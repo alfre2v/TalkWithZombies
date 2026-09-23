@@ -15,12 +15,16 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+_EXTENSION_OVERRIDES = {"audio/webm": "webm"}
+
 
 def _mime_to_extension(mime_type: str) -> str:
     """Derive a file extension from a MIME type, falling back to 'bin'."""
     base = (mime_type or "").split(";", 1)[0].strip()
     if "/" not in base:
         return "bin"
+    if base in _EXTENSION_OVERRIDES:
+        return _EXTENSION_OVERRIDES[base]
     ext = mimetypes.guess_extension(base)
     if ext and ext.startswith("."):
         return ext[1:]  # strip leading dot

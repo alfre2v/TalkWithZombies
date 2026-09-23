@@ -1123,7 +1123,7 @@ class TestTranscribeAudio:
 
 class TestMimeToExtension:
     @pytest.mark.parametrize("mime,expected", [
-        ("audio/webm", "webm"),       # mimetypes has no mapping here: subtype fallback
+        ("audio/webm", "webm"),       # pinned: mimetypes says "weba" on newer Pythons
         ("audio/ogg", "oga"),         # mimetypes' actual mapping, not ".ogg"
         ("audio/wav", "wav"),
         ("audio/utterly-unknown", "utterly-unknown"),  # subtype fallback
