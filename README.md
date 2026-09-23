@@ -1,3 +1,44 @@
+# TalkWithZombies
+
+TalkWithZombies is the app behind **Zombie-Radio**: an interactive,
+audio-only radio play performed by four AI voice actors, scientists
+trapped in a lab during a zombie outbreak, with the audience talking
+back over the radio. It will be presented in a talk at the Austin
+Python Meetup in Oct 2026.
+
+## Forked from TalkWithMe
+
+This repository is a fork of
+[TalkWithMe](https://github.com/scorbo2/TalkWithMe) by **Steve Corbett
+(scorbo2)**, taken at tag
+[7.1](https://github.com/scorbo2/TalkWithMe/tree/7.1). The fork starts
+from his work: the multi-persona chat, the TTS and STT clients, the
+persona store, and the test suite. With thanks to Steve.
+
+The fork diverges on purpose. It replaces the per-persona conversation
+with a show engine: one shared script, a director written in code, a
+screenplay grammar that constrains what the model writes, and the
+browser as the show's clock. It does not try to stay compatible with
+upstream.
+
+TalkWithMe is released under the MIT License. The license and its
+copyright notice are kept unchanged in [LICENSE](LICENSE).
+
+## Where things live
+
+- **This repository:** the app, its tests, and its feature docs.
+- **[alfre2v/zombie-radio](https://github.com/alfre2v/zombie-radio):**
+  the product spec, the design decisions, the experiments, and the
+  deployment (the model servers and the Mac installer). The reasons
+  for this fork and for its engine are in
+  [ADR-0002](https://github.com/alfre2v/zombie-radio/blob/main/docs/decisions/0002-fork-talkwithme-as-talkwithzombies-in-a-sibling-repo.md)
+  and
+  [ADR-0003](https://github.com/alfre2v/zombie-radio/blob/main/docs/decisions/0003-adopt-shared-context-screenplay-engine-with-browser-clocked-director.md).
+
+The upstream README follows, unchanged.
+
+---
+
 # TalkWithMe
 
 A local single-user chat web application that connects to a locally running **llama.cpp** server and supports **multi-persona group chats** with optional **TTS playback**.
