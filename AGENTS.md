@@ -1,3 +1,41 @@
+# TalkWithZombies — house rules (read first)
+
+This repository is a fork of TalkWithMe (see the README). These rules
+belong to the fork's owner and come first. Upstream's agent
+instructions follow unchanged and still apply wherever they do not
+conflict with these.
+
+- **Discussion first.** Propose the shape of a change (files, rough
+  content, options with a recommendation) and get the owner's input
+  before building it.
+- **Review before every commit.** Make the change, say in plain words
+  what changed, and wait for the owner's explicit word before
+  committing. A tool's permission prompt is not a review. "Commit" and
+  "push" are separate words: push only when told.
+- **No AI attribution anywhere:** no `Co-Authored-By` lines and no
+  "Generated with" footers, in commits, pull requests, or files.
+- **Minimal code comments.** The reasons behind the design live in the
+  design docs, not in the code.
+- **The suite green before review:** `.venv/bin/python -m pytest` all
+  passing, plus the Node tests when their files are touched (see
+  Testing below).
+- **Branches and pull requests.** Work on a branch; open a pull
+  request into `master`; the owner reviews and merges.
+- **Never push to upstream.** The `upstream` remote
+  (scorbo2/TalkWithMe) is for fetching only.
+- **Paths.** Files in this repository are written relative to its
+  root. Files in the sibling clones beside it are written as full
+  absolute paths in plain text, for example
+  `/Users/alfredo/workspace/hackTNT_2026/zombie-radio-claude/docs/TODO.md`.
+- **Where things live.** Design, decisions, experiments, and
+  deployment are in the companion repository
+  [alfre2v/zombie-radio](https://github.com/alfre2v/zombie-radio),
+  cloned at `/Users/alfredo/workspace/hackTNT_2026/zombie-radio-claude`.
+  Start with its `docs/README.md`, then `docs/TODO.md`. This repository
+  holds the app, its tests, and its feature docs.
+
+---
+
 # TalkWithMe — Agent Instructions
 
 ## Run the app
