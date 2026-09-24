@@ -255,7 +255,7 @@ class ShowConfig(BaseModel):
     story: str = Field(default="lab-outbreak", min_length=1)
     episode: Optional[str] = None
     model_prefix: str = "/no_think"
-    max_tokens: int = Field(default=300, ge=16, le=4096)
+    max_tokens: int = Field(default=512, ge=16, le=4096)
     context_budget: int = Field(default=14000, ge=500, le=131072)
     seed: Optional[int] = Field(default=None, ge=0)
     emotion_tags: bool = True

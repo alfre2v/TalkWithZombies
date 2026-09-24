@@ -22,7 +22,7 @@ class TestShowConfig:
         assert show.story == "lab-outbreak"
         assert show.episode is None
         assert show.model_prefix == "/no_think"
-        assert show.max_tokens == 300
+        assert show.max_tokens == 512
         assert show.context_budget == 14000
         assert show.seed is None
         assert show.emotion_tags is True
