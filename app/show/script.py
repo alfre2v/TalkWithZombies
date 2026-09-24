@@ -11,7 +11,7 @@ model wrote it.
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -29,11 +29,14 @@ class Line(BaseModel):
 
 class Round(BaseModel):
     n: int
+    kind: Literal["free", "invitation", "answer", "static"] = "free"
+    played_s: float = 0.0
     instruction: str
     listener: Optional[str] = None
     speakers: List[str]
     max_lines: int
     event: Optional[str] = None
+    tone: Optional[str] = None
     lines: List[Line] = Field(default_factory=list)
     dropped: List[str] = Field(default_factory=list)
     timings: Optional[Dict[str, int]] = None

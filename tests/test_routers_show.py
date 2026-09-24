@@ -6,6 +6,7 @@ stream_round) with the real reply recorded on the box on 2026-09-23
 (tests/test_show_parser.py), token by token.
 """
 
+import logging
 import shutil
 from pathlib import Path
 
@@ -55,10 +56,14 @@ def _start(client):
     return resp.json()
 
 
-def _round(client, run_id):
-    resp = client.post("/api/show/round", json={"run_id": run_id, "played_s": 0})
+def _round(client, run_id, played_s=0, transcript=None):
+    resp = client.post("/api/show/round", json={"run_id": run_id, "played_s": played_s, "transcript": transcript})
     assert resp.status_code == 200
     return parse_sse_events(resp.text)
+
+
+def _summary(events):
+    return sse_events_by_type(events, "round")[0]
 
 
 class TestStart:
@@ -114,6 +119,9 @@ class TestRound:
         assert recorded.event is not None
         assert recorded.speakers == summary["speakers"]
         assert summary["event"] == recorded.event
+        assert (recorded.kind, recorded.played_s, recorded.listener) == ("free", 0.0, None)
+        assert recorded.tone is not None
+        assert (summary["kind"], summary["tone"]) == ("free", recorded.tone)
 
     def test_the_request_carries_the_plan_budget_and_round_seed(self, client, show_env, fake_model):
         run_id = _start(client)["run_id"]
@@ -157,3 +165,36 @@ class TestRound:
         assert [e["type"] for e in events][-2:] == ["error", "complete"]
         assert "the model went away" in sse_events_by_type(events, "error")[0]["message"]
         assert load_run(run_id).rounds == []
+
+
+class TestListenerTurn:
+    def test_an_invitation_then_the_answer_to_the_transcript(self, client, show_env, fake_model):
+        run_id = _start(client)["run_id"]
+        invitation = _summary(_round(client, run_id, played_s=180))
+        answer = _summary(_round(client, run_id, played_s=190, transcript="Moira, is it airborne?"))
+
+        assert (invitation["kind"], invitation["speakers"]) == ("invitation", ["Samantha"])
+        assert (answer["kind"], answer["speakers"], answer["tone"]) == ("answer", ["Moira"], None)
+        first, second = load_run(run_id).rounds
+        assert (first.kind, first.played_s) == ("invitation", 180.0)
+        assert (second.kind, second.played_s, second.listener) == ("answer", 190.0, "Moira, is it airborne?")
+        assert fake_model[1]["grammar"].splitlines()[2] == 'speaker ::= "Moira"'
+        assert fake_model[1]["messages"][-1]["content"].startswith(
+            'A voice on the frequency says: "Moira, is it airborne?" Moira answers the voice:')
+
+    def test_a_silent_window_gives_the_static_round(self, client, show_env, fake_model):
+        run_id = _start(client)["run_id"]
+        _round(client, run_id, played_s=180)
+        summary = _summary(_round(client, run_id, played_s=190))
+
+        assert (summary["kind"], summary["speakers"]) == ("static", ["Samantha"])
+        assert load_run(run_id).rounds[1].instruction.startswith("Only static answers. Samantha speaks next:")
+
+    def test_a_transcript_outside_a_listening_window_is_ignored(self, client, show_env, fake_model, caplog):
+        run_id = _start(client)["run_id"]
+        with caplog.at_level(logging.WARNING):
+            summary = _summary(_round(client, run_id, transcript="Moira, is it airborne?"))
+
+        assert summary["kind"] == "free"
+        assert load_run(run_id).rounds[0].listener is None
+        assert "outside a listening window" in caplog.text

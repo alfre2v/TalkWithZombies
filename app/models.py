@@ -340,7 +340,11 @@ class ShowStartResponse(BaseModel):
 
 
 class ShowRoundRequest(BaseModel):
-    """Play the next round of a run."""
+    """Play the next round of a run.
+
+    played_s is the running total of show audio the page has played since
+    the run started; transcript is what the listener said after an invitation.
+    """
     run_id: str = Field(..., min_length=1)
     played_s: float = Field(default=0.0, ge=0)
     transcript: Optional[str] = None

@@ -90,7 +90,8 @@ def main():
     parser.add_argument("--llm", default="http://localhost:8080")
     parser.add_argument("--rounds", type=int, default=10)
     parser.add_argument("--story")
-    parser.add_argument("--played", type=float, default=20.0, help="seconds of audio reported per round")
+    parser.add_argument("--played", type=float, default=20.0,
+                        help="seconds of audio each round is taken to play; the running total is reported")
     parser.add_argument("--runs-dir", default="runs")
     parser.add_argument("--control", action="store_true")
     parser.add_argument("--run-id", help="with --control: the run whose cast sheet to use (default: the newest)")
@@ -110,15 +111,16 @@ def main():
     print(f"run {run['run_id']} — {run['title']} — cast {', '.join(run['cast'])} — seed {run['seed']}")
 
     results = []
-    for _ in range(args.rounds):
-        result = play_round(args.base, run["run_id"], args.played)
+    for i in range(args.rounds):
+        result = play_round(args.base, run["run_id"], args.played * i)
         summary = result["summary"] or {}
         results.append(result)
         if result["error"]:
             print(f"round error: {result['error']}")
             return 1
-        print(f"round {summary.get('n')}: {result['lines']} line(s) of {', '.join(summary.get('speakers', []))}"
-              f" · event: {summary.get('event') or '—'} · dropped: {len(summary.get('dropped') or [])}"
+        print(f"round {summary.get('n')} ({summary.get('kind')}): {result['lines']} line(s) of "
+              f"{', '.join(summary.get('speakers', []))} · event: {summary.get('event') or '—'}"
+              f" · tone: {summary.get('tone') or '—'} · dropped: {len(summary.get('dropped') or [])}"
               f" · finish: {summary.get('finish_reason')} · first line {result['first'] or 0:.2f}s,"
               f" round {result['seconds']:.2f}s")
 

@@ -1,8 +1,10 @@
-"""Stories: the cast sheet template, its cast, and its pool of events.
+"""Stories: the cast sheet template, its cast, its pool of events and its tone words.
 
 A story is a folder ``stories/<name>/`` holding ``cast_sheet.md`` (YAML
-front matter for the code, a Jinja body for the model) and
-``events.yaml``. The body's placeholders are filled at render time:
+front matter for the code, a Jinja body for the model),
+``events.yaml``, and optionally ``tones.yaml`` — the words the director
+draws one of per round ("Let the tone be: brittle."); without it, no
+tone word is given. The body's placeholders are filled at render time:
 ``model_prefix`` from the settings, ``format_rules`` from the rule
 snippet the emotion switch picks, ``episode`` from the current episode.
 """
@@ -35,6 +37,7 @@ class Story:
     operator: str
     template: str
     events: Tuple[str, ...]
+    tones: Tuple[str, ...] = ()
 
 
 def load_story(name: str, root: Optional[Path] = None) -> Story:
@@ -62,7 +65,8 @@ def load_story(name: str, root: Optional[Path] = None) -> Story:
         raise StoryError(f"story {name!r}: no persona with a reference voice for {', '.join(missing)}")
 
     return Story(name=name, title=title.strip(), cast=tuple(cast), operator=operator,
-                 template=body, events=_load_events(name, folder / "events.yaml"))
+                 template=body, events=_load_events(name, folder / "events.yaml"),
+                 tones=_load_tones(name, folder / "tones.yaml"))
 
 
 def _load_events(name: str, path: Path) -> Tuple[str, ...]:
@@ -72,6 +76,15 @@ def _load_events(name: str, path: Path) -> Tuple[str, ...]:
     if not isinstance(events, list) or not events or not all(isinstance(e, str) and e.strip() for e in events):
         raise StoryError(f"story {name!r}: events.yaml needs 'events', a list of sentences")
     return tuple(e.strip() for e in events)
+
+
+def _load_tones(name: str, path: Path) -> Tuple[str, ...]:
+    if not path.is_file():
+        return ()
+    tones = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("tones")
+    if not isinstance(tones, list) or not all(isinstance(t, str) and t.strip() for t in tones):
+        raise StoryError(f"story {name!r}: tones.yaml needs 'tones', a list of words")
+    return tuple(t.strip() for t in tones)
 
 
 def format_rules(emotion_tags: bool) -> str:

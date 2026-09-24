@@ -4,7 +4,9 @@ POST /api/show/start opens a run of a story. POST /api/show/round plays
 the run's next round and streams the chat's SSE events (start / token /
 done) for each script line, then a "round" summary and "complete". The
 server keeps no show state between requests: the caller sends the run id,
-and the run is loaded from its record.
+and the run is loaded from its record. Each request carries the running
+total of show audio played; after a round of kind "invitation" the page
+listens, and the next request carries what it heard as the transcript.
 """
 
 import asyncio
@@ -13,7 +15,7 @@ import json
 import logging
 import random
 import re
-from typing import AsyncIterator
+from typing import AsyncIterator, Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -65,7 +67,7 @@ async def play_round(req: ShowRoundRequest):
     except StoryError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return StreamingResponse(
-        _round_stream(run, story),
+        _round_stream(run, story, req.played_s, req.transcript),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -75,10 +77,13 @@ async def play_round(req: ShowRoundRequest):
     )
 
 
-async def _round_stream(run: Run, story: Story) -> AsyncIterator[str]:
+async def _round_stream(run: Run, story: Story, played_s: float, transcript: Optional[str]) -> AsyncIterator[str]:
     show = app_config.get_settings().show
     n = len(run.rounds) + 1
-    plan = plan_round(run, story, run.moods)
+    plan = plan_round(run, story, show, played_s, transcript)
+    if transcript and transcript.strip() and plan.kind != "answer":
+        logger.warning("Show run %s, round %s: a transcript arrived outside a listening window; ignored",
+                       run.run_id, n)
     parser = LineParser(run.moods)
     line_no = 0
     final: dict = {}
@@ -105,14 +110,15 @@ async def _round_stream(run: Run, story: Story) -> AsyncIterator[str]:
 
     parser.finish()
     round_ = Round(
-        n=n, instruction=plan.instruction, speakers=list(plan.speakers), max_lines=plan.max_lines,
-        event=plan.event, lines=[Line(**dataclasses.asdict(line)) for line in parser.lines],
+        n=n, kind=plan.kind, played_s=played_s, instruction=plan.instruction, listener=plan.listener,
+        speakers=list(plan.speakers), max_lines=plan.max_lines, event=plan.event, tone=plan.tone,
+        lines=[Line(**dataclasses.asdict(line)) for line in parser.lines],
         dropped=parser.dropped, timings=final.get("timings"), finish_reason=final.get("finish_reason"),
     )
     append_round(run, round_)
     if parser.dropped:
         logger.warning("Show run %s, round %s dropped %s line(s); finish_reason=%s",
                        run.run_id, n, len(parser.dropped), round_.finish_reason)
-    yield _sse({"type": "round", "n": n, "speakers": list(plan.speakers), "event": plan.event,
-                "dropped": parser.dropped, "finish_reason": round_.finish_reason})
+    yield _sse({"type": "round", "n": n, "kind": plan.kind, "speakers": list(plan.speakers), "event": plan.event,
+                "tone": plan.tone, "dropped": parser.dropped, "finish_reason": round_.finish_reason})
     yield _sse({"type": "complete"})

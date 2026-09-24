@@ -63,9 +63,9 @@ class TestRecord:
         assert load_run(run.run_id) == run
         assert [p.name for p in (runs_root() / run.run_id).iterdir()] == ["script.json"]
 
-    def test_a_round_recorded_before_the_event_field_still_loads(self):
-        old = {"n": 1, "instruction": "I.", "speakers": ["Ralph"], "max_lines": 1}
-        assert Round.model_validate(old).event is None
+    def test_a_round_recorded_before_the_event_and_director_v1_fields_still_loads(self):
+        old = Round.model_validate({"n": 1, "instruction": "I.", "speakers": ["Ralph"], "max_lines": 1})
+        assert (old.event, old.kind, old.played_s, old.tone) == (None, "free", 0.0, None)
 
 
 class TestAssembler:

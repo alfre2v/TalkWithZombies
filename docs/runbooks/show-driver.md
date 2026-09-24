@@ -101,12 +101,20 @@ record: runs/2026-09-24T02-18-51/script.json
   what the model actually wrote.
 - **"script after the last round"** is the size, in tokens, of what the
   model would read next — the number the context trim watches.
+- **Since director v1** (2026-09-24, after the run above), each round
+  line also names the round's kind (`free`, `invitation`, `answer`,
+  `static`) and its tone word. The driver reports the played seconds as
+  a running total (`--played` per round), so with the defaults the
+  first invitation comes between round 5 and round 10; the driver sends
+  no listener's words yet, so the round after an invitation is the
+  static one.
 - Stop the app with Ctrl-C in terminal 1.
 
 **Options:** `--base` (the app's address, default
 `http://127.0.0.1:8010`), `--rounds` (default 10), `--story` (a folder
 in `stories/`, default the settings' `show.story`), `--played` (seconds
-of audio reported per round, default 20), `--runs-dir` (default `runs`).
+of audio each round is taken to play, default 20; the app receives the
+running total), `--runs-dir` (default `runs`).
 
 ## Check that the grammar binds
 
