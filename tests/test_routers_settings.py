@@ -15,7 +15,7 @@ engine switch is never bricked by a stale doc.
 
 import logging
 
-from app.config import MCPConfig, MCPServerConfig
+from app.config import MCPConfig, MCPServerConfig, ShowConfig
 from tests.factories import make_capabilities_doc, make_mcp_server, make_settings
 
 import app.config as app_config
@@ -208,6 +208,20 @@ class TestUpdateSettings:
         saved = app_config.get_settings()
         assert [s.name for s in saved.mcp.servers] == ["keep-me"]
         assert saved.mcp.max_tool_iterations == 5
+
+    def test_show_section_carried_over_and_written(self, client, monkeypatch):
+        """The show: section is yaml-only. A UI save must not wipe it —
+        neither in memory nor in settings.yaml."""
+        kept = ShowConfig(story="keep-me", seed=3, debug=True, interaction_min_s=5, interaction_max_s=9)
+        current = make_settings()
+        current.show = kept
+        monkeypatch.setattr(app_config, "_settings_cache", current)
+
+        resp = client.put("/api/settings", json=base_update())
+        assert resp.status_code == 200
+
+        assert app_config.get_settings().show == kept
+        assert app_config.load_settings().show == kept
 
     def test_general_update_rejects_out_of_bounds_values(self, client):
         resp = client.put("/api/settings", json=base_update(

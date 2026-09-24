@@ -1,6 +1,7 @@
 app/__pycache__/
 app/services/__pycache__/
 app/routers/__pycache__/
+app/show/__pycache__/
 tests/__pycache__/
 personas.yaml
 personas.yaml.*
@@ -18,3 +19,4 @@ restore.sh
 startup.sh
 llm_api_key
 
+runs/

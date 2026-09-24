@@ -101,9 +101,9 @@ def update_settings(req: SettingsUpdateRequest):
 
     _validate_tts_parameters_if_documented(tts_base, req.tts.parameters)
 
-    # The mcp section is yaml-only for now (deliberately not in the request
-    # model). Carry it over from the current config, otherwise every UI save
-    # would silently wipe it from settings.yaml.
+    # The mcp and show sections are yaml-only (deliberately not in the
+    # request model). Carry them over from the current config, otherwise
+    # every UI save would silently wipe them from settings.yaml.
     current = app_config.get_settings()
 
     # The general section is a partial update: fields the client omitted
@@ -138,6 +138,7 @@ def update_settings(req: SettingsUpdateRequest):
         ),
         general=updated_general,
         mcp=current.mcp,
+        show=current.show,
     )
 
     app_config.save_settings(updated)

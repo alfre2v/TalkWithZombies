@@ -26,7 +26,9 @@ copyright notice are kept unchanged in [LICENSE](LICENSE).
 
 ## Where things live
 
-- **This repository:** the app, its tests, and its feature docs.
+- **This repository:** the app, its tests, and its feature docs; its
+  procedures in [`docs/runbooks/`](docs/runbooks/) (driving the show
+  without a browser: [`show-driver.md`](docs/runbooks/show-driver.md)).
 - **[alfre2v/zombie-radio](https://github.com/alfre2v/zombie-radio):**
   the product spec, the design decisions, the experiments, and the
   deployment (the model servers and the Mac installer). The reasons

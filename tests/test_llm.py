@@ -122,6 +122,69 @@ class TestStreamChat:
         assert payload["temperature"] == 0.8
         assert payload["messages"] == [{"role": "user", "content": "hi"}]
 
+    def test_stream_chat_payload_unchanged_without_show_arguments(self, monkeypatch):
+        client = FakeLLMClient([token_line("x"), "data: [DONE]"])
+        patch_llm_client(monkeypatch, client)
+
+        _collect(llm.stream_chat([{"role": "user", "content": "hi"}]))
+
+        assert set(client.payloads[0]) == {"model", "messages", "max_tokens", "temperature", "stream"}
+
+
+class TestStreamRound:
+    """stream_round — the show's request: grammar, budget and seed in the
+    payload; the text pieces, then the final ("stop") chunk's numbers.
+    The lines mirror the wire recorded on the box on 2026-09-23."""
+
+    STOP_LINE = sse_line({
+        "choices": [{"finish_reason": "stop", "index": 0, "delta": {}}],
+        "timings": {"prompt_n": 4, "prompt_ms": 137.3, "cache_n": 303, "predicted_n": 43},
+    })
+
+    def test_payload_carries_grammar_budget_and_seed(self, monkeypatch):
+        client = FakeLLMClient([token_line("x"), self.STOP_LINE, "data: [DONE]"])
+        patch_llm_client(monkeypatch, client)
+        grammar = 'root    ::= line{1,2}\n'
+
+        _collect(llm.stream_round([{"role": "user", "content": "hi"}],
+                                  grammar=grammar, max_tokens=512, seed=43))
+
+        payload = client.payloads[0]
+        assert payload["grammar"] == grammar
+        assert payload["max_tokens"] == 512
+        assert payload["seed"] == 43
+        assert payload["stream"] is True
+        assert "stream_options" not in payload
+
+    def test_yields_the_pieces_then_the_final_numbers(self, monkeypatch):
+        lines = [
+            sse_line({"choices": [{"finish_reason": None, "index": 0,
+                                   "delta": {"role": "assistant", "content": None}}]}),
+            token_line("R"), token_line("alph"), token_line(".\n"),
+            self.STOP_LINE,
+            "data: [DONE]",
+        ]
+        patch_llm_client(monkeypatch, FakeLLMClient(lines))
+
+        items = _collect(llm.stream_round([{"role": "user", "content": "hi"}],
+                                          grammar="g", max_tokens=512, seed=1))
+
+        assert items == [
+            {"token": "R"}, {"token": "alph"}, {"token": ".\n"},
+            {"timings": {"prompt_n": 4, "cache_n": 303, "predicted_n": 43}, "finish_reason": "stop"},
+        ]
+
+    def test_a_chunk_with_empty_choices_is_not_a_problem(self, monkeypatch):
+        usage_line = sse_line({"choices": [], "usage": {"prompt_tokens": 307},
+                               "timings": {"prompt_n": 4, "cache_n": 303, "predicted_n": 43}})
+        patch_llm_client(monkeypatch, FakeLLMClient([token_line("x"), usage_line, "data: [DONE]"]))
+
+        items = _collect(llm.stream_round([{"role": "user", "content": "hi"}],
+                                          grammar="g", max_tokens=512, seed=1))
+
+        assert items[-1] == {"timings": {"prompt_n": 4, "cache_n": 303, "predicted_n": 43},
+                             "finish_reason": None}
+
     def test_stream_chat_connection_error_propagates(self, monkeypatch):
         class RefusingStream:
             async def __aenter__(self):
