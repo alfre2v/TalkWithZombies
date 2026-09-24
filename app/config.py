@@ -250,12 +250,38 @@ class MCPConfig(BaseModel):
     max_tool_iterations: int = Field(default=8, ge=1, le=50, description="Max tool-call rounds per persona reply")
 
 
+class ShowConfig(BaseModel):
+    """The show engine's settings — yaml-only, like mcp."""
+    story: str = Field(default="lab-outbreak", min_length=1)
+    episode: Optional[str] = None
+    model_prefix: str = "/no_think"
+    max_tokens: int = Field(default=300, ge=16, le=4096)
+    context_budget: int = Field(default=14000, ge=500, le=131072)
+    seed: Optional[int] = Field(default=None, ge=0)
+    emotion_tags: bool = True
+    debug: bool = False
+    interaction_min_s: float = Field(default=60.0, ge=0)
+    interaction_max_s: float = Field(default=180.0, ge=0)
+    listen_window_s: float = Field(default=10.0, gt=0)
+    press_cap_s: float = Field(default=30.0, gt=0)
+    no_speech_max: float = Field(default=0.6, ge=0, le=1)
+    logprob_min: float = -1.0
+    stt_language: str = "en"
+
+    @model_validator(mode="after")
+    def _interaction_window_is_ordered(self):
+        if self.interaction_min_s > self.interaction_max_s:
+            raise ValueError("show.interaction_min_s must not exceed show.interaction_max_s")
+        return self
+
+
 class AppSettings(BaseModel):
     llm: LLMSettings = LLMSettings()
     tts: TTSConfig = TTSConfig()
     stt: STTConfig = STTConfig()
     general: GeneralConfig = GeneralConfig()
     mcp: MCPConfig = Field(default_factory=MCPConfig)
+    show: ShowConfig = Field(default_factory=ShowConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -349,6 +375,7 @@ def load_settings(path: Optional[Path] = None) -> AppSettings:
         stt=STTConfig(**raw.get("stt", {})),
         general=GeneralConfig(**raw.get("general", {})),
         mcp=MCPConfig(**raw.get("mcp", {})),
+        show=ShowConfig(**raw.get("show", {})),
     )
     return _settings_cache
 
@@ -481,6 +508,7 @@ def save_settings(config: AppSettings, path: Optional[Path] = None) -> None:
         "stt": config.stt.model_dump(exclude_none=False),
         "general": config.general.model_dump(exclude_none=False),
         "mcp": config.mcp.model_dump(exclude_none=False),
+        "show": config.show.model_dump(exclude_none=False),
     }
     with open(target, "w") as f:
         yaml.dump(raw, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
