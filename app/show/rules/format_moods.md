@@ -1,0 +1,1 @@
+Format: write the next lines of the script, one line per transmission, as `Name (emotion): spoken words`. The emotion in parentheses is the one the listener should hear in the speaker's voice, exactly one of: {{ moods }}. Each transmission is one or two short spoken sentences ending with "Over." No narration, no markdown, and nothing else in parentheses.
