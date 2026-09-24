@@ -17,7 +17,7 @@ the LLM produces a plain text answer.
 import json
 import logging
 import uuid
-from typing import AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 
@@ -78,10 +78,9 @@ def _base_payload(messages: List[dict]) -> dict:
     }
 
 
-async def _iter_completion_chunks(payload: dict) -> AsyncGenerator[dict, None]:
-    """Yield one `choices[0]` dict per SSE data line from the LLM.
+async def _iter_sse_chunks(payload: dict) -> AsyncGenerator[dict, None]:
+    """Yield each SSE data line from the LLM as a whole parsed chunk.
 
-    Each dict carries the "delta" and, on the final line, "finish_reason".
     Malformed lines are logged and skipped rather than aborting the stream.
     """
     settings = get_settings()
@@ -98,32 +97,70 @@ async def _iter_completion_chunks(payload: dict) -> AsyncGenerator[dict, None]:
                     break
                 try:
                     chunk = json.loads(data_str)
-                    yield chunk["choices"][0]
-                except (json.JSONDecodeError, KeyError, IndexError) as exc:
+                except json.JSONDecodeError as exc:
                     logger.warning("Malformed SSE chunk from LLM: %s", exc)
                     continue
+                yield chunk
+
+
+async def _iter_completion_chunks(payload: dict) -> AsyncGenerator[dict, None]:
+    """Yield one `choices[0]` dict per SSE data line from the LLM.
+
+    Each dict carries the "delta" and, on the final line, "finish_reason".
+    Malformed lines are logged and skipped rather than aborting the stream.
+    """
+    async for chunk in _iter_sse_chunks(payload):
+        try:
+            choice = chunk["choices"][0]
+        except (KeyError, IndexError) as exc:
+            logger.warning("Malformed SSE chunk from LLM: %s", exc)
+            continue
+        yield choice
 
 
 async def stream_chat(
     messages: List[Dict[str, str]],
-    *,
-    grammar: Optional[str] = None,
-    max_tokens: Optional[int] = None,
-    seed: Optional[int] = None,
 ) -> AsyncGenerator[str, None]:
     """Stream tokens from the LLM's /v1/chat/completions endpoint.
 
-    Yields individual token strings as they arrive. The keyword arguments
-    are added to the request only when given (the show engine's rounds);
-    the chat's requests stay as they were.
+    Yields individual token strings as they arrive.
     """
     payload = _base_payload(messages)
-    extra = {"grammar": grammar, "max_tokens": max_tokens, "seed": seed}
-    payload.update({key: value for key, value in extra.items() if value is not None})
     async for choice in _iter_completion_chunks(payload):
         token = (choice.get("delta") or {}).get("content") or ""
         if token:
             yield token
+
+
+async def stream_round(
+    messages: List[Dict[str, str]],
+    *,
+    grammar: str,
+    max_tokens: int,
+    seed: int,
+) -> AsyncGenerator[Dict[str, Any], None]:
+    """Stream one round of the show: the text pieces, then the final numbers.
+
+    Yields {"token": text} per piece, then one {"timings": ..., "finish_reason":
+    ...} taken from the final ("stop") chunk. The script's size is
+    timings prompt_n + cache_n (plus predicted_n after the round): a stream
+    carries no "usage" unless asked for, and we do not ask.
+    """
+    payload = _base_payload(messages)
+    payload.update({"grammar": grammar, "max_tokens": max_tokens, "seed": seed})
+    timings, finish_reason = None, None
+    async for chunk in _iter_sse_chunks(payload):
+        choices = chunk.get("choices") or []
+        choice = choices[0] if choices else {}
+        token = (choice.get("delta") or {}).get("content") or ""
+        if token:
+            yield {"token": token}
+        if choice.get("finish_reason"):
+            finish_reason = choice["finish_reason"]
+        if chunk.get("timings"):
+            timings = {key: chunk["timings"][key] for key in ("prompt_n", "cache_n", "predicted_n")
+                       if key in chunk["timings"]}
+    yield {"timings": timings, "finish_reason": finish_reason}
 
 
 async def chat_completion(messages: List[Dict[str, str]], max_tokens: int = 64) -> str:

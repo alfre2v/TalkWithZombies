@@ -322,3 +322,25 @@ class AssignPersonasRequest(BaseModel):
 class EchoChamberRequest(BaseModel):
     """Toggle echo chamber mode for a chat room."""
     echo_chamber: bool
+
+
+class ShowStartRequest(BaseModel):
+    """Open a new show run; the story defaults to settings' show.story."""
+    story: Optional[str] = None
+
+
+class ShowStartResponse(BaseModel):
+    """The run just opened: its id, story, cast and seed."""
+    run_id: str
+    story: str
+    title: str
+    cast: List[str]
+    operator: str
+    seed: int
+
+
+class ShowRoundRequest(BaseModel):
+    """Play the next round of a run."""
+    run_id: str = Field(..., min_length=1)
+    played_s: float = Field(default=0.0, ge=0)
+    transcript: Optional[str] = None

@@ -245,6 +245,8 @@ Chat rooms are stored in `chatrooms.yaml` and managed via `get_chatrooms()` / `s
 | `POST` | `/api/stt` | Proxy audio → STT `/v1/audio/transcriptions`; returns `{text, language}` |
 | `GET` | `/api/settings` | Get current settings |
 | `PUT` | `/api/settings` | Update and persist settings to `settings.yaml` |
+| `POST` | `/api/show/start` | Open a show run of a story (default `show.story`); returns `{run_id, story, title, cast, operator, seed}` |
+| `POST` | `/api/show/round` | Play a run's next round; returns an SSE stream: `start` / `token` / `done` per script line, then `round` and `complete` |
 
 ## Persona CRUD cascades
 
