@@ -106,12 +106,20 @@ async def _iter_completion_chunks(payload: dict) -> AsyncGenerator[dict, None]:
 
 async def stream_chat(
     messages: List[Dict[str, str]],
+    *,
+    grammar: Optional[str] = None,
+    max_tokens: Optional[int] = None,
+    seed: Optional[int] = None,
 ) -> AsyncGenerator[str, None]:
     """Stream tokens from the LLM's /v1/chat/completions endpoint.
 
-    Yields individual token strings as they arrive.
+    Yields individual token strings as they arrive. The keyword arguments
+    are added to the request only when given (the show engine's rounds);
+    the chat's requests stay as they were.
     """
     payload = _base_payload(messages)
+    extra = {"grammar": grammar, "max_tokens": max_tokens, "seed": seed}
+    payload.update({key: value for key, value in extra.items() if value is not None})
     async for choice in _iter_completion_chunks(payload):
         token = (choice.get("delta") or {}).get("content") or ""
         if token:

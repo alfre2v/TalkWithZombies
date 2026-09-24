@@ -122,6 +122,28 @@ class TestStreamChat:
         assert payload["temperature"] == 0.8
         assert payload["messages"] == [{"role": "user", "content": "hi"}]
 
+    def test_stream_chat_payload_unchanged_without_show_arguments(self, monkeypatch):
+        client = FakeLLMClient([token_line("x"), "data: [DONE]"])
+        patch_llm_client(monkeypatch, client)
+
+        _collect(llm.stream_chat([{"role": "user", "content": "hi"}]))
+
+        assert set(client.payloads[0]) == {"model", "messages", "max_tokens", "temperature", "stream"}
+
+    def test_stream_chat_adds_grammar_max_tokens_and_seed_when_given(self, monkeypatch):
+        client = FakeLLMClient([token_line("x"), "data: [DONE]"])
+        patch_llm_client(monkeypatch, client)
+        grammar = 'root    ::= line{1,2}\n'
+
+        _collect(llm.stream_chat([{"role": "user", "content": "hi"}],
+                                 grammar=grammar, max_tokens=300, seed=42))
+
+        payload = client.payloads[0]
+        assert payload["grammar"] == grammar
+        assert payload["max_tokens"] == 300
+        assert payload["seed"] == 42
+        assert payload["stream"] is True
+
     def test_stream_chat_connection_error_propagates(self, monkeypatch):
         class RefusingStream:
             async def __aenter__(self):
