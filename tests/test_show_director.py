@@ -207,6 +207,17 @@ class TestPacing:
 
             assert all(a != b for a, b in zip(tones, tones[1:]))
 
+    def test_no_tone_word_returns_until_the_list_is_used_up(self):
+        for seed in range(20):
+            run = _run(seed)
+            _play(run, 40, step=20, show=_pacing(tone_hold=1, tone_jitter=0))
+            words = [word for word, _ in itertools.groupby(r.tone for r in run.rounds if r.tone)]
+
+            assert len(words) >= 9
+            for start in range(0, len(words), len(TONES)):
+                one_pass = words[start:start + len(TONES)]
+                assert len(set(one_pass)) == len(one_pass)
+
     def test_answers_carry_no_tone_word_and_do_not_count(self):
         show = _pacing(tone_hold=3, tone_jitter=0)
         run = _run()

@@ -183,29 +183,35 @@ def _event_due(run: Run, show: ShowConfig) -> bool:
 
 def _next_event(run: Run, story: Story, rng: random.Random) -> str:
     """Draw an event not used since the pool was last used up."""
-    used = [r.event for r in run.rounds if r.event]
-    in_cycle = len(used) % len(story.events)
+    return rng.choice(_fresh(story.events, [r.event for r in run.rounds if r.event]))
+
+
+def _fresh(pool: Sequence[str], used: Sequence[str]) -> list:
+    """The items of the pool not used since the pool was last used up (`used`: every draw so far, in order)."""
+    in_cycle = len(used) % len(pool)
     recent = set(used[len(used) - in_cycle:]) if in_cycle else set()
-    return rng.choice([event for event in story.events if event not in recent])
+    return [item for item in pool if item not in recent]
 
 
 def _tone(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> Optional[str]:
-    """The round's tone word: the current one while its hold lasts, else a new, different one.
+    """The round's tone word: the current one while its hold lasts, else a new one.
 
     The hold is tone_hold +/- tone_jitter rounds, drawn once when the word
-    began; only the rounds that carry a tone word count. None when tone_hold
-    is 0 or the story has no tone words.
+    began; only the rounds that carry a tone word count. A new word is one not
+    used since the list was last used up, and never the word just held. None
+    when tone_hold is 0 or the story has no tone words.
     """
     if show.tone_hold == 0 or not story.tones:
         return None
     toned = [r for r in run.rounds if r.tone]
-    if toned:
-        current = toned[-1].tone
-        hold = list(itertools.takewhile(lambda r: r.tone == current, reversed(toned)))
-        if len(hold) < _drawn(run.seed, "hold", hold[-1].n, show.tone_hold, show.tone_jitter):
-            return current
-        return rng.choice([tone for tone in story.tones if tone != current] or list(story.tones))
-    return rng.choice(story.tones)
+    if not toned:
+        return rng.choice(story.tones)
+    current = toned[-1].tone
+    hold = list(itertools.takewhile(lambda r: r.tone == current, reversed(toned)))
+    if len(hold) < _drawn(run.seed, "hold", hold[-1].n, show.tone_hold, show.tone_jitter):
+        return current
+    words = [word for word, _ in itertools.groupby(r.tone for r in toned)]
+    return rng.choice([tone for tone in _fresh(story.tones, words) if tone != current] or list(story.tones))
 
 
 def _drawn(seed: int, what: str, start: int, mean: int, jitter: int) -> int:
