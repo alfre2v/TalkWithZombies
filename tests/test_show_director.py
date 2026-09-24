@@ -32,14 +32,14 @@ def _record(run, plan, played_s=0.0, lines=None):
                             lines=[Line(speaker=s, raw=f"{s} (calm): {t}", spoken=t) for s, t in lines]))
 
 
-def _play(run, rounds, step=0.0, heard=(None,), story=STORY):
+def _play(run, rounds, step=0.0, heard=(None,), story=STORY, show=SHOW):
     """Plan and record rounds, `step` seconds of audio each; after an invitation the listener
     says the next item of `heard` (None: silence). Returns the plans."""
     replies = itertools.cycle(heard)
     plans = []
     for i in range(rounds):
         after_invitation = bool(run.rounds) and run.rounds[-1].kind == "invitation"
-        plan = plan_round(run, story, SHOW, played_s=step * i, transcript=next(replies) if after_invitation else None)
+        plan = plan_round(run, story, show, played_s=step * i, transcript=next(replies) if after_invitation else None)
         _record(run, plan, step * i)
         plans.append(plan)
     return plans
@@ -121,18 +121,18 @@ class TestFree:
             _record(run, answer, 185, lines=[("Ralph", "We hear you. Over.")])
             assert {"Moira", "Ralph"} <= set(plan_round(run, STORY, SHOW, played_s=190).speakers)
 
-    def test_events_on_odd_rounds_without_repeats_until_the_pool_is_used(self):
-        plans = _play(_run(), 12)
-        events = [plan.event for plan in plans]
+    def test_events_are_drawn_without_repeats_until_the_pool_is_used(self):
+        events = [plan.event for plan in _play(_run(), 40) if plan.event]
 
-        assert all(event is None for event in events[1::2])
-        odd = events[0::2]
-        assert sorted(odd[:3]) == sorted(STORY.events)
-        assert sorted(odd[3:]) == sorted(STORY.events)
-        assert all(plan.instruction.startswith(f"Offstage: {plan.event} ") for plan in plans[0::2])
-        assert not any(plan.instruction.startswith("Offstage:") for plan in plans[1::2])
+        assert len(events) >= 6
+        assert sorted(events[:3]) == sorted(STORY.events)
+        assert sorted(events[3:6]) == sorted(STORY.events)
 
-    def test_one_tone_word_per_round_from_the_story(self):
+    def test_an_event_opens_the_instruction(self):
+        for plan in _play(_run(), 20):
+            assert plan.instruction.startswith(f"Offstage: {plan.event} ") == bool(plan.event)
+
+    def test_the_tone_word_comes_from_the_story(self):
         for plan in _play(_run(), 30):
             assert plan.tone in TONES
             assert plan.instruction.endswith(f" Let the tone be: {plan.tone}.")
@@ -141,6 +141,93 @@ class TestFree:
         plain = Story(name="lab", title="T", cast=CAST, operator="Samantha", template="", events=STORY.events)
         for plan in _play(_run(), 40, step=20, story=plain):
             assert plan.tone is None
+            assert "tone" not in plan.instruction
+
+
+def _free_events(run):
+    """For each free round in order, whether it carried an event."""
+    return [r.event is not None for r in run.rounds if r.kind == "free"]
+
+
+def _gaps(flags):
+    """Free rounds from one event to the next."""
+    marks = [i for i, flag in enumerate(flags) if flag]
+    return [later - earlier for earlier, later in zip(marks, marks[1:])]
+
+
+def _holds(run):
+    """How many rounds each tone word was kept, over the rounds that carry one."""
+    return [len(list(group)) for _, group in itertools.groupby(r.tone for r in run.rounds if r.tone)]
+
+
+def _pacing(**knobs):
+    return ShowConfig(interaction_min_s=60, interaction_max_s=180, **knobs)
+
+
+class TestPacing:
+    @pytest.mark.parametrize("every, jitter", [(2, 1), (3, 0), (4, 2), (1, 0), (2, 3)])
+    def test_event_gaps_stay_within_bounds(self, every, jitter):
+        show = _pacing(event_every=every, event_jitter=jitter)
+        for seed in range(100):
+            run = _run(seed)
+            _play(run, 60, step=20, heard=(None, "Moira, is it airborne?"), show=show)
+            flags = _free_events(run)
+
+            assert flags[0]
+            assert all(max(1, every - jitter) <= gap <= every + jitter for gap in _gaps(flags))
+            assert not any(r.event for r in run.rounds if r.kind != "free")
+
+    @pytest.mark.parametrize("hold, jitter", [(3, 1), (2, 0), (4, 2), (1, 0)])
+    def test_tone_holds_stay_within_bounds(self, hold, jitter):
+        show = _pacing(tone_hold=hold, tone_jitter=jitter)
+        for seed in range(100):
+            run = _run(seed)
+            _play(run, 60, step=20, heard=(None, "Moira, is it airborne?"), show=show)
+            lengths = _holds(run)
+
+            assert all(max(1, hold - jitter) <= length <= hold + jitter for length in lengths[:-1])
+            assert lengths[-1] <= hold + jitter
+
+    def test_the_jitter_varies_gaps_and_holds(self):
+        gaps, holds = set(), set()
+        for seed in range(50):
+            run = _run(seed)
+            _play(run, 60, step=20)
+            gaps |= set(_gaps(_free_events(run)))
+            holds |= set(_holds(run)[:-1])
+
+        assert gaps == {1, 2, 3}
+        assert holds == {2, 3, 4}
+
+    def test_a_new_tone_word_differs_from_the_last(self):
+        for seed in range(20):
+            run = _run(seed)
+            _play(run, 40, step=20, show=_pacing(tone_hold=1, tone_jitter=0))
+            tones = [r.tone for r in run.rounds if r.tone]
+
+            assert all(a != b for a, b in zip(tones, tones[1:]))
+
+    def test_answers_carry_no_tone_word_and_do_not_count(self):
+        show = _pacing(tone_hold=3, tone_jitter=0)
+        run = _run()
+        _record(run, plan_round(run, STORY, show))
+        _record(run, plan_round(run, STORY, show, played_s=180), played_s=180)
+        answer = plan_round(run, STORY, show, played_s=185, transcript="Hello?")
+        _record(run, answer, 185)
+        fourth = plan_round(run, STORY, show, played_s=190)
+        _record(run, fourth, 190)
+        fifth = plan_round(run, STORY, show, played_s=195)
+
+        assert [r.kind for r in run.rounds] == ["free", "invitation", "answer", "free"]
+        assert answer.tone is None
+        assert run.rounds[0].tone == run.rounds[1].tone == fourth.tone
+        assert fifth.tone not in (None, fourth.tone)
+
+    def test_zero_turns_events_and_tone_words_off(self):
+        show = _pacing(event_every=0, tone_hold=0)
+        for plan in _play(_run(), 40, step=20, heard=(None, "Hello?"), show=show):
+            assert (plan.event, plan.tone) == (None, None)
+            assert "Offstage" not in plan.instruction
             assert "tone" not in plan.instruction
 
 
@@ -180,7 +267,7 @@ class TestListenerTurn:
 
         assert (plan.kind, plan.speakers, plan.max_lines, plan.listener) == ("static", ("Samantha",), 1, None)
         assert plan.instruction == (
-            "Only static answers. Samantha speaks next: "
+            "Only static answers; the broadcast goes on. Samantha speaks next: "
             f"the next line, with the emotion in its voice. Let the tone be: {plan.tone}.")
 
     def test_an_unaddressed_voice_lets_the_whole_cast_answer(self):

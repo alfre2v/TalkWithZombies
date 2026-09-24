@@ -1,6 +1,7 @@
-# One word per round, drawn at random: "Let the tone be: <word>." It colors what the
-# characters say; the emotion tag colors how they sound. The groups are the show's
-# palette: the more words a group holds, the more often its color comes up.
+# One word at a time, kept for a few rounds (show.tone_hold, with jitter), then a new one
+# drawn at random: "Let the tone be: <word>." It colors what the characters say; the
+# emotion tag colors how they sound. The groups are the show's palette: the more words
+# a group holds, the more often its color comes up.
 tones:
   # Dread and horror
   - macabre

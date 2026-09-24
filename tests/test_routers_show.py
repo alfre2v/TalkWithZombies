@@ -188,7 +188,8 @@ class TestListenerTurn:
         summary = _summary(_round(client, run_id, played_s=190))
 
         assert (summary["kind"], summary["speakers"]) == ("static", ["Samantha"])
-        assert load_run(run_id).rounds[1].instruction.startswith("Only static answers. Samantha speaks next:")
+        assert load_run(run_id).rounds[1].instruction.startswith(
+            "Only static answers; the broadcast goes on. Samantha speaks next:")
 
     def test_a_transcript_outside_a_listening_window_is_ignored(self, client, show_env, fake_model, caplog):
         run_id = _start(client)["run_id"]

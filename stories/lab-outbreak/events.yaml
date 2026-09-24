@@ -1,4 +1,4 @@
-# One event about every other free round, drawn without repeats until the pool is used up.
+# An event every few free rounds (show.event_every, with jitter), drawn without repeats until the pool is used up.
 # The director says it as "Offstage: <event>"; it is never spoken, the characters react to it.
 events:
   # The ADR-0003 gate's ten (2026-09-22)

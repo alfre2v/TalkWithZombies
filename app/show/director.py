@@ -12,8 +12,14 @@ The kinds: "free" (the cast talks), "invitation" (the operator asks anyone
 listening to answer; the page listens next), "answer" (after an invitation,
 the character the listener addressed answers), "static" (after an invitation
 that heard nothing, the operator reacts to the silence).
+
+Events and tone words are paced in rounds: an event every few free rounds
+(the gap), a tone word kept for a few rounds (the hold). Each gap and hold is
+drawn once, when it begins, from a generator seeded by the run's seed and that
+round, so its length is the same whenever the record is read again.
 """
 
+import itertools
 import random
 import re
 from dataclasses import dataclass
@@ -53,10 +59,10 @@ def plan_round(run: Run, story: Story, show: ShowConfig, played_s: float = 0.0,
     rng = random.Random(f"{run.seed}:{n}")
     if run.rounds and run.rounds[-1].kind == "invitation":
         heard = (transcript or "").strip()
-        return _answer(story, run.moods, heard) if heard else _static(story, run.moods, rng)
+        return _answer(story, run.moods, heard) if heard else _static(run, story, show, rng)
     if _time_to_listen(run, show, played_s, rng):
-        return _invitation(story, run.moods, rng)
-    return _free(run, story, rng, n)
+        return _invitation(run, story, show, rng)
+    return _free(run, story, show, rng)
 
 
 def _time_to_listen(run: Run, show: ShowConfig, played_s: float, rng: random.Random) -> bool:
@@ -74,11 +80,11 @@ def _time_to_listen(run: Run, show: ShowConfig, played_s: float, rng: random.Ran
     return rng.random() < (since - show.interaction_min_s) / (show.interaction_max_s - show.interaction_min_s)
 
 
-def _free(run: Run, story: Story, rng: random.Random, n: int) -> RoundPlan:
+def _free(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> RoundPlan:
     """Plan a round of the cast talking.
     Two or three names: whoever has been silent longest, anyone named in
     the last round, then random fill. A budget of 1-4 lines weighted to
-    2-3, an event on odd rounds, a tone word.
+    2-3, an event when its gap has passed, the tone word of the hold.
     """
     silent = _silent_longest(run, story, rng)
     named = sorted(_named_last_round(run, story) - {silent}, key=story.cast.index)
@@ -88,17 +94,17 @@ def _free(run: Run, story: Story, rng: random.Random, n: int) -> RoundPlan:
     chosen += rng.sample([name for name in story.cast if name not in chosen], size - len(chosen))
     speakers = tuple(name for name in story.cast if name in chosen)
     max_lines = rng.choices(_LINE_BUDGETS, weights=_LINE_WEIGHTS)[0]
-    event = _next_event(run, story, rng) if n % 2 == 1 else None
-    tone = _tone(story, rng)
+    event = _next_event(run, story, rng) if _event_due(run, show) else None
+    tone = _tone(run, story, show, rng)
     return _plan("free", speakers, max_lines, run.moods, event=event, tone=tone,
                  instruction=instruction_for(speakers, max_lines, event, run.moods, tone))
 
 
-def _invitation(story: Story, moods: bool, rng: random.Random) -> RoundPlan:
+def _invitation(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> RoundPlan:
     """Plan the operator's one line asking anyone listening to answer."""
-    tone = _tone(story, rng)
-    text = f"{story.operator} turns to the microphone and asks anyone listening to answer: {_count(1, moods)}."
-    return _plan("invitation", (story.operator,), 1, moods, tone=tone, instruction=text + _tone_sentence(tone))
+    tone = _tone(run, story, show, rng)
+    text = f"{story.operator} turns to the microphone and asks anyone listening to answer: {_count(1, run.moods)}."
+    return _plan("invitation", (story.operator,), 1, run.moods, tone=tone, instruction=text + _tone_sentence(tone))
 
 
 def _answer(story: Story, moods: bool, heard: str) -> RoundPlan:
@@ -115,11 +121,12 @@ def _answer(story: Story, moods: bool, heard: str) -> RoundPlan:
     return _plan("answer", addressed or story.cast, 1, moods, listener=heard, instruction=text)
 
 
-def _static(story: Story, moods: bool, rng: random.Random) -> RoundPlan:
+def _static(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> RoundPlan:
     """Plan the operator's one line reacting to a listening window that heard nothing."""
-    tone = _tone(story, rng)
-    text = "Only static answers. " + instruction_for((story.operator,), 1, None, moods, tone)
-    return _plan("static", (story.operator,), 1, moods, tone=tone, instruction=text)
+    tone = _tone(run, story, show, rng)
+    constraint = instruction_for((story.operator,), 1, None, run.moods, tone)
+    text = "Only static answers; the broadcast goes on. " + constraint
+    return _plan("static", (story.operator,), 1, run.moods, tone=tone, instruction=text)
 
 
 def _plan(kind: str, speakers: Sequence[str], max_lines: int, moods: bool, *, instruction: str,
@@ -158,6 +165,22 @@ def names_in(text: str, cast: Sequence[str]) -> Set[str]:
     return {name for name in cast if re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text)}
 
 
+def _event_due(run: Run, show: ShowConfig) -> bool:
+    """Decide whether this free round carries an event.
+
+    The run's first free round does. After an event, the next one comes when
+    its gap has passed: event_every +/- event_jitter free rounds, drawn once at
+    that event. Only free rounds count.
+    """
+    if show.event_every == 0:
+        return False
+    last = next((r for r in reversed(run.rounds) if r.event), None)
+    if last is None:
+        return True
+    since = sum(1 for r in run.rounds if r.n > last.n and r.kind == "free") + 1
+    return since >= _drawn(run.seed, "gap", last.n, show.event_every, show.event_jitter)
+
+
 def _next_event(run: Run, story: Story, rng: random.Random) -> str:
     """Draw an event not used since the pool was last used up."""
     used = [r.event for r in run.rounds if r.event]
@@ -166,9 +189,28 @@ def _next_event(run: Run, story: Story, rng: random.Random) -> str:
     return rng.choice([event for event in story.events if event not in recent])
 
 
-def _tone(story: Story, rng: random.Random) -> Optional[str]:
-    """Draw a tone word from the story's list, or none if the story has none."""
-    return rng.choice(story.tones) if story.tones else None
+def _tone(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> Optional[str]:
+    """The round's tone word: the current one while its hold lasts, else a new, different one.
+
+    The hold is tone_hold +/- tone_jitter rounds, drawn once when the word
+    began; only the rounds that carry a tone word count. None when tone_hold
+    is 0 or the story has no tone words.
+    """
+    if show.tone_hold == 0 or not story.tones:
+        return None
+    toned = [r for r in run.rounds if r.tone]
+    if toned:
+        current = toned[-1].tone
+        hold = list(itertools.takewhile(lambda r: r.tone == current, reversed(toned)))
+        if len(hold) < _drawn(run.seed, "hold", hold[-1].n, show.tone_hold, show.tone_jitter):
+            return current
+        return rng.choice([tone for tone in story.tones if tone != current] or list(story.tones))
+    return rng.choice(story.tones)
+
+
+def _drawn(seed: int, what: str, start: int, mean: int, jitter: int) -> int:
+    """The length of the gap or hold that began at round `start`: mean +/- jitter, never below 1."""
+    return max(1, mean + random.Random(f"{seed}:{what}:{start}").randint(-jitter, jitter))
 
 
 def _tone_sentence(tone: Optional[str]) -> str:

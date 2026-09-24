@@ -60,7 +60,12 @@ All commands run from this repository's root,
   reads that folder (verified 2026-09-24). `show.seed` makes a run
   repeatable — the same seed, story and settings give the same rounds;
   remove it for a random seed per run. Every other `show:` setting
-  takes its default (`app/config.py`, `ShowConfig`).
+  takes its default (`app/config.py`, `ShowConfig`). The pacing
+  settings are the ones most worth trying by ear: `event_every` and
+  `event_jitter` (by default an event every 2 free rounds, give or
+  take 1) and `tone_hold` and `tone_jitter` (a tone word kept 3
+  rounds, give or take 1); 0 in
+  `event_every` or `tone_hold` turns events or tone words off.
 
 ## Play rounds
 

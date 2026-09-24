@@ -27,6 +27,7 @@ class TestShowConfig:
         assert show.seed is None
         assert show.emotion_tags is True
         assert show.debug is False
+        assert (show.event_every, show.event_jitter, show.tone_hold, show.tone_jitter) == (2, 1, 3, 1)
         assert (show.interaction_min_s, show.interaction_max_s) == (60.0, 180.0)
         assert (show.listen_window_s, show.press_cap_s) == (10.0, 30.0)
         assert (show.no_speech_max, show.logprob_min) == (0.6, -1.0)
@@ -37,9 +38,11 @@ class TestShowConfig:
             "story": "another-story", "episode": "01-supplies", "max_tokens": 400,
             "context_budget": 3000, "seed": 7, "emotion_tags": False, "debug": True,
             "interaction_min_s": 5, "interaction_max_s": 9, "stt_language": "es",
+            "event_every": 0, "event_jitter": 0, "tone_hold": 5, "tone_jitter": 2,
         }}
         show = app_config.load_settings(_write_settings(tmp_path, raw)).show
 
+        assert (show.event_every, show.event_jitter, show.tone_hold, show.tone_jitter) == (0, 0, 5, 2)
         assert (show.story, show.episode) == ("another-story", "01-supplies")
         assert (show.max_tokens, show.context_budget, show.seed) == (400, 3000, 7)
         assert show.emotion_tags is False
@@ -59,6 +62,10 @@ class TestShowConfig:
         ("listen_window_s", 0),
         ("press_cap_s", 0),
         ("no_speech_max", 1.5),
+        ("event_every", -1),
+        ("event_jitter", -1),
+        ("tone_hold", -1),
+        ("tone_jitter", -1),
     ])
     def test_out_of_bounds_rejected(self, field, value):
         with pytest.raises(ValidationError):
