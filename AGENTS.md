@@ -14,8 +14,11 @@ conflict with these.
   "push" are separate words: push only when told.
 - **No AI attribution anywhere:** no `Co-Authored-By` lines and no
   "Generated with" footers, in commits, pull requests, or files.
-- **Minimal code comments.** The reasons behind the design live in the
-  design docs, not in the code.
+- **Upstream's documentation style.** This fork keeps TalkWithMe's
+  way of documenting code: a brief docstring on every new function,
+  and comments where they help, on the brief side. A plain `-` for
+  hyphens and ranges, never the en dash. The full reasoning behind
+  the show engine's design lives in zombie-radio's design docs.
 - **The suite green before review:** `.venv/bin/python -m pytest` all
   passing, plus the Node tests when their files are touched (see
   Testing below).
