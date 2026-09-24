@@ -72,9 +72,9 @@ class TestShippedStory:
         assert story.title == "The Lab at the End of the Frequency"
         assert story.cast == tuple(CAST)
         assert story.operator == "Samantha"
-        assert len(story.events) == 10
+        assert len(story.events) == 289
         assert story.events[2] == "Something is scratching at the loading dock door, slow and rhythmic."
-        assert len(story.tones) == 65
+        assert len(story.tones) == 500
         assert "brittle" in story.tones
         assert not set(story.tones) & set(MOODS)
 
