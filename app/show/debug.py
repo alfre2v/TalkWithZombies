@@ -14,13 +14,14 @@ import logging
 from typing import Dict, List, Optional, Tuple
 
 from app.services.llm import count_tokens, render_prompt, round_payload
-from app.show.script import runs_root
+from app.show.script import Heard, runs_root
 
 logger = logging.getLogger(__name__)
 
 
 async def write_round(run_id: str, n: int, kind: str, messages: List[Dict[str, str]], *, grammar: str,
-                      max_tokens: int, seed: int, reply: str, final: dict, error: Optional[str] = None) -> None:
+                      max_tokens: int, seed: int, reply: str, final: dict, heard: Optional[Heard] = None,
+                      error: Optional[str] = None) -> None:
     """Write round n's two debug files; never raise."""
     try:
         folder = runs_root() / run_id / "debug"
@@ -34,6 +35,7 @@ async def write_round(run_id: str, n: int, kind: str, messages: List[Dict[str, s
             f"seed {seed} | max_tokens {max_tokens} | finish {final.get('finish_reason')} | "
             f"timings {json.dumps(final.get('timings'))}",
             f"token check: {check}",
+            *([_listener_line(heard)] if heard else []),
             *([f"error: {error}"] if error else []),
             "", "== grammar ==", grammar.rstrip("\n"),
             "", "== the prompt as the model read it (/apply-template) ==", prompt,
@@ -42,6 +44,13 @@ async def write_round(run_id: str, n: int, kind: str, messages: List[Dict[str, s
         (folder / f"r{n:03d}.txt").write_text(text + "\n", encoding="utf-8")
     except Exception as exc:
         logger.warning("Show run %s, round %s: debug files not written: %s", run_id, n, exc)
+
+
+def _listener_line(heard: Heard) -> str:
+    """What Whisper heard, its confidence, and whether it counted as words or as silence."""
+    verdict = f"silence: {heard.silence}" if heard.silence else "words"
+    return (f"listener: heard {heard.text!r} | no_speech_prob {heard.no_speech_prob} | "
+            f"avg_logprob {heard.avg_logprob} | {verdict}")
 
 
 async def _rendered(run_id: str, n: int, messages: List[Dict[str, str]],

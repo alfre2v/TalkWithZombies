@@ -12,7 +12,7 @@ import pytest
 
 import app.show.debug as debug
 from app.services.llm import round_payload
-from app.show.script import runs_root
+from app.show.script import Heard, runs_root
 
 RUN_ID = "2026-09-24T01-23-45"
 MESSAGES = [{"role": "system", "content": "S"}, {"role": "user", "content": "Moira speaks next: the next line."}]
@@ -93,6 +93,13 @@ class TestWriteRound:
 
         assert "error: the model went away" in text
         assert "token check: the rendered prompt has 120 tokens; the server reported no size" in text
+
+    def test_what_the_listener_said_and_the_verdict(self, server):
+        heard = Heard(text="Thank you.", no_speech_prob=0.1, avg_logprob=-0.2, silence="a known Whisper hallucination")
+        text = (_write(kind="static", heard=heard) / "r003.txt").read_text(encoding="utf-8")
+
+        assert ("listener: heard 'Thank you.' | no_speech_prob 0.1 | avg_logprob -0.2 | "
+                "silence: a known Whisper hallucination") in text
 
     def test_a_disk_failure_never_raises(self, server, caplog):
         blocked = runs_root() / RUN_ID

@@ -67,7 +67,7 @@ class TestRecord:
     def test_a_round_recorded_by_an_older_version_still_loads(self):
         old = Round.model_validate({"n": 1, "instruction": "I.", "speakers": ["Ralph"], "max_lines": 1})
         assert (old.event, old.kind, old.played_s, old.tone) == (None, "free", 0.0, None)
-        assert (old.tokens, old.trims) == (None, [])
+        assert (old.tokens, old.trims, old.heard) == (None, [], None)
 
 
 class TestAssembler:

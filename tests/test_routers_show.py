@@ -6,6 +6,7 @@ stream_round) with the real reply recorded on the box on 2026-09-23
 (tests/test_show_parser.py), token by token.
 """
 
+import base64
 import dataclasses
 import json
 import logging
@@ -17,7 +18,7 @@ import pytest
 import app.config as app_config
 import app.routers.show as show_router
 import app.show.debug as show_debug
-from app.config import Persona, PersonasConfig, ShowConfig
+from app.config import Persona, PersonasConfig, ShowConfig, STTConfig
 from app.show.script import Line, Round, append_round, load_run, runs_root, save_run
 from tests.factories import make_settings, parse_sse_events, sse_events_by_type
 from tests.test_show_parser import REAL_LINES, REAL_ROUND, REAL_TEXT
@@ -59,8 +60,9 @@ def _start(client):
     return resp.json()
 
 
-def _round(client, run_id, played_s=0, transcript=None):
-    resp = client.post("/api/show/round", json={"run_id": run_id, "played_s": played_s, "transcript": transcript})
+def _round(client, run_id, played_s=0, transcript=None, **heard):
+    body = {"run_id": run_id, "played_s": played_s, "transcript": transcript, **heard}
+    resp = client.post("/api/show/round", json=body)
     assert resp.status_code == 200
     return parse_sse_events(resp.text)
 
@@ -205,6 +207,90 @@ class TestListenerTurn:
         assert load_run(run_id).rounds[0].listener is None
         assert "outside a listening window" in caplog.text
 
+
+class TestTranscriptFilter:
+    """After an invitation, what Whisper heard becomes words (an answer) or silence (static), recorded either way."""
+
+    @pytest.mark.parametrize("text, no_speech_prob, avg_logprob, reason", [
+        ("", None, None, "nothing heard"),
+        ("Hello there.", 0.9, -0.2, "no speech (no_speech_prob 0.90 > 0.6)"),
+        ("Hello there.", 0.1, -1.5, "an unsure reading (avg_logprob -1.50 < -1.0)"),
+        ("Thank you.", 0.1, -0.2, "a known Whisper hallucination"),
+        ("No response received from STT server", None, None, "a known Whisper hallucination"),
+    ])
+    def test_whisper_noise_gives_the_static_round(self, client, show_env, fake_model, text, no_speech_prob,
+                                                   avg_logprob, reason):
+        run_id = _start(client)["run_id"]
+        _round(client, run_id, played_s=180)
+        summary = _summary(_round(client, run_id, played_s=190, transcript=text, no_speech_prob=no_speech_prob,
+                                  avg_logprob=avg_logprob))
+
+        assert summary["kind"] == "static"
+        recorded = load_run(run_id).rounds[1]
+        assert recorded.listener is None
+        assert (recorded.heard.text, recorded.heard.silence) == (text, reason)
+
+    def test_clear_words_give_the_answer_and_are_recorded(self, client, show_env, fake_model):
+        run_id = _start(client)["run_id"]
+        _round(client, run_id, played_s=180)
+        summary = _summary(_round(client, run_id, played_s=190, transcript="Moira, is it airborne?",
+                                  no_speech_prob=0.05, avg_logprob=-0.3))
+
+        assert (summary["kind"], summary["speakers"]) == ("answer", ["Moira"])
+        recorded = load_run(run_id).rounds[1]
+        assert recorded.listener == "Moira, is it airborne?"
+        assert recorded.heard.model_dump() == {"text": "Moira, is it airborne?", "no_speech_prob": 0.05,
+                                               "avg_logprob": -0.3, "silence": None}
+
+
+class TestListen:
+    AUDIO = base64.b64encode(b"fake webm audio").decode()
+
+    @pytest.fixture
+    def whisper(self, monkeypatch):
+        """Turn STT on and fake the show's transcription; keep each call's arguments."""
+        app_config._settings_cache.stt = STTConfig(enabled=True, base_url="http://stt.local:6600")
+        calls = []
+
+        async def fake_transcribe_for_show(audio_bytes, mime_type="audio/webm", *, prompt=None, language=None):
+            calls.append({"audio": audio_bytes, "mime": mime_type, "prompt": prompt, "language": language})
+            return {"text": "Moira, is it airborne?", "no_speech_prob": 0.05, "avg_logprob": -0.3}
+
+        monkeypatch.setattr(show_router, "transcribe_for_show", fake_transcribe_for_show)
+        return calls
+
+    def test_transcribes_with_the_casts_names_and_the_language(self, client, show_env, whisper):
+        run_id = _start(client)["run_id"]
+
+        resp = client.post("/api/show/listen", json={"run_id": run_id, "audio_base64": self.AUDIO})
+
+        assert resp.status_code == 200
+        assert resp.json() == {"text": "Moira, is it airborne?", "no_speech_prob": 0.05, "avg_logprob": -0.3}
+        assert whisper[0] == {"audio": b"fake webm audio", "mime": "audio/webm",
+                              "prompt": "Daniel, Moira, Ralph, Samantha", "language": "en"}
+
+    def test_stt_off_is_503(self, client, show_env):
+        run_id = _start(client)["run_id"]
+        resp = client.post("/api/show/listen", json={"run_id": run_id, "audio_base64": self.AUDIO})
+        assert resp.status_code == 503
+
+    def test_bad_audio_is_400_and_an_unknown_run_404(self, client, show_env, whisper):
+        run_id = _start(client)["run_id"]
+        assert client.post("/api/show/listen", json={"run_id": run_id, "audio_base64": "abc"}).status_code == 400
+        assert client.post("/api/show/listen", json={"run_id": "nope", "audio_base64": self.AUDIO}).status_code == 404
+
+    def test_a_failed_transcription_is_502(self, client, show_env, monkeypatch):
+        app_config._settings_cache.stt = STTConfig(enabled=True, base_url="http://stt.local:6600")
+
+        async def failing(*args, **kwargs):
+            return None
+
+        monkeypatch.setattr(show_router, "transcribe_for_show", failing)
+        run_id = _start(client)["run_id"]
+
+        resp = client.post("/api/show/listen", json={"run_id": run_id, "audio_base64": self.AUDIO})
+
+        assert resp.status_code == 502
 
 class TestTrim:
     def test_a_full_script_is_trimmed_before_the_round(self, client, show_env, monkeypatch):

@@ -34,12 +34,24 @@ class Line(BaseModel):
     spoken: str
 
 
+class Heard(BaseModel):
+    """What Whisper heard after an invitation.
+
+    `silence` says why it counted as silence; None when it counted as words.
+    """
+    text: str
+    no_speech_prob: Optional[float] = None
+    avg_logprob: Optional[float] = None
+    silence: Optional[str] = None
+
+
 class Round(BaseModel):
     n: int
     kind: Literal["free", "invitation", "answer", "static"] = "free"
     played_s: float = 0.0
     instruction: str
     listener: Optional[str] = None
+    heard: Optional[Heard] = None
     speakers: List[str]
     max_lines: int
     event: Optional[str] = None

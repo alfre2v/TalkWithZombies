@@ -1117,6 +1117,60 @@ class TestTranscribeAudio:
         assert _run(stt_client.transcribe_audio(b"x")) is None
 
 
+class TestTranscribeForShow:
+    """transcribe_for_show — the show's listener: Whisper's confidence and the show's hints."""
+
+    def test_request_carries_the_hints_and_asks_for_confidence(self, monkeypatch):
+        _active_stt(monkeypatch)
+        seen = {}
+
+        def responder(method, url, **kw):
+            seen.update(url=url, data=kw.get("data"), files=kw.get("files"))
+            return json_response(200, {"text": " Moira, is it airborne? ", "segments": [
+                {"no_speech_prob": 0.02, "avg_logprob": -0.2}, {"no_speech_prob": 0.10, "avg_logprob": -0.4}]})
+
+        _patch_http(monkeypatch, responder)
+        result = _run(stt_client.transcribe_for_show(b"audio", "audio/webm", prompt="Daniel, Moira", language="en"))
+
+        assert result == {"text": "Moira, is it airborne?", "no_speech_prob": 0.10,
+                          "avg_logprob": pytest.approx(-0.3)}
+        assert seen["url"] == "http://stt.local:6600/v1/audio/transcriptions"
+        assert seen["data"] == {"response_format": "json", "vad_filter": "true",
+                                "prompt": "Daniel, Moira", "language": "en"}
+        assert seen["files"]["file"] == ("audio.webm", b"audio", "audio/webm")
+
+    def test_nothing_heard_is_empty_text_never_a_placeholder(self, monkeypatch):
+        _active_stt(monkeypatch)
+        _patch_http(monkeypatch, lambda method, url, **kw: json_response(200, {"text": "", "segments": []}))
+
+        assert _run(stt_client.transcribe_for_show(b"x")) == {"text": "", "no_speech_prob": None,
+                                                              "avg_logprob": None}
+
+    def test_without_hints_only_the_format_and_vad_are_sent(self, monkeypatch):
+        _active_stt(monkeypatch)
+        seen = {}
+
+        def responder(method, url, **kw):
+            seen["data"] = kw.get("data")
+            return json_response(200, {"text": "ok"})
+
+        _patch_http(monkeypatch, responder)
+        _run(stt_client.transcribe_for_show(b"x"))
+
+        assert seen["data"] == {"response_format": "json", "vad_filter": "true"}
+
+    def test_inactive_empty_or_failing_returns_none(self, monkeypatch):
+        def fail(*a, **kw):
+            raise AssertionError("no request expected")
+
+        _patch_http(monkeypatch, fail)
+        assert _run(stt_client.transcribe_for_show(b"x")) is None
+        _active_stt(monkeypatch)
+        assert _run(stt_client.transcribe_for_show(b"")) is None
+        _patch_http(monkeypatch, lambda method, url, **kw: json_response(500, {}))
+        assert _run(stt_client.transcribe_for_show(b"x")) is None
+
+
 # ---------------------------------------------------------------------------
 # _mime_to_extension
 # ---------------------------------------------------------------------------
