@@ -18,3 +18,4 @@ restore.sh
 startup.sh
 llm_api_key
 
+runs/
