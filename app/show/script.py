@@ -33,6 +33,7 @@ class Round(BaseModel):
     listener: Optional[str] = None
     speakers: List[str]
     max_lines: int
+    event: Optional[str] = None
     lines: List[Line] = Field(default_factory=list)
     dropped: List[str] = Field(default_factory=list)
     timings: Optional[Dict[str, int]] = None

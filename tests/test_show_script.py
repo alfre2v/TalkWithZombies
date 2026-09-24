@@ -63,6 +63,10 @@ class TestRecord:
         assert load_run(run.run_id) == run
         assert [p.name for p in (runs_root() / run.run_id).iterdir()] == ["script.json"]
 
+    def test_a_round_recorded_before_the_event_field_still_loads(self):
+        old = {"n": 1, "instruction": "I.", "speakers": ["Ralph"], "max_lines": 1}
+        assert Round.model_validate(old).event is None
+
 
 class TestAssembler:
     def test_system_then_alternating_turns_then_the_new_instruction(self):
