@@ -154,6 +154,31 @@ It opens no run and writes nothing. If `runs/` is empty, play one
 drive first; after changing the story or the emotion switch, play one
 drive first too, so the cast sheet it borrows is current.
 
+## Look inside a round (the debug switch)
+
+Add `debug: true` under `show:` in `settings.yaml` and restart the app.
+Every round then leaves two files in `runs/<run-id>/debug/`:
+
+- **`r005.txt`**, to read: the round's numbers (seed, budget, finish,
+  the server's timings), a token check, the grammar, **the prompt
+  exactly as the model read it** (special markers included, rendered
+  by the model server's `/apply-template`), and the reply as it
+  streamed, including any line that was cut or dropped. A failed
+  round gets its file too, with the error.
+- **`r005.request.json`**, the exact request body. To send it again
+  (the tunnel up; the reply comes back as the same stream of `data:`
+  lines):
+
+  ```bash
+  curl -s localhost:8080/v1/chat/completions -H 'Content-Type: application/json' -d @runs/<run-id>/debug/r005.request.json
+  ```
+
+The token check compares the rendered prompt's token count with the
+size the server read (`prompt_n + cache_n`); it says `difference 0`
+when all is well, and the app's log warns when it is not. Each debug
+round costs about 0.35 s more (two extra calls to the model server),
+so leave the switch off when timing a drive.
+
 ## When something looks wrong
 
 - **The driver cannot connect to port 8010** — the app is not serving:

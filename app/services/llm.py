@@ -132,6 +132,13 @@ async def stream_chat(
             yield token
 
 
+def round_payload(messages: List[Dict[str, str]], *, grammar: str, max_tokens: int, seed: int) -> dict:
+    """The request body of one show round: the chat payload plus the round's grammar, budget and seed."""
+    payload = _base_payload(messages)
+    payload.update({"grammar": grammar, "max_tokens": max_tokens, "seed": seed})
+    return payload
+
+
 async def stream_round(
     messages: List[Dict[str, str]],
     *,
@@ -146,8 +153,7 @@ async def stream_round(
     timings prompt_n + cache_n (plus predicted_n after the round): a stream
     carries no "usage" unless asked for, and we do not ask.
     """
-    payload = _base_payload(messages)
-    payload.update({"grammar": grammar, "max_tokens": max_tokens, "seed": seed})
+    payload = round_payload(messages, grammar=grammar, max_tokens=max_tokens, seed=seed)
     timings, finish_reason = None, None
     async for chunk in _iter_sse_chunks(payload):
         choices = chunk.get("choices") or []
@@ -161,6 +167,30 @@ async def stream_round(
             timings = {key: chunk["timings"][key] for key in ("prompt_n", "cache_n", "predicted_n")
                        if key in chunk["timings"]}
     yield {"timings": timings, "finish_reason": finish_reason}
+
+
+async def render_prompt(messages: List[Dict[str, str]]) -> str:
+    """The prompt text the model reads for these messages, from llama.cpp's /apply-template (no generation)."""
+    settings = get_settings()
+    async with _llm_client(timeout=15.0) as client:
+        resp = await client.post(f"{settings.llm.base_url}/apply-template", json={"messages": messages})
+        resp.raise_for_status()
+        return resp.json()["prompt"]
+
+
+async def count_tokens(text: str) -> int:
+    """How many tokens the model reads for the text, from llama.cpp's /tokenize.
+
+    Special markers are parsed as the model's own tokens and the start token is
+    added, which is how the server counts a prompt (checked 2026-09-24: equal
+    to prompt_n + cache_n on every round compared).
+    """
+    settings = get_settings()
+    async with _llm_client(timeout=15.0) as client:
+        resp = await client.post(f"{settings.llm.base_url}/tokenize",
+                                 json={"content": text, "add_special": True, "parse_special": True})
+        resp.raise_for_status()
+        return len(resp.json()["tokens"])
 
 
 async def chat_completion(messages: List[Dict[str, str]], max_tokens: int = 64) -> str:

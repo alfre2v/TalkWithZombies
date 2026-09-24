@@ -7,6 +7,8 @@ server keeps no show state between requests: the caller sends the run id,
 and the run is loaded from its record. Each request carries the running
 total of show audio played; after a round of kind "invitation" the page
 listens, and the next request carries what it heard as the transcript.
+With show.debug on, each round also leaves its debug files
+(app/show/debug.py), failed rounds included.
 """
 
 import asyncio
@@ -23,6 +25,7 @@ from fastapi.responses import StreamingResponse
 from app import config as app_config
 from app.models import ShowRoundRequest, ShowStartRequest, ShowStartResponse
 from app.services.llm import stream_round
+from app.show.debug import write_round
 from app.show.director import plan_round
 from app.show.parser import LineParser
 from app.show.script import (Line, Round, Run, append_round, assemble_messages, load_run, new_run, round_share,
@@ -92,15 +95,18 @@ async def _round_stream(run: Run, story: Story, played_s: float, transcript: Opt
     if transcript and transcript.strip() and plan.kind != "answer":
         logger.warning("Show run %s, round %s: a transcript arrived outside a listening window; ignored",
                        run.run_id, n)
+    messages = assemble_messages(run, plan.instruction)
+    request = {"grammar": plan.grammar, "max_tokens": show.max_tokens, "seed": run.seed + n}
     parser = LineParser(run.moods)
     line_no = 0
     final: dict = {}
+    pieces = []
     try:
-        async for item in stream_round(assemble_messages(run, plan.instruction), grammar=plan.grammar,
-                                       max_tokens=show.max_tokens, seed=run.seed + n):
+        async for item in stream_round(messages, **request):
             if "token" not in item:
                 final = item
                 continue
+            pieces.append(item["token"])
             for event in parser.feed(item["token"]):
                 if event["type"] == "start":
                     line_no += 1
@@ -112,6 +118,9 @@ async def _round_stream(run: Run, story: Story, played_s: float, transcript: Opt
         raise
     except Exception as exc:
         logger.warning("Show run %s, round %s failed; nothing recorded: %s", run.run_id, n, exc)
+        if show.debug:
+            await write_round(run.run_id, n, plan.kind, messages, **request, reply="".join(pieces), final=final,
+                              error=str(exc))
         yield _sse({"type": "error", "message": str(exc)})
         yield _sse({"type": "complete"})
         return
@@ -125,6 +134,8 @@ async def _round_stream(run: Run, story: Story, played_s: float, transcript: Opt
         tokens=round_share(size_before, trimmed_tokens, final.get("timings")), trims=trimmed,
     )
     append_round(run, round_)
+    if show.debug:
+        await write_round(run.run_id, n, plan.kind, messages, **request, reply="".join(pieces), final=final)
     if parser.dropped:
         logger.warning("Show run %s, round %s dropped %s line(s); finish_reason=%s",
                        run.run_id, n, len(parser.dropped), round_.finish_reason)

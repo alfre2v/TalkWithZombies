@@ -7,6 +7,7 @@ stream_round) with the real reply recorded on the box on 2026-09-23
 """
 
 import dataclasses
+import json
 import logging
 import shutil
 from pathlib import Path
@@ -15,8 +16,9 @@ import pytest
 
 import app.config as app_config
 import app.routers.show as show_router
+import app.show.debug as show_debug
 from app.config import Persona, PersonasConfig, ShowConfig
-from app.show.script import Line, Round, append_round, load_run, save_run
+from app.show.script import Line, Round, append_round, load_run, runs_root, save_run
 from tests.factories import make_settings, parse_sse_events, sse_events_by_type
 from tests.test_show_parser import REAL_LINES, REAL_ROUND, REAL_TEXT
 
@@ -235,3 +237,58 @@ class TestTrim:
         assert [r.n for r in recorded.rounds if r.trimmed] == [3, 4, 5, 6]
         assert recorded.rounds[-1].trims == [3, 4, 5, 6]
         assert recorded.rounds[-1].tokens == 650 - (950 - 400)
+
+
+class TestDebug:
+    @pytest.fixture
+    def debug_server(self, monkeypatch):
+        """Fake the model server's /apply-template and /tokenize; the count matches FINAL's prompt size."""
+        async def render_prompt(messages):
+            return "RENDERED PROMPT"
+
+        async def count_tokens(text):
+            return 4 + 303
+
+        monkeypatch.setattr(show_debug, "render_prompt", render_prompt)
+        monkeypatch.setattr(show_debug, "count_tokens", count_tokens)
+
+    def test_debug_on_leaves_both_files_per_round(self, client, show_env, fake_model, debug_server):
+        app_config._settings_cache.show = ShowConfig(seed=42, debug=True)
+        run_id = _start(client)["run_id"]
+        _round(client, run_id)
+        _round(client, run_id)
+
+        folder = runs_root() / run_id / "debug"
+        assert sorted(p.name for p in folder.iterdir()) == [
+            "r001.request.json", "r001.txt", "r002.request.json", "r002.txt"]
+        request = json.loads((folder / "r002.request.json").read_text(encoding="utf-8"))
+        assert request["messages"] == fake_model[1]["messages"]
+        assert (request["grammar"], request["max_tokens"], request["seed"]) == (
+            fake_model[1]["grammar"], 512, 42 + 2)
+        text = (folder / "r002.txt").read_text(encoding="utf-8")
+        assert "difference 0" in text
+        assert "RENDERED PROMPT" in text
+        assert "".join(REAL_ROUND) in text
+
+    def test_debug_off_leaves_nothing(self, client, show_env, fake_model):
+        run_id = _start(client)["run_id"]
+        _round(client, run_id)
+
+        assert not (runs_root() / run_id / "debug").exists()
+
+    def test_a_failed_round_leaves_its_debug_file(self, client, show_env, monkeypatch, debug_server):
+        app_config._settings_cache.show = ShowConfig(seed=42, debug=True)
+
+        async def failing_stream_round(messages, *, grammar, max_tokens, seed):
+            for token in REAL_ROUND[:10]:
+                yield {"token": token}
+            raise RuntimeError("the model went away")
+
+        monkeypatch.setattr(show_router, "stream_round", failing_stream_round)
+        run_id = _start(client)["run_id"]
+        _round(client, run_id)
+
+        text = (runs_root() / run_id / "debug" / "r001.txt").read_text(encoding="utf-8")
+        assert "error: the model went away" in text
+        assert "".join(REAL_ROUND[:10]) in text
+        assert load_run(run_id).rounds == []
