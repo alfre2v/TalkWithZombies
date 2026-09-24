@@ -9,7 +9,8 @@ from datetime import datetime
 
 from app.config import ShowConfig
 from app.show.script import (
-    Line, Round, append_round, assemble_messages, load_run, new_run, reply_text, runs_root,
+    Line, Round, Run, append_round, assemble_messages, load_run, new_run, reply_text, round_share, runs_root,
+    script_size, trim,
 )
 from app.show.story import Story
 
@@ -63,9 +64,10 @@ class TestRecord:
         assert load_run(run.run_id) == run
         assert [p.name for p in (runs_root() / run.run_id).iterdir()] == ["script.json"]
 
-    def test_a_round_recorded_before_the_event_and_director_v1_fields_still_loads(self):
+    def test_a_round_recorded_by_an_older_version_still_loads(self):
         old = Round.model_validate({"n": 1, "instruction": "I.", "speakers": ["Ralph"], "max_lines": 1})
         assert (old.event, old.kind, old.played_s, old.tone) == (None, "free", 0.0, None)
+        assert (old.tokens, old.trims) == (None, [])
 
 
 class TestAssembler:
@@ -120,3 +122,68 @@ class TestAssembler:
 
         text = "".join(m["content"] for m in assemble_messages(run, "Next."))
         assert not any(f"[{name}]:" in text for name in STORY.cast)
+
+
+def _sized(count, size, share=100):
+    """A run of `count` rounds with lines, each recording `share` tokens; the last reports `size` tokens."""
+    run = Run(run_id="r", started="s", story="lab-outbreak", cast=list(STORY.cast), moods=True, seed=1,
+              systems={"": "S"})
+    for n in range(1, count + 1):
+        run.rounds.append(_round(n, tokens=share))
+    run.rounds[-1].timings = {"prompt_n": size - 50, "cache_n": 0, "predicted_n": 50}
+    return run
+
+
+class TestTrim:
+    def test_the_size_is_what_the_server_reported_after_the_last_round(self):
+        run = _sized(3, 1234)
+        assert script_size(run) == 1234
+        run.rounds[-1].timings = None
+        assert script_size(run) is None
+
+    def test_no_trim_below_ninety_percent_or_without_a_size(self):
+        assert trim(_sized(20, 1799), 2000) == []
+        run = _sized(20, 1900)
+        run.rounds[-1].timings = None
+        assert trim(run, 2000) == []
+        assert not any(r.trimmed for r in run.rounds)
+
+    def test_middle_rounds_are_flagged_outwards_until_half_the_budget(self):
+        run = _sized(20, 1900)
+
+        flagged = trim(run, 2000)
+
+        assert flagged == list(range(6, 15))
+        assert [r.n for r in run.rounds if r.trimmed] == flagged
+
+    def test_the_first_two_and_last_four_rounds_are_never_flagged(self):
+        run = _sized(20, 5000)
+
+        assert trim(run, 2000) == list(range(3, 17))
+        assert trim(_sized(6, 5000), 2000) == []
+
+    def test_a_second_trim_takes_the_middle_of_what_remains(self):
+        run = _sized(20, 1900)
+        trim(run, 2000)
+        for n in range(21, 31):
+            run.rounds.append(_round(n, tokens=100))
+        run.rounds[-1].timings = {"prompt_n": 1850, "cache_n": 0, "predicted_n": 50}
+
+        assert trim(run, 2000) == list(range(15, 24))
+        assert [r.n for r in run.rounds if not r.trimmed] == [1, 2, 3, 4, 5, 24, 25, 26, 27, 28, 29, 30]
+
+    def test_rounds_the_model_does_not_read_are_not_candidates(self):
+        run = _sized(12, 1900)
+        run.rounds[2].lines = []
+        run.rounds[3].episode = "earlier"
+
+        flagged = trim(run, 2000)
+
+        assert 3 not in flagged and 4 not in flagged
+        assert flagged == [5, 6, 7, 8]
+
+    def test_a_round_share_is_its_size_less_the_size_before_it(self):
+        assert round_share(900, 0, {"prompt_n": 120, "cache_n": 830, "predicted_n": 50}) == 100
+        assert round_share(1900, 900, {"prompt_n": 900, "cache_n": 150, "predicted_n": 50}) == 100
+        assert round_share(None, 0, {"prompt_n": 300, "cache_n": 0, "predicted_n": 50}) is None
+        assert round_share(900, 0, None) is None

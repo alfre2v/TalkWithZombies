@@ -25,7 +25,8 @@ from app.models import ShowRoundRequest, ShowStartRequest, ShowStartResponse
 from app.services.llm import stream_round
 from app.show.director import plan_round
 from app.show.parser import LineParser
-from app.show.script import Line, Round, Run, append_round, assemble_messages, load_run, new_run
+from app.show.script import (Line, Round, Run, append_round, assemble_messages, load_run, new_run, round_share,
+                             script_size, trim)
 from app.show.story import Story, StoryError, load_story, render_cast_sheet
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,13 @@ async def play_round(req: ShowRoundRequest):
 async def _round_stream(run: Run, story: Story, played_s: float, transcript: Optional[str]) -> AsyncIterator[str]:
     show = app_config.get_settings().show
     n = len(run.rounds) + 1
+    size_before = script_size(run)
+    trimmed = trim(run, show.context_budget)
+    flagged = set(trimmed)
+    trimmed_tokens = sum(r.tokens or 0 for r in run.rounds if r.n in flagged)
+    if trimmed:
+        logger.info("Show run %s, round %s: script at %s tokens (budget %s); trimmed rounds %s, about %s tokens",
+                    run.run_id, n, size_before, show.context_budget, trimmed, trimmed_tokens)
     plan = plan_round(run, story, show, played_s, transcript)
     if transcript and transcript.strip() and plan.kind != "answer":
         logger.warning("Show run %s, round %s: a transcript arrived outside a listening window; ignored",
@@ -114,11 +122,13 @@ async def _round_stream(run: Run, story: Story, played_s: float, transcript: Opt
         speakers=list(plan.speakers), max_lines=plan.max_lines, event=plan.event, tone=plan.tone,
         lines=[Line(**dataclasses.asdict(line)) for line in parser.lines],
         dropped=parser.dropped, timings=final.get("timings"), finish_reason=final.get("finish_reason"),
+        tokens=round_share(size_before, trimmed_tokens, final.get("timings")), trims=trimmed,
     )
     append_round(run, round_)
     if parser.dropped:
         logger.warning("Show run %s, round %s dropped %s line(s); finish_reason=%s",
                        run.run_id, n, len(parser.dropped), round_.finish_reason)
     yield _sse({"type": "round", "n": n, "kind": plan.kind, "speakers": list(plan.speakers), "event": plan.event,
-                "tone": plan.tone, "dropped": parser.dropped, "finish_reason": round_.finish_reason})
+                "tone": plan.tone, "trimmed": trimmed, "dropped": parser.dropped,
+                "finish_reason": round_.finish_reason})
     yield _sse({"type": "complete"})

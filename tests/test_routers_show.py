@@ -6,6 +6,7 @@ stream_round) with the real reply recorded on the box on 2026-09-23
 (tests/test_show_parser.py), token by token.
 """
 
+import dataclasses
 import logging
 import shutil
 from pathlib import Path
@@ -15,7 +16,7 @@ import pytest
 import app.config as app_config
 import app.routers.show as show_router
 from app.config import Persona, PersonasConfig, ShowConfig
-from app.show.script import load_run
+from app.show.script import Line, Round, append_round, load_run, save_run
 from tests.factories import make_settings, parse_sse_events, sse_events_by_type
 from tests.test_show_parser import REAL_LINES, REAL_ROUND, REAL_TEXT
 
@@ -122,6 +123,8 @@ class TestRound:
         assert (recorded.kind, recorded.played_s, recorded.listener) == ("free", 0.0, None)
         assert recorded.tone is not None
         assert (summary["kind"], summary["tone"]) == ("free", recorded.tone)
+        assert summary["trimmed"] == []
+        assert (recorded.tokens, recorded.trims) == (None, [])
 
     def test_the_request_carries_the_plan_budget_and_round_seed(self, client, show_env, fake_model):
         run_id = _start(client)["run_id"]
@@ -199,3 +202,36 @@ class TestListenerTurn:
         assert summary["kind"] == "free"
         assert load_run(run_id).rounds[0].listener is None
         assert "outside a listening window" in caplog.text
+
+
+class TestTrim:
+    def test_a_full_script_is_trimmed_before_the_round(self, client, show_env, monkeypatch):
+        app_config._settings_cache.show = ShowConfig(seed=42, context_budget=1000)
+        requests = []
+
+        async def fake_stream_round(messages, *, grammar, max_tokens, seed):
+            requests.append(messages)
+            for token in REAL_ROUND:
+                yield {"token": token}
+            yield {"timings": {"prompt_n": 100, "cache_n": 500, "predicted_n": 50}, "finish_reason": "stop"}
+
+        monkeypatch.setattr(show_router, "stream_round", fake_stream_round)
+        run_id = _start(client)["run_id"]
+        run = load_run(run_id)
+        lines = [Line(**dataclasses.asdict(line)) for line in REAL_LINES]
+        for n in range(1, 11):
+            append_round(run, Round(n=n, instruction=f"Instruction {n}.", speakers=["Ralph", "Moira"],
+                                    max_lines=2, lines=lines, tokens=100))
+        run.rounds[-1].timings = {"prompt_n": 900, "cache_n": 0, "predicted_n": 50}
+        save_run(run)
+
+        summary = _summary(_round(client, run_id))
+
+        assert summary["trimmed"] == [3, 4, 5, 6]
+        sent = [m["content"] for m in requests[0]]
+        assert not any(f"Instruction {n}." in sent for n in (3, 4, 5, 6))
+        assert all(f"Instruction {n}." in sent for n in (1, 2, 7, 8, 9, 10))
+        recorded = load_run(run_id)
+        assert [r.n for r in recorded.rounds if r.trimmed] == [3, 4, 5, 6]
+        assert recorded.rounds[-1].trims == [3, 4, 5, 6]
+        assert recorded.rounds[-1].tokens == 650 - (950 - 400)

@@ -123,6 +123,9 @@ def main():
               f" · tone: {summary.get('tone') or '—'} · dropped: {len(summary.get('dropped') or [])}"
               f" · finish: {summary.get('finish_reason')} · first line {result['first'] or 0:.2f}s,"
               f" round {result['seconds']:.2f}s")
+        if summary.get("trimmed"):
+            print(f"  trimmed before this round: rounds {', '.join(map(str, summary['trimmed']))}"
+                  " (the model no longer reads them)")
 
     rounds = json.loads(record.read_text())["rounds"]
     timings = rounds[-1].get("timings") or {}

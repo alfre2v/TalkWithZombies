@@ -113,6 +113,13 @@ record: runs/2026-09-24T02-18-51/script.json
   first invitation comes between round 5 and round 10; the driver sends
   no listener's words yet, so the round after an invitation is the
   static one.
+- **The trim.** When the script reaches 90% of `show.context_budget`
+  (14,000 tokens by default), the model stops reading whole rounds from
+  the middle of the script until it is back to 50%; the first two and
+  the last four rounds are always kept. The driver then prints
+  `trimmed before this round: rounds ...`. To watch it within a short
+  drive, set `context_budget: 1500` under `show:` and drive about 24
+  rounds: a trim comes near round 13.
 - Stop the app with Ctrl-C in terminal 1.
 
 **Options:** `--base` (the app's address, default
