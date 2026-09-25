@@ -110,9 +110,10 @@ record: runs/2026-09-24T02-18-51/script.json
   line also names the round's kind (`free`, `invitation`, `answer`,
   `static`) and its tone word. The driver reports the played seconds as
   a running total (`--played` per round), so with the defaults the
-  first invitation comes between round 5 and round 10; the driver sends
-  no listener's words yet, so the round after an invitation is the
-  static one.
+  first invitation comes between round 5 and round 10. Without
+  `--heard` the driver sends no listener's words, so the round after an
+  invitation is the static one; to answer the invitations, see
+  [Run the checkpoint](#run-the-checkpoint).
 - **The trim.** When the script reaches 90% of `show.context_budget`
   (14,000 tokens by default), the model stops reading whole rounds from
   the middle of the script until it is back to 50%; the first two and
@@ -126,7 +127,11 @@ record: runs/2026-09-24T02-18-51/script.json
 `http://127.0.0.1:8010`), `--rounds` (default 10), `--story` (a folder
 in `stories/`, default the settings' `show.story`), `--played` (seconds
 of audio each round is taken to play, default 20; the app receives the
-running total), `--runs-dir` (default `runs`).
+running total), `--heard` (what the listener says at the next
+invitation; repeat it, one per invitation; `-` is a silent window),
+`--speak` (send the `--heard` items spoken and transcribed, not as
+text), `--report` (judge the drive against the checkpoint's criteria),
+`--runs-dir` (default `runs`).
 
 ## Check that the grammar binds
 
@@ -178,6 +183,81 @@ size the server read (`prompt_n + cache_n`); it says `difference 0`
 when all is well, and the app's log warns when it is not. Each debug
 round costs about 0.35 s more (two extra calls to the model server),
 so leave the switch off when timing a drive.
+
+## Run the checkpoint
+
+The show engine's midpoint checkpoint (zombie-radio's `docs/TODO.md`,
+"Checkpoint — 2026-09-25") in one drive, without a browser: at least
+ten unattended rounds whose speakers and line counts obey the director,
+an invitation answered from a listener's words, a silent window giving
+the static round, the trim firing, and the debug files written.
+
+**The listener.** After each invitation, the next `--heard` item
+answers, in turn; `-` is a silent window. By default the words go into
+the next round request as text. With `--speak` they go the real way, as
+the page will send them: the app's TTS speaks them in the operator's
+voice (`/api/tts`), the show's listen route transcribes them
+(`/api/show/listen`, Whisper), and what Whisper heard, with its
+confidence, goes into the round request; a silent window sends two
+seconds of silence. Without `--heard`, or once the items run out,
+nothing is sent and the window counts as silence.
+
+**1. The settings.** Under `show:` in `settings.yaml` (keep a copy of
+the file first and put it back after):
+
+```yaml
+show:
+  seed: 42
+  debug: true
+  context_budget: 1500
+```
+
+Restart the app (terminal 1). `debug` writes the files the report
+checks; the small budget makes the trim fire within the drive; the seed
+fixes where the invitations fall.
+
+**2. The drive** (terminal 2):
+
+```bash
+python3 scripts/drive_show.py --rounds 20 --speak --report --heard "Moira, is the virus airborne?" --heard - --heard "Is anyone still alive in there?"
+```
+
+With seed 42 and 20 seconds a round, the invitations fall at rounds 8,
+13 and 18 (the cadence depends only on the seed and the played
+seconds, not on what the model writes): round 9 answers the question
+naming Moira, round 14 is the silent window's static round, round 19
+answers a question naming no one, and the trim fires before round 14.
+Leave out `--speak` to test without TTS and Whisper.
+
+**3. The report.** From the first run (2026-09-24), the listener's
+rounds and the end:
+
+```
+round 8 (invitation): 1 line(s) of Samantha · ...
+  the listener says "Moira, is the virus airborne?" in Samantha's voice (1.28s); Whisper heard "Moira, is the virus airborne?" (no_speech_prob 0.010, avg_logprob -0.225) in 0.35s
+  [ 0.84s] Moira (doubtful): I don't know, maybe. Over.
+round 9 (answer): 1 line(s) of Moira · ...
+  listener: "Moira, is the virus airborne?"
+...
+round 14 (static): 1 line(s) of Samantha · ...
+  heard: "" -> silence: nothing heard
+  trimmed before this round: rounds 3, 4, 5, 6, 7, 8, 9 (the model no longer reads them)
+...
+checkpoint report, run 2026-09-24T18-56-59:
+  PASS  20 of 20 rounds played and recorded (10 needed)
+  PASS  speakers and line counts obey the director: 38 lines, 0 dropped
+  PASS  an invitation answered from the listener's words: round 9 heard "Moira, is the virus airborne?" -> Moira; round 19 heard "Is anyone still alive in there?" -> Samantha
+  PASS  a silent window gave the static round: round 14 (nothing heard)
+  PASS  the trim fired: before round 14 (rounds 3, 4, 5, 6, 7, 8, 9)
+  PASS  debug files for 20 of 20 rounds; token check difference 0 in 20 of them
+6 of 6 criteria pass
+```
+
+The report reads the run's record and its `debug/` folder; the driver
+exits with 1 when a criterion fails. A FAIL line says what is missing
+(no answer, no static round, no trim, the rounds without debug files,
+a token check that is not 0). The verdict — continue, scale down or
+stop — stays a person's call.
 
 ## When something looks wrong
 

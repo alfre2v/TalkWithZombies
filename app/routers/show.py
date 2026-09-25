@@ -10,7 +10,9 @@ listens: POST /api/show/listen transcribes the recording with the show's
 Whisper settings, and the next round request carries what was heard, with
 Whisper's confidence. The round decides whether it counts as words (an
 answer round) or as silence (a static round) with the transcript filter
-(app/show/listen.py), and records what was heard either way.
+(app/show/listen.py), records what was heard either way, and reports it
+on the "round" summary (`heard`: the text, Whisper's numbers, and why it
+counted as silence, if it did).
 With show.debug on, each round also leaves its debug files
 (app/show/debug.py), failed rounds included.
 """
@@ -181,6 +183,6 @@ async def _round_stream(run: Run, story: Story, req: ShowRoundRequest) -> AsyncI
         logger.warning("Show run %s, round %s dropped %s line(s); finish_reason=%s",
                        run.run_id, n, len(parser.dropped), round_.finish_reason)
     yield _sse({"type": "round", "n": n, "kind": plan.kind, "speakers": list(plan.speakers), "event": plan.event,
-                "tone": plan.tone, "trimmed": trimmed, "dropped": parser.dropped,
-                "finish_reason": round_.finish_reason})
+                "tone": plan.tone, "heard": heard.model_dump() if heard else None, "trimmed": trimmed,
+                "dropped": parser.dropped, "finish_reason": round_.finish_reason})
     yield _sse({"type": "complete"})

@@ -127,6 +127,7 @@ class TestRound:
         assert (recorded.kind, recorded.played_s, recorded.listener) == ("free", 0.0, None)
         assert recorded.tone is not None
         assert (summary["kind"], summary["tone"]) == ("free", recorded.tone)
+        assert (summary["heard"], recorded.heard) == (None, None)
         assert summary["trimmed"] == []
         assert (recorded.tokens, recorded.trims) == (None, [])
 
@@ -194,7 +195,7 @@ class TestListenerTurn:
         _round(client, run_id, played_s=180)
         summary = _summary(_round(client, run_id, played_s=190))
 
-        assert (summary["kind"], summary["speakers"]) == ("static", ["Samantha"])
+        assert (summary["kind"], summary["speakers"], summary["heard"]) == ("static", ["Samantha"], None)
         assert load_run(run_id).rounds[1].instruction.startswith(
             "Only static answers; the broadcast goes on. Samantha speaks next:")
 
@@ -229,6 +230,7 @@ class TestTranscriptFilter:
         recorded = load_run(run_id).rounds[1]
         assert recorded.listener is None
         assert (recorded.heard.text, recorded.heard.silence) == (text, reason)
+        assert summary["heard"] == recorded.heard.model_dump()
 
     def test_clear_words_give_the_answer_and_are_recorded(self, client, show_env, fake_model):
         run_id = _start(client)["run_id"]
@@ -241,6 +243,7 @@ class TestTranscriptFilter:
         assert recorded.listener == "Moira, is it airborne?"
         assert recorded.heard.model_dump() == {"text": "Moira, is it airborne?", "no_speech_prob": 0.05,
                                                "avg_logprob": -0.3, "silence": None}
+        assert summary["heard"] == recorded.heard.model_dump()
 
 
 class TestListen:

@@ -249,7 +249,7 @@ Chat rooms are stored in `chatrooms.yaml` and managed via `get_chatrooms()` / `s
 | `GET` | `/api/settings` | Get current settings |
 | `PUT` | `/api/settings` | Update and persist settings to `settings.yaml` |
 | `POST` | `/api/show/start` | Open a show run of a story (default `show.story`); returns `{run_id, story, title, cast, operator, seed}` |
-| `POST` | `/api/show/round` | Play a run's next round; returns an SSE stream: `start` / `token` / `done` per script line, then `round` and `complete`. After an invitation it takes what `/api/show/listen` heard (`transcript`, `no_speech_prob`, `avg_logprob`) and filters it: words give the answer round, silence the static one |
+| `POST` | `/api/show/round` | Play a run's next round; returns an SSE stream: `start` / `token` / `done` per script line, then `round` and `complete`. After an invitation it takes what `/api/show/listen` heard (`transcript`, `no_speech_prob`, `avg_logprob`) and filters it: words give the answer round, silence the static one; the `round` summary reports it as `heard` (text, Whisper's numbers, the silence reason) |
 | `POST` | `/api/show/listen` | Transcribe a show listener's recording with the show's Whisper settings (the cast's names as `prompt`, `language`, `vad_filter`); returns `{text, no_speech_prob, avg_logprob}` for the next round request; 503 when STT is inactive, 502 when it fails |
 
 ## Persona CRUD cascades
