@@ -99,3 +99,51 @@ async def transcribe_audio(audio_bytes: bytes, mime_type: str = "audio/webm") ->
     except Exception as exc:
         logger.warning("STT transcribe failed: %s", exc)
     return None
+
+
+async def transcribe_for_show(audio_bytes: bytes, mime_type: str = "audio/webm", *, prompt: Optional[str] = None,
+                              language: Optional[str] = None) -> Optional[dict]:
+    """Transcribe a show listener's recording, with Whisper's confidence in what it heard.
+
+    Asks for json: the Whisper server we deploy (whisper-fastapi) puts the
+    per-segment confidence in its json reply and rejects verbose_json
+    ("Invailed response_format", checked 2026-09-24). Sends the show's hints:
+    `prompt` (the cast's names), `language`, and vad_filter, which cuts
+    silence before decoding. Returns {"text",
+    "no_speech_prob", "avg_logprob"}: the text empty when nothing was heard
+    (never a placeholder), no_speech_prob the highest across segments,
+    avg_logprob their average (both None without segments). Returns None on
+    any failure. Upstream's transcribe_audio stays as it is for the chat.
+    """
+    settings = get_settings()
+    if not settings.stt.is_active or not audio_bytes:
+        logger.warning("Show STT skipped: %s", "no audio data" if settings.stt.is_active else "feature not active")
+        return None
+    url = f"{settings.stt.base_url}/v1/audio/transcriptions"
+    mime_type = (mime_type or "audio/webm").split(";", 1)[0].strip() or "audio/webm"
+    files = {"file": (f"audio.{_mime_to_extension(mime_type)}", audio_bytes, mime_type)}
+    data = {"response_format": "json", "vad_filter": "true"}
+    if prompt:
+        data["prompt"] = prompt
+    if language:
+        data["language"] = language
+    try:
+        async with httpx.AsyncClient(timeout=settings.stt.timeout) as client:
+            resp = await client.post(url, files=files, data=data)
+            resp.raise_for_status()
+            body = resp.json()
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Show STT transcribe failed (%s): HTTP %s: %s", url, exc.response.status_code,
+                       exc.response.text[:200])
+        return None
+    except Exception as exc:
+        logger.warning("Show STT transcribe failed (%s): %s", url, exc)
+        return None
+    segments = body.get("segments") or []
+    no_speech = [s["no_speech_prob"] for s in segments if isinstance(s.get("no_speech_prob"), (int, float))]
+    logprobs = [s["avg_logprob"] for s in segments if isinstance(s.get("avg_logprob"), (int, float))]
+    return {
+        "text": (body.get("text") or "").strip(),
+        "no_speech_prob": max(no_speech) if no_speech else None,
+        "avg_logprob": sum(logprobs) / len(logprobs) if logprobs else None,
+    }

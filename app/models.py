@@ -340,7 +340,28 @@ class ShowStartResponse(BaseModel):
 
 
 class ShowRoundRequest(BaseModel):
-    """Play the next round of a run."""
+    """Play the next round of a run.
+
+    played_s is the running total of show audio the page has played since
+    the run started; after an invitation, transcript is what the listener
+    said, with Whisper's confidence as /api/show/listen returned it.
+    """
     run_id: str = Field(..., min_length=1)
     played_s: float = Field(default=0.0, ge=0)
     transcript: Optional[str] = None
+    no_speech_prob: Optional[float] = None
+    avg_logprob: Optional[float] = None
+
+
+class ShowListenRequest(BaseModel):
+    """A show listener's recording, sent when the button is released."""
+    run_id: str = Field(..., min_length=1)
+    audio_base64: str = Field(..., min_length=1)
+    audio_mime_type: Optional[str] = "audio/webm"
+
+
+class ShowListenResponse(BaseModel):
+    """What Whisper heard, to send with the next round request, which decides whether it counts."""
+    text: str
+    no_speech_prob: Optional[float] = None
+    avg_logprob: Optional[float] = None

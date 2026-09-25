@@ -211,6 +211,53 @@ class TestStreamRound:
             _collect(llm.stream_chat([{"role": "user", "content": "hi"}]))
 
 
+class _UrlRecordingClient(FakeLLMClient):
+    """FakeLLMClient that also records the URL of each post."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.urls = []
+
+    async def post(self, url, json=None):
+        self.urls.append(url)
+        return await super().post(url, json=json)
+
+
+class TestShowDebugHelpers:
+    """round_payload, render_prompt and count_tokens: the show's debug
+    switch replays and renders exactly what a round sent."""
+
+    def test_round_payload_is_the_chat_payload_plus_the_rounds_constraints(self):
+        messages = [{"role": "user", "content": "hi"}]
+        payload = llm.round_payload(messages, grammar="g", max_tokens=512, seed=7)
+
+        assert payload == {**llm._base_payload(messages), "grammar": "g", "max_tokens": 512, "seed": 7}
+
+    def test_render_prompt_asks_apply_template_for_the_messages(self, monkeypatch):
+        client = _UrlRecordingClient([], post_response=json_response(200, {"prompt": "<SPECIAL_10>System\nS"}))
+        patch_llm_client(monkeypatch, client)
+        messages = [{"role": "system", "content": "S"}]
+
+        assert _run(llm.render_prompt(messages)) == "<SPECIAL_10>System\nS"
+        assert client.urls[0].endswith("/apply-template")
+        assert client.payloads[0] == {"messages": messages}
+
+    def test_count_tokens_parses_special_markers_and_adds_the_start_token(self, monkeypatch):
+        client = _UrlRecordingClient([], post_response=json_response(200, {"tokens": [1, 2, 3, 4]}))
+        patch_llm_client(monkeypatch, client)
+
+        assert _run(llm.count_tokens("<SPECIAL_11>User\nhi")) == 4
+        assert client.urls[0].endswith("/tokenize")
+        assert client.payloads[0] == {"content": "<SPECIAL_11>User\nhi", "add_special": True,
+                                      "parse_special": True}
+
+    def test_a_server_error_raises(self, monkeypatch):
+        patch_llm_client(monkeypatch, FakeLLMClient([], post_response=json_response(500, {"error": "x"})))
+
+        with pytest.raises(Exception):
+            _run(llm.render_prompt([{"role": "user", "content": "hi"}]))
+
+
 # ---------------------------------------------------------------------------
 # chat_completion — non-streaming router call
 # ---------------------------------------------------------------------------

@@ -260,6 +260,12 @@ class ShowConfig(BaseModel):
     seed: Optional[int] = Field(default=None, ge=0)
     emotion_tags: bool = True
     debug: bool = False
+    # Pacing, in rounds: an event every N free rounds (the gap), a tone word kept N rounds (the hold);
+    # each drawn N +/- jitter, never below 1; 0 turns it off.
+    event_every: int = Field(default=2, ge=0)
+    event_jitter: int = Field(default=1, ge=0)
+    tone_hold: int = Field(default=3, ge=0)
+    tone_jitter: int = Field(default=1, ge=0)
     interaction_min_s: float = Field(default=60.0, ge=0)
     interaction_max_s: float = Field(default=180.0, ge=0)
     listen_window_s: float = Field(default=10.0, gt=0)

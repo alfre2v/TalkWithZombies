@@ -1,4 +1,7 @@
+# An event every few free rounds (show.event_every, with jitter), drawn without repeats until the pool is used up.
+# The director says it as "Offstage: <event>"; it is never spoken, the characters react to it.
 events:
+  # The ADR-0003 gate's ten (2026-09-22)
   - The generator coughed twice and the lights flickered across the east wing.
   - A listener in Tulsa reports the highway north is blocked by abandoned trucks.
   - Something is scratching at the loading dock door, slow and rhythmic.
@@ -9,3 +12,296 @@ events:
   - The roof hatch alarm tripped, but the camera shows only rain.
   - The fuel gauge reads one quarter and the night has barely started.
   - A helicopter passes low overhead without slowing down.
+  # Power and machines
+  - The emergency lights switch to red and stay that way for a full minute.
+  - The freezer in the cold room starts beeping a temperature alarm that nobody set.
+  - An elevator somewhere in the building starts moving on its own and stops between floors.
+  - The vending machine on level one lights up and drops a candy bar that nobody paid for.
+  - Every printer in the admin wing starts printing the same blank page.
+  - The server room fans spin up to full speed with a rising howl.
+  - A fire alarm in the east wing rings once, loud as a church bell, and stops.
+  - The intercom clicks on, and all that comes through is slow, wet breathing.
+  - The centrifuge in the virology lab starts spinning with no one at the controls.
+  - The backup battery bank reports three hours left, then suddenly two.
+  - A fluorescent tube in the main corridor pops, and glass rains onto the floor.
+  - The security monitors go to snow, then show a room that no camera is supposed to see.
+  - The electronic lock on the armory door beeps green by itself.
+  - A desk phone in the director's office rings, and the caller ID shows an extension in the basement.
+  - The old wall clock in the break room stops, its second hand trembling in place.
+  - The ventilation reverses, and the air starts to smell of the loading dock.
+  - The coffee machine in the break room starts brewing on its own, and the corridor fills with the smell of burnt coffee.
+  - The automatic doors at the main entrance slide open and shut, open and shut, with no one there.
+  - The public address system plays the first three notes of the shift-change chime.
+  - The generator's exhaust pipe starts rattling as if something is climbing inside it.
+  - A laptop left in the conference room wakes up and rings with an incoming video call.
+  - The water heater in the basement bangs three times, loud as a fist on a door.
+  - The fume hoods in the chemistry lab all shut off at once.
+  - A smoke detector chirps for a low battery somewhere no one can find it.
+  - The heating fails, and breath starts to fog in the corridors.
+  - A transistor radio in the break room switches itself on, tuned to a dance band.
+  - The Geiger counter in the isotope lab starts clicking, slowly, then faster.
+  # The building
+  - A ceiling tile in the east corridor sags and drops, and something in the crawl space goes still.
+  - Wet footprints lead from the stairwell to the supply closet and stop at its door.
+  - The fire door on level three is found propped open with a chair from the cafeteria.
+  - Glass breaks somewhere below, one pane, then silence.
+  - Water begins dripping through the ceiling of the server room.
+  - The lobby window has a handprint on the outside, at the height of a child.
+  - A stretch of the perimeter fence has been pressed flat, as if something heavy leaned on it all night.
+  - The stairwell door on level two won't open, as if something heavy is sitting against the other side.
+  - The loading dock's roller door rises about a foot and jams there.
+  - Somebody has written the number forty-one on the inside of the elevator doors in marker.
+  - A pipe bursts in the basement, and the floor drains start to gurgle.
+  - The skylight above the atrium cracks from corner to corner under some weight.
+  - Plaster dust sifts down from the ceiling as something moves above the third floor.
+  - The fire escape outside the west windows is shaking, rung by rung.
+  - A door that was locked an hour ago is standing wide open.
+  - The janitor's closet is found unlocked, the mop bucket full of clean, warm water.
+  - Every chair in the cafeteria has been stacked into a tower against the far wall.
+  - The emergency exit on the north side has been chained shut from the outside.
+  - A car alarm in the parking garage goes on and on, echoing off the concrete.
+  - The glass doors of the library are fogged from the inside, and the library should be empty.
+  - The mail slot at the front desk clatters, and a single envelope falls through.
+  - The basement flood sensor trips, and the water keeps rising, an inch at a time.
+  - The east corridor is strewn with loose paper, as if someone ran through with an armful.
+  - The north stairwell smells of fresh cigarette smoke.
+  # The specimens and the science
+  - The mice in the animal room have stopped eating, and they all face the same wall.
+  - A culture dish in incubator four has grown in a perfect spiral overnight.
+  - The blood samples from the first victims have separated into three layers instead of two.
+  - The electron microscope captures the virus in an image that looks like it is folding in on itself.
+  - A lab notebook turns up with its last ten pages torn out.
+  - The PCR machine finishes a run that no one started, and the result reads positive.
+  - Specimen jar nine is found empty, its seal intact.
+  - The tissue in specimen jar seven is warmer than the room around it.
+  - The computer model of the outbreak finishes its run and predicts a date.
+  - A frozen sample in the minus-eighty freezer has cracked its vial from the inside.
+  - The reference database matches the pathogen to a sample logged in this building eleven years ago.
+  - The lab rats begin gnawing at the bars of their cages in unison.
+  - A bottle of the experimental antiviral is missing from the locked cabinet.
+  - Yesterday's autopsy recording has a second voice on it that nobody remembers hearing.
+  - The dead fruit flies in the teaching lab begin to twitch.
+  - The pathogen cultures glow faintly under the ultraviolet lamp, which they should not do.
+  - A petri dish left open on the bench has a clean circle in it, as if the culture retreated from something.
+  - The genome sequencer finishes and flags a segment that looks deliberately inserted.
+  - The centrifuge tubes from the morning run are labeled in a handwriting nobody recognizes.
+  - A tray of seeds in the botany lab has sprouted, pale and fast, in total darkness.
+  - The last entry in the quarantine logbook is signed with today's date and no name.
+  - The thermal camera shows a warm shape standing still in the specimen room.
+  - A rack falls in the virology lab, and one test tube keeps rolling across the floor.
+  - The incubator's log shows someone opened it in the dead of night.
+  # The dead outside
+  - The shamblers at the fence have all turned to face the radio mast.
+  - Somewhere outside, the dead are humming, one low note that doesn't stop.
+  - A crowd of the infected walks past the gate in perfect single file.
+  - One of the infected at the fence is still wearing a staff badge from this building.
+  - The infected in the parking lot go completely still at the same moment.
+  - A shambler at the front doors is tapping on the glass in a slow rhythm, like Morse code.
+  - The dead in the courtyard have started piling stones against the fence.
+  - An infected mail carrier is walking his route, stopping at every door.
+  - The moaning outside stops all at once, and the silence is worse.
+  - A shambler at the east fence is holding a child's balloon.
+  - The dead are gathering at the edge of the woods, just beyond the floodlights, and coming no closer.
+  - One of the infected outside is wearing a wedding dress.
+  - A figure on the far side of the parking lot waves, slowly, the way a person would.
+  - The infected at the south gate are tearing at a car, but the car is empty.
+  - Dozens of the dead are walking west along the highway, all in the same direction.
+  - An infected dog sits outside the main door and whines to be let in.
+  - The shamblers flinch and scatter every time the radio transmits.
+  - One of the dead at the fence is saying a single word over and over, too faint to make out.
+  - A shambler in a security guard's uniform is trying the handle of every car in the lot.
+  - The bodies that lay still near the loading dock are gone.
+  - Something large moves through the treeline, snapping branches, and the dead follow it.
+  - The infected on the lawn lie down in the wet grass all at once, as if to sleep.
+  - A shambler has climbed the water tower and stands at the top, facing the lab.
+  - The dead at the gate part to let one of their own walk through, as if it leads them.
+  - An infected woman is pushing an empty stroller in slow circles around the lot.
+  - The fence line is quiet, but the floodlights show fresh scratches on every post.
+  # The radio itself
+  - A second voice cuts into the frequency and repeats the lab's last transmission word for word, a second late.
+  - A numbers station breaks in on the lab's channel and starts reading digits in a woman's voice.
+  - The lab's own transmission from an hour ago comes back over the radio, as if it bounced off something.
+  - 'The static on the frequency falls into a rhythm: three short, three long, three short.'
+  - A lullaby is being sung very softly on the neighboring channel.
+  - The transmitter's power meter spikes into the red, and the room smells of hot dust.
+  - A ham operator in Winnipeg breaks in to say the lab's signal is the only one he can hear.
+  - The emergency broadcast tone sounds on every channel, and no message follows.
+  - A trucker on channel nineteen reports a convoy heading toward the lab with its headlights off.
+  - The antenna cable on the roof is swaying, and the signal fades in and out with it.
+  - A voice on the frequency reads the lab's street address aloud, then goes silent.
+  - A ship at sea asks for the lab's position in perfect Morse code.
+  - A church bell rings over the frequency, far away, and keeps ringing.
+  - Someone on the frequency is laughing softly and won't answer.
+  - The radio catches a ball game, the crowd cheering as if nothing has happened.
+  - The county sheriff's signal goes to static in the middle of a sentence.
+  - A pilot on the aviation band calls for anyone on the ground near the lab.
+  - An automated weather station reads out a forecast for a town that was evacuated days ago.
+  - The frequency fills with the sound of wind, though the night outside is still.
+  - A station in Mexico City broadcasts the same sentence in Spanish on a loop.
+  - A voice repeats the lab's call sign, and it sounds exactly like one of the scientists.
+  - The radio's tuning dial drifts by itself, slowly, as if a hand were on it.
+  - Feedback shrieks through the headphones, and then a child whispers hello.
+  - An old-time dance band plays on a frequency that should be empty.
+  - A station in Newfoundland asks the lab to stay on the air, because a whole town is listening.
+  # Voices from outside
+  - A listener in Duluth says the lake froze early and the dead are walking across the ice.
+  - A farmer in Kansas reports his cattle broke through the fence and ran toward the city.
+  - A woman in Albuquerque says her neighbors are all standing in their front yards, looking up.
+  - A nurse in Memphis radios that the patients in her ward are singing.
+  - A trucker reports the bridge on the road to the lab is still standing, but barely.
+  - A scoutmaster says his troop is safe in a fire tower and asks for news.
+  - 'A listener in Baton Rouge says the bayou has gone silent: no frogs, no insects.'
+  - A man in Omaha says he was bitten two days ago, feels fine, and asks what that means.
+  - The National Guard announces a safe zone and gives coordinates in the middle of a lake.
+  - A listener in Denver reports a green light in the sky over the mountains.
+  - A priest in Santa Fe asks the lab to say a few words for his town's dead.
+  - A lighthouse keeper on Lake Michigan says the ships have stopped coming.
+  - Students trapped in a Chicago library ask whether books can stop a bite.
+  - A listener in Tucson says the infected there stay out of the shade.
+  - A voice claiming to be the lab's former director orders the scientists to destroy their samples.
+  - A listener in Savannah reports that the church bells there are ringing on their own.
+  - A pharmacist in Louisville asks which medicines to hand out, with only minutes of battery left.
+  - The Coast Guard warns that the river is carrying bodies downstream toward the lab.
+  - A retired schoolteacher in Boise reads a poem on the frequency and asks the lab to read one back.
+  - A listener in Anchorage says it has been dark for hours and the dead do not seem to mind.
+  - A dispatcher in Kansas City keeps sending units to addresses, though no unit answers.
+  - A family in a motor home asks for directions to the lab, and they are only ten miles away.
+  - A listener in Portland says the dead there are gathering around radio towers.
+  - A soldier at a checkpoint says his orders are to shoot anything coming from the direction of the lab.
+  - A boy on the frequency says his parents went out to find food and haven't come back.
+  - A voice from the university across town says their lab held the same sample, and they burned it.
+  - A listener in Sioux Falls reports that the dead there are walking backward.
+  - A local television anchor is still reading the evening news, alone in the studio, on the audio feed.
+  - A beekeeper in Vermont says his bees sting the infected and leave everyone else alone.
+  - A pilot overhead says the lab is the only building in the county with its lights on.
+  # Weather and night
+  - Thunder rolls over the lab, and every alarm in the building answers it.
+  - Fog rolls in off the river and swallows the floodlights one by one.
+  - Hail hammers the roof so loudly it drowns out the moaning.
+  - The moon comes out from behind the clouds and shows the whole field full of standing figures.
+  - Lightning strikes the radio mast, and the whole building hums.
+  - The temperature drops so fast the windows crackle with frost.
+  - Wind starts howling through a broken window on the top floor.
+  - The rain turns to sleet, and the dead outside don't seem to feel it.
+  - The sky to the east glows orange, though it is nowhere near dawn.
+  - A dust storm rolls across the parking lot, and when it clears, the lot is empty.
+  - It starts snowing in the courtyard, big slow flakes, in September.
+  - The power lines along the road are singing in the wind.
+  - Heat lightning flickers silently across the whole horizon.
+  - The rain stops, and in the quiet there are footsteps on the roof.
+  - A tornado siren in town starts wailing, then winds down.
+  # The sky and the distance
+  - A red flare goes up over the town and drifts down slowly.
+  - The glow of a large fire is spreading on the horizon to the north.
+  - A jet passes very high overhead, blinking, as if nothing were wrong.
+  - Gunfire crackles from the direction of the highway, then stops.
+  - A helicopter circles the lab twice with its searchlight on, then flies away.
+  - Fireworks go off over the town, a full celebration, for no reason anyone can guess.
+  - Headlights appear on the access road, stop at the gate, and switch off.
+  - A train horn blows from the rail line, long and mournful, though the trains stopped days ago.
+  - A plane drops leaflets that flutter down and cover the lawn.
+  - A searchlight from the military base sweeps the sky in slow circles.
+  - A column of black smoke rises from where the hospital should be.
+  - The streetlights of the town go out block by block, toward the lab.
+  - Far away a siren wails, then another joins it, then another.
+  - A drone hovers outside a third-floor window, its red light blinking, and then climbs away.
+  - A single light comes on in the office tower across the valley and blinks as if signaling.
+  - An explosion rattles the windows from the direction of the chemical plant.
+  - A hot-air balloon drifts over the lab, its basket empty.
+  - A parachute comes down in the woods, and nobody sees who was under it.
+  # Supplies and bodies
+  - The last packet of coffee is found, and it is decaf.
+  - A case of military rations turns up in the storeroom, three years past their date.
+  - The morphine vials in the first-aid kit are all empty.
+  - The water from the tap comes out warm and smells faintly of iron.
+  - Someone's secret stash of chocolate turns up hidden in a fume hood.
+  - The last working flashlight begins to flicker.
+  - A rat has gotten into the flour.
+  - The canned peaches, the last luxury, have swollen lids.
+  - The inventory count finds one more can of beans than there should be.
+  - The last bottle on the water cooler is half full, and the level keeps dropping.
+  - The antibiotics in the medical cabinet expire tonight.
+  - The only working lighter runs out of fuel.
+  - Every watch in the lab shows a different time.
+  - The last fresh orange turns up in the break room fridge.
+  - A box of old blankets turns up in the basement, smelling of mothballs.
+  - The spare batteries in the storeroom are the wrong size for everything.
+  - A bottle of whiskey is discovered in the director's desk drawer.
+  - A thermometer in the clinic shows a fever that no one will admit to.
+  - A cut that should have healed by now is still bleeding through its bandage.
+  # Small mysteries
+  - A music box starts playing in the east wing, slow and out of tune.
+  - A child's drawing of the lab, with five stick figures on the roof, is found taped to a door.
+  - A phone in the lobby rings exactly thirteen times, then stops.
+  - A photograph of last summer's staff picnic is found face down, one face scratched out.
+  - Someone has left a single red rose on the front desk.
+  - The name tag of a staff member no one has ever heard of turns up in the cafeteria.
+  - The voicemail light on the reception phone is blinking, and the message is dated tomorrow.
+  - The chalkboard in the seminar room has a new equation on it that nobody wrote.
+  - A wind-up toy soldier marches out of the supply closet and falls over.
+  - A line of salt has been poured along the threshold of every door in the west wing.
+  - A clock somewhere in the building chimes, though no one knows of a clock that chimes.
+  - A bouquet of wilted flowers lies in the elevator with a card that says sorry.
+  - A typewriter in the archive room clacks out a single line and stops.
+  - The washroom mirror is fogged, and someone has drawn an arrow on it pointing down.
+  - The lost-and-found box holds the keys to a car still idling in the parking lot.
+  - A cassette tape labeled 'play if we don't make it' turns up in the security office.
+  - The evacuation map on the wall has a new exit drawn on it in red marker.
+  - A birthday candle is burning in the empty cafeteria.
+  - A child's shoe sits on the stairs, perfectly dry, in the middle of the wet stairwell.
+  - A telegram pinned to the notice board, dated forty years ago, warns about this building.
+  # Animals
+  - A flock of crows lands on the roof and falls silent together.
+  - A cat appears in the lobby, perfectly clean, and sits staring at the stairwell door.
+  - Every dog in town starts barking at once, then stops at once.
+  - Moths swarm the one working floodlight so thickly that it goes dark.
+  - A deer walks right up to the main door and looks in, unafraid.
+  - The fish in the lab's aquarium are all swimming in tight circles.
+  - Bats pour out of the ventilation shaft and scatter into the night.
+  - A rooster crows somewhere in the dark, hours too early.
+  - An owl sits on the radio mast, watching the dead below.
+  - Rats stream out of the basement and up the stairs, all at once.
+  - A saddled horse gallops down the access road without a rider.
+  - The crickets outside stop chirping all at once.
+  - A lab monkey that escaped last month is seen on the roof of the parking garage.
+  - Flies settle on the east windows, thick enough to block the light.
+  - A parrot in the zoology lab starts repeating a word nobody taught it.
+  # Authority
+  - The military frequency announces that the lab now lies inside the quarantine line.
+  - An armored vehicle rolls to a stop outside the gate, and nobody gets out.
+  - A voice claiming to be a general orders the lab to stop transmitting.
+  - Soldiers are stringing razor wire along the road below the lab.
+  - A military bulletin lists the lab by name among the facilities to be sanitized at dawn.
+  - A helicopter drops a crate marked with a red cross onto the lawn.
+  - The military jams every frequency but this one.
+  - A soldier at the gate shouts that he is not infected and begs to be let in.
+  - An evacuation bus drives past the lab without stopping, every window full of faces.
+  - A government bulletin declares the outbreak fully contained while the dead walk past the window.
+  # Inside the walls
+  - Something is knocking inside the walls of the west corridor, following along.
+  - A dark handprint appears on the inside of the observation window.
+  - The door to the isolation ward rattles, though the ward was sealed empty.
+  - Footsteps cross the floor above, where the roof access was welded shut.
+  - The body bags in the morgue fridge have been rearranged.
+  - A shape passes behind the frosted glass of the chemistry lab door.
+  - The morgue drawer that holds the first victim slides open by itself.
+  - A scream echoes up the elevator shaft and cuts off.
+  # Luck and small mercies
+  - A working satellite phone turns up in a storage locker, with one bar of battery.
+  - A convoy of survivors on the radio says they have fuel to share.
+  - The dead at the gate wander off, drawn away by a car alarm down the road.
+  - The garden on the roof still has ripe tomatoes.
+  - A voice from overseas says a vaccine trial has begun.
+  - A box of candles and matches turns up in the chapel.
+  - The rain fills the rooftop tanks with clean water.
+  - A listener sends word that the family of one of the scientists is safe.
+  - The spare fuel drum for the generator turns out to be full.
+  - A school choir on the frequency sings for the lab.
+  - An old truck in the garage starts on the first try.
+  - There are fewer of the dead at the fence tonight than last night.
+  - Someone gets the heater on level two working, and the corridor warms up.
+  - A lunchbox in the break room fridge holds a child's note asking Daddy to come home soon.
+  - A dusty guitar turns up in the security office, with all six strings.
+  - The office pool on how long the outbreak would last shows that everyone lost.
+  - An unfinished crossword lies on the break room table with one clue left.
+  - The calendar in the break room says today is someone's birthday.

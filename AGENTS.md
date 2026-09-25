@@ -14,8 +14,11 @@ conflict with these.
   "push" are separate words: push only when told.
 - **No AI attribution anywhere:** no `Co-Authored-By` lines and no
   "Generated with" footers, in commits, pull requests, or files.
-- **Minimal code comments.** The reasons behind the design live in the
-  design docs, not in the code.
+- **Upstream's documentation style.** This fork keeps TalkWithMe's
+  way of documenting code: a brief docstring on every new function,
+  and comments where they help, on the brief side. A plain `-` for
+  hyphens and ranges, never the en dash. The full reasoning behind
+  the show engine's design lives in zombie-radio's design docs.
 - **The suite green before review:** `.venv/bin/python -m pytest` all
   passing, plus the Node tests when their files are touched (see
   Testing below).
@@ -246,7 +249,8 @@ Chat rooms are stored in `chatrooms.yaml` and managed via `get_chatrooms()` / `s
 | `GET` | `/api/settings` | Get current settings |
 | `PUT` | `/api/settings` | Update and persist settings to `settings.yaml` |
 | `POST` | `/api/show/start` | Open a show run of a story (default `show.story`); returns `{run_id, story, title, cast, operator, seed}` |
-| `POST` | `/api/show/round` | Play a run's next round; returns an SSE stream: `start` / `token` / `done` per script line, then `round` and `complete` |
+| `POST` | `/api/show/round` | Play a run's next round; returns an SSE stream: `start` / `token` / `done` per script line, then `round` and `complete`. After an invitation it takes what `/api/show/listen` heard (`transcript`, `no_speech_prob`, `avg_logprob`) and filters it: words give the answer round, silence the static one; the `round` summary reports it as `heard` (text, Whisper's numbers, the silence reason) |
+| `POST` | `/api/show/listen` | Transcribe a show listener's recording with the show's Whisper settings (the cast's names as `prompt`, `language`, `vad_filter`); returns `{text, no_speech_prob, avg_logprob}` for the next round request; 503 when STT is inactive, 502 when it fails |
 
 ## Persona CRUD cascades
 
