@@ -1,6 +1,6 @@
 /**
  * test_show_page.js — Tests for the show page's scripts
- * (static/show/sse.js, player.js and show.js).
+ * (static/show/sse.js, player.js, mic.js and show.js).
  *
  * Run with plain Node (Node 20+, no npm packages, no network):
  *
@@ -20,11 +20,16 @@
  *     alone, never across lines;
  *   - the voice queue, with fetch and AudioContext stubbed: chunks played in
  *     order, a line's start once at its first clip, the played seconds, the
- *     drain, a stop that cuts the voice, a failed chunk skipped.
+ *     drain, a stop that cuts the voice, a failed chunk skipped;
+ *   - the listener's turn, with the microphone, the recorder and the
+ *     transcription route stubbed: a press and a release give what was
+ *     heard, no press gives silence, the press cap ends a long press, a stop
+ *     discards the recording, a failed transcription counts as silence —
+ *     and the microphone is closed after each; the round request's body.
  *
  * How it works: the show's scripts are browser globals (classic scripts,
- * like upstream's), so each test evaluates sse.js + player.js + show.js in a
- * fresh vm.Context — the technique of test_tts_settings.js — and calls their
+ * like upstream's), so each test evaluates sse.js + player.js + mic.js +
+ * show.js in a fresh vm.Context — the technique of test_tts_settings.js — and calls their
  * functions. show.js only defines functions and registers its page wiring
  * at load time, so a document stub that takes the listener is all the DOM
  * it needs; the voice gets stubs for fetch and the AudioContext. The page
@@ -45,7 +50,7 @@ const test = require("node:test");
 const vm = require("node:vm");
 
 const SHOW_DIR = path.join(__dirname, "..", "static", "show");
-const SHOW_SCRIPTS = ["sse.js", "player.js", "show.js"];
+const SHOW_SCRIPTS = ["sse.js", "player.js", "mic.js", "show.js"];
 
 /** A fresh context with the show's scripts loaded; warnings are collected instead of printed. */
 function loadShow(extra = {}) {
@@ -55,8 +60,12 @@ function loadShow(extra = {}) {
         document: { addEventListener: () => {} },
         TextDecoder,
         setTimeout,
+        clearTimeout,
         AbortController,
         atob,
+        btoa,
+        Blob,
+        performance,
         ...extra,
     };
     vm.createContext(sandbox);
@@ -370,4 +379,168 @@ test("debugLine: once said, the round's first sound and the audio it played", ()
 
     assert.equal(line, "round 3 · free · speakers Moira · event — · tone — · first line 0.9 s · round 2.1 s"
         + " · first sound 3.2 s · played 14.3 s · run r");
+});
+
+/* ==========================================================================
+   The listener's turn
+   ========================================================================== */
+
+test("roundBody: the run and the seconds played, plus what the listener said when there is something", () => {
+    const { sandbox } = loadShow();
+
+    assert.deepEqual(plain(sandbox.roundBody("r", 12.5, null)), { run_id: "r", played_s: 12.5 });
+    assert.deepEqual(plain(sandbox.roundBody("r", 12.5, { text: "Moira?", no_speech_prob: 0.01, avg_logprob: -0.2 })),
+        { run_id: "r", played_s: 12.5, transcript: "Moira?", no_speech_prob: 0.01, avg_logprob: -0.2 });
+});
+
+test("hear: an empty recording is heard as nothing, without a request", async () => {
+    const { sandbox } = loadShow({ fetch: async () => assert.fail("no request for an empty recording") });
+
+    const heard = await sandbox.hear(new Blob([]), "audio/webm", "r", new AbortController().signal);
+
+    assert.deepEqual(plain(heard), { text: "", no_speech_prob: null, avg_logprob: null });
+});
+
+/** A page element as the show's code uses it. */
+function element() {
+    const classes = new Set();
+    return {
+        textContent: "", hidden: false, disabled: false, children: [], scrollTop: 0, scrollHeight: 0,
+        classList: {
+            toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)),
+            add: (name) => classes.add(name),
+            remove: (name) => classes.delete(name),
+            contains: (name) => classes.has(name),
+        },
+        setAttribute() {}, addEventListener() {}, setPointerCapture() {},
+        appendChild(child) { this.children.push(child); }, prepend(child) { this.children.unshift(child); },
+    };
+}
+
+/**
+ * The show's scripts on a stub page with a stub microphone: getUserMedia
+ * opens a stream whose track records its stop, the MediaRecorder records
+ * "voice", and /api/show/listen answers (or fails with `listenStatus`). The
+ * turn counts in 5 ms steps, with a 3-step window and a 3-step press cap.
+ */
+function turnHarness({ listenStatus = 200 } = {}) {
+    const elements = new Map();
+    const document = {
+        addEventListener() {},
+        getElementById: (id) => (elements.has(id) ? elements.get(id) : elements.set(id, element()).get(id)),
+        createElement: () => element(),
+        body: element(),
+    };
+    const log = [];
+    const navigator = {
+        mediaDevices: {
+            getUserMedia: async () => {
+                log.push("open");
+                return { getTracks: () => [{ stop: () => log.push("close") }] };
+            },
+        },
+    };
+    class MediaRecorderStub {
+        constructor() {
+            this.state = "inactive";
+            this.mimeType = "audio/webm;codecs=opus";
+        }
+        start() {
+            this.state = "recording";
+            log.push("record");
+        }
+        stop() {
+            this.state = "inactive";
+            log.push("stop");
+            setTimeout(() => {
+                this.ondataavailable({ data: new Blob(["voice"]) });
+                if (this.onstop) this.onstop();
+            }, 0);
+        }
+    }
+    const requests = [];
+    const fetchStub = async (url, options) => {
+        requests.push({ url, body: JSON.parse(options.body) });
+        if (listenStatus !== 200) return { ok: false, status: listenStatus, json: async () => ({}) };
+        const heard = { text: "Moira, is it airborne?", no_speech_prob: 0.01, avg_logprob: -0.2 };
+        return { ok: true, json: async () => heard };
+    };
+    const { sandbox, warnings } = loadShow({ document, navigator, MediaRecorder: MediaRecorderStub, fetch: fetchStub });
+    vm.runInContext(`TURN.tickMs = 5;
+        show.run = { run_id: "r", listen_window_s: 3, press_cap_s: 3, debug: false };`, sandbox);
+    const state = () => vm.runInContext("show.state", sandbox);
+    const until = async (predicate) => {
+        for (let i = 0; i < 400 && !predicate(); i++) await new Promise((resolve) => setTimeout(resolve, 1));
+        assert.ok(predicate(), "timed out waiting");
+    };
+    return { sandbox, log, requests, state, until, warnings };
+}
+
+test("the listener's turn: a press and a release send the recording; what was heard comes back", async () => {
+    const { sandbox, log, requests, state, until } = turnHarness();
+
+    const turn = sandbox.listenerTurn(new AbortController().signal);
+    await until(() => state() === "listening");
+    sandbox.talkPress();
+    await until(() => state() === "recording");
+    sandbox.talkRelease();
+    const heard = await turn;
+
+    assert.deepEqual(plain(heard), { text: "Moira, is it airborne?", no_speech_prob: 0.01, avg_logprob: -0.2 });
+    assert.deepEqual(log, ["open", "record", "stop", "close"]);
+    assert.deepEqual(requests.map((r) => r.url), ["/api/show/listen"]);
+    assert.deepEqual(requests[0].body, { run_id: "r", audio_base64: btoa("voice"),
+        audio_mime_type: "audio/webm;codecs=opus" });
+});
+
+test("the listener's turn: no press before the window ends is silence, with nothing sent", async () => {
+    const { sandbox, log, requests } = turnHarness();
+
+    const heard = await sandbox.listenerTurn(new AbortController().signal);
+
+    assert.equal(heard, null);
+    assert.deepEqual(log, ["open", "close"]);
+    assert.equal(requests.length, 0);
+});
+
+test("the listener's turn: the press cap ends a long press, and what was said is sent", async () => {
+    const { sandbox, log, requests, state, until } = turnHarness();
+
+    const turn = sandbox.listenerTurn(new AbortController().signal);
+    await until(() => state() === "listening");
+    sandbox.talkPress();
+    const heard = await turn;
+
+    assert.equal(heard.text, "Moira, is it airborne?");
+    assert.deepEqual(log, ["open", "record", "stop", "close"]);
+    assert.equal(requests.length, 1);
+});
+
+test("the listener's turn: a stop while recording discards the recording and closes the microphone", async () => {
+    const { sandbox, log, requests, state, until } = turnHarness();
+    const controller = new AbortController();
+
+    const turn = sandbox.listenerTurn(controller.signal);
+    await until(() => state() === "listening");
+    sandbox.talkPress();
+    await until(() => state() === "recording");
+    controller.abort();
+
+    await assert.rejects(turn);
+    assert.deepEqual(log, ["open", "record", "stop", "close"]);
+    assert.equal(requests.length, 0);
+});
+
+test("the listener's turn: a failed transcription counts as silence", async () => {
+    const { sandbox, requests, state, until, warnings } = turnHarness({ listenStatus: 502 });
+
+    const turn = sandbox.listenerTurn(new AbortController().signal);
+    await until(() => state() === "listening");
+    sandbox.talkPress();
+    await until(() => state() === "recording");
+    sandbox.talkRelease();
+
+    assert.equal(await turn, null);
+    assert.equal(requests.length, 1);
+    assert.equal(warnings.length, 1);
 });

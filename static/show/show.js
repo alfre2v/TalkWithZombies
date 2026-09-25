@@ -1,32 +1,40 @@
 /**
  * show.js — The show page: open a run, play its rounds one after another,
- * and open the listening window when the director invites the listeners.
+ * and give the listener a turn when the director invites them.
  *
  * Each line goes to the voice (player.js) as soon as it is written, and
  * appears on the page when its voice starts; the next round is asked for
  * when the voice has said everything, with the seconds of audio played so
  * far. With ?voice=off the page plays the text only, on the simulated clock
  * of step 3.1: it waits as long as a round's lines would take to say, about
- * 15 characters a second. After an invitation the listening window counts
- * down with the talk button still disabled (the microphone comes in step
- * 3.3), and the next round goes without a transcript: the static round.
+ * 15 characters a second.
  *
- * A classic script sharing globals, like upstream's; sse.js and player.js
- * load first. At load time it only defines functions and wires the page on
+ * After an invitation has been said, the listener's turn: the listening
+ * window opens with the microphone (mic.js) and counts down
+ * listen_window_s; holding the talk button (or the space bar) records, up
+ * to press_cap_s; on release what Whisper heard rides the next round
+ * request, and the director answers it. No press, and the next round goes
+ * without a transcript: the static round.
+ *
+ * A classic script sharing globals, like upstream's; sse.js, player.js and
+ * mic.js load first. At load time it only defines functions and wires the page on
  * DOMContentLoaded, so the Node tests can load it without a DOM.
  */
 
 const SPEAKING_CHARS_PER_S = 15;
 const CAPTIONS_KEY = "show.captions";
-const RUNNING_STATES = ["thinking", "on air", "listening"];
+const RUNNING_STATES = ["thinking", "on air", "listening", "recording", "hearing"];
 const STATE_TEXT = {
     idle: "Press Start to go on air.",
     thinking: "Thinking…",
     "on air": "On air",
     listening: "Listening…",
+    recording: "Recording…",
+    hearing: "Hearing…",
     stopped: "Stopped.",
     error: "Error:",
 };
+const TURN = { tickMs: 1000 }; // the listener's turn counts in these steps (the tests shorten them)
 
 const show = {
     run: null,          // the start response: run_id, title, cast, listen_window_s, press_cap_s, debug, ...
@@ -58,6 +66,17 @@ function speakingSeconds(text) {
  */
 function keptAttempts(lastN, n, early) {
     return Math.min(early, Math.max(0, n - lastN - 1));
+}
+
+/** The body of a round request: the run, the seconds played, and what the listener said, if anything. */
+function roundBody(runId, playedS, heard) {
+    const body = { run_id: runId, played_s: playedS };
+    if (heard) {
+        body.transcript = heard.text;
+        body.no_speech_prob = heard.no_speech_prob;
+        body.avg_logprob = heard.avg_logprob;
+    }
+    return body;
 }
 
 /** Seconds with one decimal, or a dash when unknown. */
@@ -101,6 +120,7 @@ function debugLine(summary, times, runId) {
 /** Open a run, then play it. */
 async function startShow() {
     if (show.voice) unlockAudio();
+    primeMic(); // Asks for the microphone now, so the prompt never eats a listening window
     el("btn-start").disabled = true;
     try {
         const resp = await fetch("/api/show/start", {
@@ -128,7 +148,7 @@ async function startShow() {
 /**
  * Play rounds one after another until Stop or a failure.
  *
- * After an invitation the listening window comes first, so a Resume after a
+ * After an invitation the listener's turn comes first, so a Resume after a
  * stop there opens it again.
  */
 async function runShow() {
@@ -136,8 +156,8 @@ async function runShow() {
     show.controller = controller;
     try {
         while (true) {
-            if (show.lastKind === "invitation") await listenWindow(controller.signal);
-            const round = await playRound(controller.signal);
+            const heard = show.lastKind === "invitation" ? await listenerTurn(controller.signal) : null;
+            const round = await playRound(controller.signal, heard);
             show.lastKind = round.summary.kind;
             if (show.voice) await playOut(round, controller.signal);
             else await onAir(round, controller.signal);
@@ -151,7 +171,8 @@ async function runShow() {
 }
 
 /**
- * Ask for the next round and give each line to the voice as it completes.
+ * Ask for the next round (with what the listener said, if anything) and give
+ * each line to the voice as it completes.
  *
  * With the voice, a line appears when its voice starts; with ?voice=off, at
  * once. Resolves with the round's summary, its lines and its timings; throws
@@ -159,7 +180,7 @@ async function runShow() {
  * summary. The stage direction goes above the round's lines when the
  * summary brings the event.
  */
-async function playRound(signal) {
+async function playRound(signal, heard) {
     setState("thinking");
     lightSpeaker(null);
     const started = performance.now();
@@ -174,7 +195,7 @@ async function playRound(signal) {
         const resp = await fetch("/api/show/round", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ run_id: show.run.run_id, played_s: show.playedS }),
+            body: JSON.stringify(roundBody(show.run.run_id, show.playedS, heard)),
             signal,
         });
         if (!resp.ok || !resp.body) throw new Error(`the round request failed (HTTP ${resp.status})`);
@@ -265,12 +286,63 @@ async function onAir(round, signal) {
     show.playedS += seconds;
 }
 
-/** The listening window after an invitation: count down listen_window_s; the microphone comes in step 3.3. */
-async function listenWindow(signal) {
+/**
+ * The listener's turn after an invitation.
+ *
+ * The window opens with the microphone and counts down; a press records
+ * until release or the press cap; resolves with what Whisper heard, or null
+ * for silence — no press, no microphone, or a failed transcription (noted
+ * with debug on). The turn's seconds are not show audio: they do not count
+ * as played.
+ */
+async function listenerTurn(signal) {
+    const invitation = show.current;
+    await openMic();
+    try {
+        if (!(await waitForPress(signal))) return null;
+        const blob = await recordUntilRelease(signal);
+        setState("hearing");
+        const started = performance.now();
+        try {
+            const heard = await hear(blob, mic.mime, show.run.run_id, signal);
+            const seconds = formatSeconds((performance.now() - started) / 1000);
+            if (show.run.debug && invitation) addDebugLine(invitation.element, `heard "${heard.text}" in ${seconds} s`);
+            return heard;
+        } catch (err) {
+            if (signal.aborted) throw err;
+            console.warn("Show: the transcription failed; counted as silence:", err);
+            if (show.run.debug && invitation) addNote(invitation.element, `(${err.message}; counted as silence)`);
+            return null;
+        }
+    } finally {
+        closeMic();
+    }
+}
+
+/** The window's countdown: resolves true at a press, false when listen_window_s runs out first. */
+async function waitForPress(signal) {
+    const pressed = nextPress().then(() => true);
     for (let left = Math.ceil(show.run.listen_window_s); left > 0; left--) {
         setState("listening", `${left} s`);
-        await sleep(1000, signal);
+        if (await Promise.race([pressed, sleep(TURN.tickMs, signal).then(() => false)])) return true;
     }
+    return false;
+}
+
+/** Record while the talk button is held, up to press_cap_s; resolves with the recording. */
+async function recordUntilRelease(signal) {
+    startRecording();
+    const released = nextRelease().then(() => true);
+    for (let left = Math.ceil(show.run.press_cap_s); left > 0; left--) {
+        setState("recording", `${left} s`);
+        if (await Promise.race([released, sleep(TURN.tickMs, signal).then(() => false)])) break;
+    }
+    return await stopRecording();
+}
+
+/** The listener may talk now: a window or a recording is under way, with the microphone open. */
+function canTalk() {
+    return (show.state === "listening" || show.state === "recording") && Boolean(mic.stream);
 }
 
 /** Stop now: the round in flight is abandoned, the voice is cut, and a wait is cut short. */
@@ -328,7 +400,11 @@ function setState(name, detail) {
     el("btn-start").hidden = !(name === "idle" || (name === "error" && !show.run));
     el("btn-stop").hidden = !RUNNING_STATES.includes(name);
     el("btn-resume").hidden = !(show.run && (name === "stopped" || name === "error"));
-    el("btn-talk").classList.toggle("window-open", name === "listening");
+    const talk = el("btn-talk");
+    talk.disabled = !canTalk();
+    talk.classList.toggle("window-open", name === "listening");
+    talk.classList.toggle("recording", name === "recording");
+    talk.textContent = name === "recording" ? "Release to send" : "Hold to talk";
 }
 
 /** The cast strip: one name per cast member. */
@@ -415,6 +491,29 @@ function scrollToEnd() {
     script.scrollTop = script.scrollHeight;
 }
 
+/** Hold to talk: the talk button (pointer captured, so a drag off it still releases) or the space bar. */
+function wireTalk() {
+    const talk = el("btn-talk");
+    talk.addEventListener("pointerdown", (e) => {
+        if (!canTalk()) return;
+        talk.setPointerCapture(e.pointerId);
+        talkPress();
+    });
+    talk.addEventListener("pointerup", talkRelease);
+    talk.addEventListener("pointercancel", talkRelease);
+    talk.addEventListener("contextmenu", (e) => e.preventDefault()); // A long touch must not open a menu
+    document.addEventListener("keydown", (e) => {
+        if (e.code !== "Space" || !canTalk()) return;
+        e.preventDefault(); // No scroll, and no click on a focused button
+        if (!e.repeat) talkPress();
+    });
+    document.addEventListener("keyup", (e) => {
+        if (e.code !== "Space" || !canTalk()) return;
+        e.preventDefault();
+        talkRelease();
+    });
+}
+
 /** Show or hide the captions: the lines and the stage directions. */
 function applyCaptions(on) {
     document.body.classList.toggle("captions-off", !on);
@@ -450,5 +549,6 @@ document.addEventListener("DOMContentLoaded", () => {
     el("btn-stop").addEventListener("click", stopShow);
     el("btn-resume").addEventListener("click", resumeShow);
     el("btn-captions").addEventListener("click", toggleCaptions);
+    wireTalk();
     setState("idle");
 });

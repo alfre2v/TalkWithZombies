@@ -181,8 +181,18 @@ button:disabled {
 
 #btn-talk {
     font-weight: 700;
+    touch-action: none;      /* hold to talk: no scrolling or zooming from the press */
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 #btn-talk.window-open {
     border-color: var(--accent);
+    color: var(--accent);
+}
+
+#btn-talk.recording {
+    border-color: var(--on-air);
+    background: var(--on-air);
+    color: #fff;
 }

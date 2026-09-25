@@ -1,8 +1,8 @@
 # Runbook: play the show in the browser
 
 *Living, undated. Written 2026-09-25 with step 3.1 of the show engine's
-slice 3 (the page with text only) and grown with 3.2 (the voice); the
-listener's turn (3.3) comes next. The page is `GET /show`
+slice 3 (the page with text only), grown with 3.2 (the voice) and 3.3
+(the listener's turn). The page is `GET /show`
 (`templates/show.html`, with its own files in `static/show/`). The
 plan it follows lives in the companion repository,
 [alfre2v/zombie-radio](https://github.com/alfre2v/zombie-radio)
@@ -73,12 +73,29 @@ rounds one after another until you press **Stop**.
   characters a second, and reports that as played seconds. Useful to
   watch the director without the TTS, or while it is down.
 
-## The listening window
+## Talk back
 
-After an invitation has been said, the state shows "Listening… N s"
-for `show.listen_window_s` seconds (10 by default); the talk button
-stays disabled for now (the microphone comes in step 3.3), so the next
-round is the static one.
+- **The microphone** is asked for once, when you press Start (the
+  browser shows its permission prompt then, not in the middle of a
+  listening window). It is open only while the radio listens.
+- **After an invitation** ("If anyone's out there…") has been said, the
+  listening window opens: the state shows "Listening… N s" for
+  `show.listen_window_s` seconds (10 by default) and the **Hold to
+  talk** button lights up.
+- **Hold the button (or the space bar) while you speak**, and let go
+  when you are done. The window stops counting; the state shows
+  "Recording… N s", counting down `show.press_cap_s` (30 by default),
+  which ends a press held too long. On release the state shows
+  "Hearing…" while Whisper transcribes, and the next round answers you:
+  the character you named, or whoever fits best.
+- **No press before the window ends**, and the next round is the static
+  one: the operator reacts to the silence, and the broadcast goes on.
+  A transcription that fails counts as silence too.
+- With debug on, the invitation's block shows what Whisper heard
+  (`heard "…" in 0.4 s`), and the next round's debug line whether it
+  counted as words or as silence, and why.
+- **If the browser pane will not give the page the microphone**, open
+  <http://127.0.0.1:8010/show> in Chrome.
 
 ## The debug line
 
@@ -120,6 +137,10 @@ are written too.
   asked for again.
 - **Nothing happens on Start** — the app is not serving, or the browser
   console (Developer Tools) shows why.
+- **The talk button never lights up** — the microphone was refused or
+  is missing: allow it in the browser's site settings and reload (a
+  reload starts a new run); the windows still count down, and the
+  rounds after them go static.
 - **Lines appear but no sound** — check the browser's sound and the
   TTS (`curl -s -o /dev/null -w '%{http_code}' localhost:8001/capabilities`
   must say 200); with debug on, each round notes the chunks the voice
