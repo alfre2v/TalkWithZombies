@@ -1,6 +1,8 @@
 """Show router — open a run, then play its rounds.
 
-POST /api/show/start opens a run of a story. POST /api/show/round plays
+GET /show serves the show page (templates/show.html, with its own files
+in static/show/). POST /api/show/start opens a run of a story and gives the
+page the settings it needs. POST /api/show/round plays
 the run's next round and streams the chat's SSE events (start / token /
 done) for each script line, then a "round" summary and "complete". The
 server keeps no show state between requests: the caller sends the run id,
@@ -14,7 +16,8 @@ answer round) or as silence (a static round) with the transcript filter
 on the "round" summary (`heard`: the text, Whisper's numbers, and why it
 counted as silence, if it did).
 With show.debug on, each round also leaves its debug files
-(app/show/debug.py), failed rounds included.
+(app/show/debug.py), failed rounds included, and a recorded round keeps
+them even when the client leaves while they are being written.
 """
 
 import asyncio
@@ -24,10 +27,12 @@ import json
 import logging
 import random
 import re
+from pathlib import Path
 from typing import AsyncIterator, Tuple
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.templating import Jinja2Templates
 
 from app import config as app_config
 from app.models import (ShowListenRequest, ShowListenResponse, ShowRoundRequest, ShowStartRequest,
@@ -44,12 +49,20 @@ from app.show.story import Story, StoryError, load_story, render_cast_sheet
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/show", tags=["show"])
+page_router = APIRouter(tags=["show"])
+_templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent.parent / "templates"))
 
 _RUN_ID = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(-\d+)?$")
 
 
 def _sse(event: dict) -> str:
     return f"data: {json.dumps(event)}\n\n"
+
+
+@page_router.get("/show", response_class=HTMLResponse)
+async def show_page(request: Request):
+    """Serve the show page, which opens a run and plays its rounds."""
+    return _templates.TemplateResponse(request, "show.html")
 
 
 @router.post("/start", response_model=ShowStartResponse)
@@ -64,7 +77,9 @@ def start(req: ShowStartRequest):
     run = new_run(story, show, render_cast_sheet(story, show), seed)
     logger.info("Show run %s opened: story %s, seed %s", run.run_id, story.name, seed)
     return ShowStartResponse(run_id=run.run_id, story=story.name, title=story.title,
-                             cast=list(story.cast), operator=story.operator, seed=seed)
+                             cast=list(story.cast), operator=story.operator, seed=seed,
+                             listen_window_s=show.listen_window_s, press_cap_s=show.press_cap_s,
+                             debug=show.debug)
 
 
 def _load(run_id: str) -> Tuple[Run, Story]:
@@ -177,8 +192,9 @@ async def _round_stream(run: Run, story: Story, req: ShowRoundRequest) -> AsyncI
     )
     append_round(run, round_)
     if show.debug:
-        await write_round(run.run_id, n, plan.kind, messages, **request, reply="".join(pieces), final=final,
-                          heard=heard)
+        # Shielded: the round is recorded now, so its files are written even if the client leaves meanwhile
+        await asyncio.shield(write_round(run.run_id, n, plan.kind, messages, **request, reply="".join(pieces),
+                                         final=final, heard=heard))
     if parser.dropped:
         logger.warning("Show run %s, round %s dropped %s line(s); finish_reason=%s",
                        run.run_id, n, len(parser.dropped), round_.finish_reason)

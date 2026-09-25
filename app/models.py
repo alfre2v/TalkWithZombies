@@ -330,13 +330,20 @@ class ShowStartRequest(BaseModel):
 
 
 class ShowStartResponse(BaseModel):
-    """The run just opened: its id, story, cast and seed."""
+    """The run just opened: its id, story, cast and seed, and the show settings the page needs.
+
+    listen_window_s and press_cap_s time the listener's turn; debug turns on
+    the page's debug line.
+    """
     run_id: str
     story: str
     title: str
     cast: List[str]
     operator: str
     seed: int
+    listen_window_s: float
+    press_cap_s: float
+    debug: bool
 
 
 class ShowRoundRequest(BaseModel):

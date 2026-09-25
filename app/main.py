@@ -144,6 +144,7 @@ app.include_router(stt.router)
 app.include_router(settings.router)
 app.include_router(persistence.router)
 app.include_router(show.router)
+app.include_router(show.page_router)
 
 # Jinja2 templates
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))

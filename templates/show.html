@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The show — TalkWithZombies</title>
+    <link rel="stylesheet" href="/static/show/show.css">
+    <link rel="icon" href="/static/favicon.ico">
+</head>
+<body>
+    <div id="show">
+        <!-- The story's title, the cast strip, and the ON AIR sign with the captions toggle under it -->
+        <header id="show-header">
+            <div>
+                <h1 id="show-title">The show</h1>
+                <div id="cast"></div>
+            </div>
+            <div id="show-signs">
+                <div id="on-air">ON AIR</div>
+                <button id="btn-captions" type="button" aria-pressed="true"
+                        title="Show or hide the lines and the stage directions">Captions: on</button>
+            </div>
+        </header>
+
+        <!-- The script as it is played: one block per round -->
+        <main id="script" aria-live="polite"></main>
+
+        <!-- The controls, the state, and the talk button -->
+        <footer id="show-controls">
+            <div class="control-buttons">
+                <button id="btn-start" type="button">Start</button>
+                <button id="btn-stop" type="button" hidden>Stop</button>
+                <button id="btn-resume" type="button" hidden>Resume</button>
+            </div>
+            <div id="show-state">Press Start to go on air.</div>
+            <button id="btn-talk" type="button" disabled title="Enabled while the radio listens">Hold to talk</button>
+        </footer>
+    </div>
+
+    <script src="/static/show/sse.js"></script>
+    <script src="/static/show/show.js"></script>
+</body>
+</html>

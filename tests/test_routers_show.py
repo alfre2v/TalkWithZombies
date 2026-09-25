@@ -6,6 +6,7 @@ stream_round) with the real reply recorded on the box on 2026-09-23
 (tests/test_show_parser.py), token by token.
 """
 
+import asyncio
 import base64
 import dataclasses
 import json
@@ -19,6 +20,7 @@ import app.config as app_config
 import app.routers.show as show_router
 import app.show.debug as show_debug
 from app.config import Persona, PersonasConfig, ShowConfig, STTConfig
+from app.models import ShowRoundRequest
 from app.show.script import Line, Round, append_round, load_run, runs_root, save_run
 from tests.factories import make_settings, parse_sse_events, sse_events_by_type
 from tests.test_show_parser import REAL_LINES, REAL_ROUND, REAL_TEXT
@@ -83,6 +85,15 @@ class TestStart:
         assert run.systems[""].startswith("/no_think\nYou write a live radio play.")
         assert run.rounds == []
 
+    def test_gives_the_page_the_listener_timers_and_the_debug_switch(self, client, show_env, monkeypatch):
+        body = _start(client)
+        assert (body["listen_window_s"], body["press_cap_s"], body["debug"]) == (10.0, 30.0, False)
+
+        monkeypatch.setattr(app_config.get_settings(), "show",
+                            ShowConfig(seed=42, listen_window_s=7, press_cap_s=20, debug=True))
+        body = _start(client)
+        assert (body["listen_window_s"], body["press_cap_s"], body["debug"]) == (7.0, 20.0, True)
+
     def test_unknown_story_is_refused(self, client, show_env):
         resp = client.post("/api/show/start", json={"story": "nope"})
         assert resp.status_code == 422
@@ -95,6 +106,21 @@ class TestStart:
 
         assert resp.status_code == 422
         assert "Samantha" in resp.json()["detail"]
+
+
+class TestPage:
+    def test_serves_the_show_page_with_its_own_files(self, client):
+        resp = client.get("/show")
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/html")
+        for asset in ("/static/show/show.css", "/static/show/sse.js", "/static/show/show.js"):
+            assert asset in resp.text
+        assert "/static/chat.js" not in resp.text
+
+    def test_the_page_files_are_served(self, client):
+        for asset in ("/static/show/show.css", "/static/show/sse.js", "/static/show/show.js"):
+            assert client.get(asset).status_code == 200
 
 
 class TestRound:
@@ -381,3 +407,42 @@ class TestDebug:
         assert "error: the model went away" in text
         assert "".join(REAL_ROUND[:10]) in text
         assert load_run(run_id).rounds == []
+
+    def test_a_client_leaving_while_the_files_are_written_still_gets_them(self, client, show_env, fake_model,
+                                                                          monkeypatch):
+        """Seen live on 2026-09-25: a Stop after the round was recorded cut its debug files short."""
+        app_config._settings_cache.show = ShowConfig(seed=42, debug=True)
+        run, story = show_router._load(_start(client)["run_id"])
+        written = []
+
+        async def scenario():
+            started, release = asyncio.Event(), asyncio.Event()
+
+            async def slow_write_round(run_id, n, kind, messages, **kwargs):
+                started.set()
+                await release.wait()
+                written.append(n)
+
+            monkeypatch.setattr(show_router, "write_round", slow_write_round)
+
+            async def consume():
+                async for _ in show_router._round_stream(run, story, ShowRoundRequest(run_id=run.run_id)):
+                    pass
+
+            task = asyncio.create_task(consume())
+            await started.wait()
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            release.set()
+            for _ in range(5):
+                await asyncio.sleep(0)
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(scenario())
+        finally:
+            loop.close()
+
+        assert written == [1]
+        assert [r.n for r in load_run(run.run_id).rounds] == [1]
