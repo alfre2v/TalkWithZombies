@@ -33,6 +33,31 @@ class TestShowConfig:
         assert (show.listen_window_s, show.press_cap_s) == (10.0, 30.0)
         assert (show.no_speech_max, show.logprob_min) == (0.6, -1.0)
         assert show.stt_language == "en"
+        assert (show.free_lines, show.free_line_weights) == ([1, 2, 3, 4], [1.0, 3.0, 3.0, 1.0])
+        assert (show.overtone_hold, show.overtone_jitter) == (4, 1)
+        assert (show.contact_exchanges, show.contact_jitter) == (3, 1)
+        assert (show.contact_min_lines, show.contact_max_lines) == (2, 3)
+        assert (show.silences_to_switch_off, show.beat_max_lines) == (2, 2)
+        assert (show.orientation_every, show.orientation_jitter) == (20, 5)
+        assert (show.recollection_every, show.recollection_jitter) == (15, 5)
+        assert show.restatement_contacts == 5
+
+    def test_the_contact_and_pacing_settings_read_from_yaml(self, tmp_path):
+        raw = {"show": {
+            "free_lines": [2, 3], "free_line_weights": [1, 1], "overtone_hold": 6, "overtone_jitter": 0,
+            "contact_exchanges": 4, "contact_jitter": 0, "contact_min_lines": 3, "contact_max_lines": 3,
+            "silences_to_switch_off": 1, "beat_max_lines": 1, "orientation_every": 0, "orientation_jitter": 0,
+            "recollection_every": 10, "recollection_jitter": 2, "restatement_contacts": 2,
+        }}
+        show = app_config.load_settings(_write_settings(tmp_path, raw)).show
+
+        assert (show.free_lines, show.free_line_weights) == ([2, 3], [1.0, 1.0])
+        assert (show.overtone_hold, show.overtone_jitter) == (6, 0)
+        assert (show.contact_exchanges, show.contact_jitter, show.contact_min_lines, show.contact_max_lines) == (
+            4, 0, 3, 3)
+        assert (show.silences_to_switch_off, show.beat_max_lines) == (1, 1)
+        assert (show.orientation_every, show.recollection_every, show.recollection_jitter) == (0, 10, 2)
+        assert show.restatement_contacts == 2
 
     def test_values_read_from_yaml(self, tmp_path):
         raw = {"show": {
@@ -56,6 +81,17 @@ class TestShowConfig:
         with pytest.raises(ValidationError):
             ShowConfig(interaction_min_s=200, interaction_max_s=100)
 
+    def test_contact_min_lines_above_max_rejected(self):
+        with pytest.raises(ValidationError, match="contact_min_lines"):
+            ShowConfig(contact_min_lines=4, contact_max_lines=3)
+
+    @pytest.mark.parametrize("lines, weights", [
+        ([], []), ([1, 2], [1]), ([2, 2], [1, 1]), ([0, 1], [1, 1]), ([1, 2], [1, -1]), ([1, 2], [0, 0]),
+    ])
+    def test_unsound_free_line_budgets_rejected(self, lines, weights):
+        with pytest.raises(ValidationError, match="free_lines"):
+            ShowConfig(free_lines=lines, free_line_weights=weights)
+
     @pytest.mark.parametrize("field,value", [
         ("story", ""),
         ("max_tokens", 0),
@@ -68,6 +104,16 @@ class TestShowConfig:
         ("event_jitter", -1),
         ("tone_hold", -1),
         ("tone_jitter", -1),
+        ("overtone_hold", 0),
+        ("overtone_jitter", -1),
+        ("contact_exchanges", 0),
+        ("contact_jitter", -1),
+        ("contact_min_lines", 0),
+        ("silences_to_switch_off", 0),
+        ("beat_max_lines", 0),
+        ("orientation_every", -1),
+        ("recollection_every", -1),
+        ("restatement_contacts", 0),
     ])
     def test_out_of_bounds_rejected(self, field, value):
         with pytest.raises(ValidationError):

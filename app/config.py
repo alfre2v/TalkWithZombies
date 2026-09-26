@@ -266,6 +266,30 @@ class ShowConfig(BaseModel):
     event_jitter: int = Field(default=1, ge=0)
     tone_hold: int = Field(default=3, ge=0)
     tone_jitter: int = Field(default=1, ge=0)
+    # A free round's line budget: one of free_lines, drawn with free_line_weights.
+    free_lines: List[int] = Field(default_factory=lambda: [1, 2, 3, 4])
+    free_line_weights: List[float] = Field(default_factory=lambda: [1.0, 3.0, 3.0, 1.0])
+    # The overtone of free rounds is held overtone_hold +/- overtone_jitter free rounds, never below 1, then drifts
+    # to a neighbor (the story's overtones.yaml).
+    overtone_hold: int = Field(default=4, ge=1)
+    overtone_jitter: int = Field(default=1, ge=0)
+    # A contact lasts contact_exchanges +/- contact_jitter of the listener's answers, drawn when it starts; each
+    # exchange is contact_min_lines to contact_max_lines lines. silences_to_switch_off silences in a row switch
+    # the receiver off; beat_max_lines is the budget of the Switch-off and the orientation.
+    contact_exchanges: int = Field(default=3, ge=1)
+    contact_jitter: int = Field(default=1, ge=0)
+    contact_min_lines: int = Field(default=2, ge=1)
+    contact_max_lines: int = Field(default=3, ge=1)
+    silences_to_switch_off: int = Field(default=2, ge=1)
+    beat_max_lines: int = Field(default=2, ge=1)
+    # An orientation every N free rounds, a recollection every N free rounds once a listener has spoken; each
+    # drawn N +/- jitter, never below 1; 0 turns it off (the sign-on at round 1 stays). A contact instruction
+    # restates the listener's words from the last restatement_contacts contacts.
+    orientation_every: int = Field(default=20, ge=0)
+    orientation_jitter: int = Field(default=5, ge=0)
+    recollection_every: int = Field(default=15, ge=0)
+    recollection_jitter: int = Field(default=5, ge=0)
+    restatement_contacts: int = Field(default=5, ge=1)
     # How an event is worded: on (the default since the A/B of 2026-09-25), the listeners cannot see it and the
     # first to speak tells them on air what is happening; off, "Offstage: <event>" (the characters only react,
     # which a listener cannot follow)
@@ -282,6 +306,18 @@ class ShowConfig(BaseModel):
     def _interaction_window_is_ordered(self):
         if self.interaction_min_s > self.interaction_max_s:
             raise ValueError("show.interaction_min_s must not exceed show.interaction_max_s")
+        return self
+
+    @model_validator(mode="after")
+    def _line_budgets_are_sound(self):
+        """Check the budgets the director draws from: a contact's range in order, the free rounds' pairs."""
+        if self.contact_min_lines > self.contact_max_lines:
+            raise ValueError("show.contact_min_lines must not exceed show.contact_max_lines")
+        lines, weights = self.free_lines, self.free_line_weights
+        if (not lines or len(lines) != len(weights) or len(set(lines)) != len(lines) or min(lines) < 1
+                or min(weights) < 0 or not sum(weights)):
+            raise ValueError("show.free_lines needs different budgets of at least 1, and show.free_line_weights "
+                             "one weight of at least 0 for each, not all 0")
         return self
 
 

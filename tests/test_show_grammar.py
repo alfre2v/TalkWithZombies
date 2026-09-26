@@ -61,3 +61,47 @@ class TestBuildGrammar:
     def test_budget_below_one_rejected(self):
         with pytest.raises(ValueError):
             build_grammar(CAST, 0)
+
+    def test_min_lines_raises_the_floor(self):
+        assert build_grammar(CAST, 3, MOODS, min_lines=2).splitlines()[0] == "root    ::= line{2,3}"
+
+    @pytest.mark.parametrize("min_lines", [0, 5])
+    def test_min_lines_outside_the_budget_rejected(self, min_lines):
+        with pytest.raises(ValueError):
+            build_grammar(CAST, 4, min_lines=min_lines)
+
+    def test_first_line_pinned_and_the_rest_to_the_others(self):
+        assert build_grammar(CAST, 3, MOODS, min_lines=2, first="Moira") == (
+            'root    ::= pinned line{1,2}\n'
+            'pinned  ::= "Moira" " (" emotion "): " text "\\n"\n'
+            'line    ::= speaker " (" emotion "): " text "\\n"\n'
+            'speaker ::= "Daniel" | "Ralph" | "Samantha"\n'
+            'emotion ::= "calm" | "happy" | "sad" | "afraid" | "terrified" | "doubtful" | "angry" | "urgent" | '
+            '"exhausted"\n'
+            'text    ::= [^\\n\\[\\]()]+\n'
+        )
+
+    def test_last_line_pinned_after_the_others(self):
+        assert build_grammar(CAST, 2, min_lines=2, last="Samantha") == (
+            'root    ::= line{1,1} pinned\n'
+            'pinned  ::= "Samantha" ": " text "\\n"\n'
+            'line    ::= speaker ": " text "\\n"\n'
+            'speaker ::= "Daniel" | "Moira" | "Ralph"\n'
+            'text    ::= [^\\n\\[\\]]+\n'
+        )
+
+    def test_a_pinned_single_line_needs_no_other_speaker(self):
+        assert build_grammar(["Samantha"], 2, first="Samantha").splitlines()[:2] == [
+            "root    ::= pinned",
+            'pinned  ::= "Samantha" ": " text "\\n"',
+        ]
+
+    @pytest.mark.parametrize("kwargs", [
+        {"first": "Ralph", "last": "Moira"},
+        {"first": "Nobody"},
+        {"last": "Samantha", "min_lines": 2, "speakers": ["Samantha"]},
+    ])
+    def test_bad_pins_rejected(self, kwargs):
+        speakers = kwargs.pop("speakers", CAST)
+        with pytest.raises(ValueError):
+            build_grammar(speakers, 2, **kwargs)

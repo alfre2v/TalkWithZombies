@@ -31,8 +31,6 @@ from app.show.script import Run
 from app.show.story import Story
 
 _NUMBERS = {2: "two", 3: "three", 4: "four"}
-_LINE_BUDGETS = (1, 2, 3, 4)
-_LINE_WEIGHTS = (1, 3, 3, 1)
 
 
 @dataclass(frozen=True)
@@ -83,8 +81,9 @@ def _time_to_listen(run: Run, show: ShowConfig, played_s: float, rng: random.Ran
 def _free(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> RoundPlan:
     """Plan a round of the cast talking.
     Two or three names: whoever has been silent longest, anyone named in
-    the last round, then random fill. A budget of 1-4 lines weighted to
-    2-3, an event when its gap has passed, the tone word of the hold.
+    the last round, then random fill. A line budget drawn from the
+    settings (1-4 lines weighted to 2-3 by default), an event when its gap
+    has passed, the tone word of the hold.
     """
     silent = _silent_longest(run, story, rng)
     named = sorted(_named_last_round(run, story) - {silent}, key=story.cast.index)
@@ -93,7 +92,7 @@ def _free(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> Round
     chosen = [silent] + rng.sample(named, min(len(named), size - 1))
     chosen += rng.sample([name for name in story.cast if name not in chosen], size - len(chosen))
     speakers = tuple(name for name in story.cast if name in chosen)
-    max_lines = rng.choices(_LINE_BUDGETS, weights=_LINE_WEIGHTS)[0]
+    max_lines = rng.choices(show.free_lines, weights=show.free_line_weights)[0]
     event = _next_event(run, story, rng) if _event_due(run, show) else None
     tone = _tone(run, story, show, rng)
     return _plan("free", speakers, max_lines, run.moods, event=event, tone=tone,
