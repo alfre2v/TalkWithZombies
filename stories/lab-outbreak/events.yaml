@@ -1,5 +1,6 @@
 # An event every few free rounds (show.event_every, with jitter), drawn without repeats until the pool is used up.
-# The director says it as "Offstage: <event>"; it is never spoken, the characters react to it.
+# The director gives it to the model as something the listeners cannot see, which the first to speak reports on air
+# (show.event_report, on by default; off, it says "Offstage: <event>" and the characters only react to it).
 events:
   # The ADR-0003 gate's ten (2026-09-22)
   - The generator coughed twice and the lights flickered across the east wing.

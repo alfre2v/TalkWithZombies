@@ -128,9 +128,26 @@ class TestFree:
         assert sorted(events[:3]) == sorted(STORY.events)
         assert sorted(events[3:6]) == sorted(STORY.events)
 
-    def test_an_event_opens_the_instruction(self):
-        for plan in _play(_run(), 20):
+    def test_an_event_opens_the_instruction_worded_for_the_broadcast(self):
+        plans = _play(_run(), 20)
+
+        assert any(plan.event for plan in plans)
+        for plan in plans:
+            reported = f"Something happens that the listeners cannot see: {plan.event} The first to speak tells"
+            assert plan.instruction.startswith(reported) == bool(plan.event)
+            assert "Offstage" not in plan.instruction
+
+    def test_event_report_off_gives_the_offstage_wording(self):
+        for plan in _play(_run(), 20, show=ShowConfig(interaction_min_s=60, interaction_max_s=180,
+                                                      event_report=False)):
             assert plan.instruction.startswith(f"Offstage: {plan.event} ") == bool(plan.event)
+
+    def test_event_report_changes_the_wording_only(self):
+        off = _play(_run(), 20, show=ShowConfig(interaction_min_s=60, interaction_max_s=180, event_report=False))
+        on = _play(_run(), 20)
+
+        assert [(p.kind, p.speakers, p.max_lines, p.event, p.tone, p.grammar) for p in off] == [
+            (p.kind, p.speakers, p.max_lines, p.event, p.tone, p.grammar) for p in on]
 
     def test_the_tone_word_comes_from_the_story(self):
         for plan in _play(_run(), 30):
@@ -239,6 +256,7 @@ class TestPacing:
         for plan in _play(_run(), 40, step=20, heard=(None, "Hello?"), show=show):
             assert (plan.event, plan.tone) == (None, None)
             assert "Offstage" not in plan.instruction
+            assert "cannot see" not in plan.instruction
             assert "tone" not in plan.instruction
 
 
@@ -334,6 +352,18 @@ class TestWording:
                                "Something is scratching at the loading dock door, slow and rhythmic.", True) == (
             "Offstage: Something is scratching at the loading dock door, slow and rhythmic. "
             "Moira and Ralph speak next: the next two lines, each with the emotion in its voice.")
+
+    def test_the_probe_round_worded_for_the_broadcast(self):
+        assert instruction_for(("Moira", "Ralph"), 2,
+                               "Something is scratching at the loading dock door, slow and rhythmic.", True,
+                               report=True) == (
+            "Something happens that the listeners cannot see: Something is scratching at the loading dock door, "
+            "slow and rhythmic. The first to speak tells the listeners on air what is happening. "
+            "Moira and Ralph speak next: the next two lines, each with the emotion in its voice.")
+
+    def test_without_an_event_report_changes_nothing(self):
+        assert instruction_for(("Daniel", "Moira"), 2, None, True, "brittle", report=True) == instruction_for(
+            ("Daniel", "Moira"), 2, None, True, "brittle")
 
     def test_three_speakers_without_an_event(self):
         assert instruction_for(("Daniel", "Moira", "Ralph"), 3, None, True) == (

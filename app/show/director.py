@@ -97,7 +97,7 @@ def _free(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> Round
     event = _next_event(run, story, rng) if _event_due(run, show) else None
     tone = _tone(run, story, show, rng)
     return _plan("free", speakers, max_lines, run.moods, event=event, tone=tone,
-                 instruction=instruction_for(speakers, max_lines, event, run.moods, tone))
+                 instruction=instruction_for(speakers, max_lines, event, run.moods, tone, show.event_report))
 
 
 def _invitation(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> RoundPlan:
@@ -240,8 +240,17 @@ def _count(max_lines: int, moods: bool) -> str:
 
 
 def instruction_for(speakers: Sequence[str], max_lines: int, event: Optional[str], moods: bool,
-                    tone: Optional[str] = None) -> str:
-    """Word a round's constraints: the event if any, who speaks next, how many lines, and the tone."""
+                    tone: Optional[str] = None, report: bool = False) -> str:
+    """Word a round's constraints: the event if any, who speaks next, how many lines, and the tone.
+
+    With report, the event is worded for the broadcast: the listeners cannot
+    see it, and the first to speak tells them on air what is happening.
+    """
     verb = "speaks" if len(speakers) == 1 else "speak"
     text = f"{_names(speakers)} {verb} next: {_count(max_lines, moods)}.{_tone_sentence(tone)}"
-    return f"Offstage: {event} {text}" if event else text
+    if not event:
+        return text
+    if report:
+        return (f"Something happens that the listeners cannot see: {event} "
+                f"The first to speak tells the listeners on air what is happening. {text}")
+    return f"Offstage: {event} {text}"

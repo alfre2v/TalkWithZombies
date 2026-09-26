@@ -66,6 +66,11 @@ All commands run from this repository's root,
   take 1) and `tone_hold` and `tone_jitter` (a tone word kept 3
   rounds, give or take 1); 0 in
   `event_every` or `tone_hold` turns events or tone words off.
+  `event_report` (on by default since an A/B test on 2026-09-25) words
+  an event for the broadcast — the listeners cannot see it, and the
+  first to speak tells them on air what is happening; `false` gives
+  the older "Offstage: …", where the characters only react, which a
+  listener cannot follow.
 
 ## Play rounds
 

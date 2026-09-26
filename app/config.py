@@ -266,6 +266,10 @@ class ShowConfig(BaseModel):
     event_jitter: int = Field(default=1, ge=0)
     tone_hold: int = Field(default=3, ge=0)
     tone_jitter: int = Field(default=1, ge=0)
+    # How an event is worded: on (the default since the A/B of 2026-09-25), the listeners cannot see it and the
+    # first to speak tells them on air what is happening; off, "Offstage: <event>" (the characters only react,
+    # which a listener cannot follow)
+    event_report: bool = True
     interaction_min_s: float = Field(default=60.0, ge=0)
     interaction_max_s: float = Field(default=180.0, ge=0)
     listen_window_s: float = Field(default=10.0, gt=0)
