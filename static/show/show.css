@@ -129,6 +129,55 @@ body {
     font-style: italic;
 }
 
+.listener .speaker {
+    color: var(--accent);
+}
+
+.word {
+    position: relative;
+}
+
+/* Whisper's confidence in the word, at once on hover (a title tooltip is slow and unreliable) */
+.word[data-percent]:hover::after {
+    content: attr(data-percent);
+    position: absolute;
+    left: 50%;
+    bottom: 100%;
+    transform: translateX(-50%);
+    padding: 0 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--panel);
+    color: var(--text);
+    font: 12px/1.6 ui-monospace, "SF Mono", Menlo, monospace;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.word-unsure,
+.word-doubtful {
+    text-decoration-skip-ink: none;   /* no gaps under letters that dip below the line ("again") */
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 4px;
+}
+
+.word-unsure {
+    text-decoration-line: underline;
+    text-decoration-style: dotted;
+}
+
+.word-doubtful {
+    color: var(--muted);   /* dimmed by color, not opacity, which the hover tooltip would inherit */
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+    text-decoration-color: var(--on-air);
+}
+
+.verdict {
+    color: var(--muted);
+    font-style: italic;
+}
+
 .direction {
     margin: 4px 0;
     color: var(--muted);

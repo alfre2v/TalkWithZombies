@@ -367,8 +367,19 @@ class ShowListenRequest(BaseModel):
     audio_mime_type: Optional[str] = "audio/webm"
 
 
+class ShowHeardWord(BaseModel):
+    """One word Whisper heard, with how sure it was of it (0 to 1)."""
+    word: str
+    probability: Optional[float] = None
+
+
 class ShowListenResponse(BaseModel):
-    """What Whisper heard, to send with the next round request, which decides whether it counts."""
+    """What Whisper heard, to send with the next round request, which decides whether it counts.
+
+    words is for the page's caption only: each word with Whisper's
+    probability; the round request does not carry them.
+    """
     text: str
     no_speech_prob: Optional[float] = None
     avg_logprob: Optional[float] = None
+    words: List[ShowHeardWord] = Field(default_factory=list)

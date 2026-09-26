@@ -283,7 +283,9 @@ class TestListen:
 
         async def fake_transcribe_for_show(audio_bytes, mime_type="audio/webm", *, prompt=None, language=None):
             calls.append({"audio": audio_bytes, "mime": mime_type, "prompt": prompt, "language": language})
-            return {"text": "Moira, is it airborne?", "no_speech_prob": 0.05, "avg_logprob": -0.3}
+            return {"text": "Moira, is it airborne?", "no_speech_prob": 0.05, "avg_logprob": -0.3,
+                    "words": [{"word": "Moira,", "probability": 0.8}, {"word": "is", "probability": 0.99},
+                              {"word": "it", "probability": 0.97}, {"word": "airborne?", "probability": 0.45}]}
 
         monkeypatch.setattr(show_router, "transcribe_for_show", fake_transcribe_for_show)
         return calls
@@ -294,7 +296,10 @@ class TestListen:
         resp = client.post("/api/show/listen", json={"run_id": run_id, "audio_base64": self.AUDIO})
 
         assert resp.status_code == 200
-        assert resp.json() == {"text": "Moira, is it airborne?", "no_speech_prob": 0.05, "avg_logprob": -0.3}
+        assert resp.json() == {"text": "Moira, is it airborne?", "no_speech_prob": 0.05, "avg_logprob": -0.3,
+                               "words": [{"word": "Moira,", "probability": 0.8}, {"word": "is", "probability": 0.99},
+                                         {"word": "it", "probability": 0.97},
+                                         {"word": "airborne?", "probability": 0.45}]}
         assert whisper[0] == {"audio": b"fake webm audio", "mime": "audio/webm",
                               "prompt": "Daniel, Moira, Ralph, Samantha", "language": "en"}
 

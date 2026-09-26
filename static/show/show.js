@@ -14,7 +14,10 @@
  * listen_window_s; holding the talk button (or the space bar) records, up
  * to press_cap_s; on release what Whisper heard rides the next round
  * request, and the director answers it. No press, and the next round goes
- * without a transcript: the static round.
+ * without a transcript: the static round. What Whisper heard shows at once
+ * as a caption under the invitation ("You: …"), each word marked by how
+ * sure Whisper was of it; when the next round's summary says the words
+ * counted as silence, the caption says why.
  *
  * A classic script sharing globals, like upstream's; sse.js, player.js and
  * mic.js load first. At load time it only defines functions and wires the page on
@@ -35,6 +38,7 @@ const STATE_TEXT = {
     error: "Error:",
 };
 const TURN = { tickMs: 1000 }; // the listener's turn counts in these steps (the tests shorten them)
+const WORD_BANDS = { sure: 0.8, unsure: 0.5 }; // Whisper's word probability: at least sure, at least unsure, below
 
 const show = {
     run: null,          // the start response: run_id, title, cast, listen_window_s, press_cap_s, debug, ...
@@ -44,6 +48,7 @@ const show = {
     lastKind: null,     // the kind of the last round that completed
     lastN: 0,           // the number of the last round whose summary arrived
     unsure: [],         // rounds that ended early since then: {note, reason}; the next summary tells if kept
+    heardCaption: null, // the caption of what the listener said, until the next summary gives its verdict
     controller: null,   // aborts the round request or the wait in progress
     state: "idle",
 };
@@ -77,6 +82,29 @@ function roundBody(runId, playedS, heard) {
         body.avg_logprob = heard.avg_logprob;
     }
     return body;
+}
+
+/** How sure Whisper was of a word: "sure", "unsure" or "doubtful" (a word without a probability counts as sure). */
+function wordBand(probability) {
+    if (probability === null || probability === undefined || probability >= WORD_BANDS.sure) return "sure";
+    return probability >= WORD_BANDS.unsure ? "unsure" : "doubtful";
+}
+
+/**
+ * What the listener said, as the caption's words: {text, band, percent}.
+ *
+ * Whisper's words when it gave them; otherwise the whole text as one word
+ * (percent null); nothing heard gives none.
+ */
+function heardWords(heard) {
+    if (heard.words && heard.words.length) {
+        return heard.words.map((w) => ({
+            text: w.word,
+            band: wordBand(w.probability),
+            percent: w.probability === null || w.probability === undefined ? null : Math.round(w.probability * 100),
+        }));
+    }
+    return heard.text ? [{ text: heard.text, band: "sure", percent: null }] : [];
 }
 
 /** Seconds with one decimal, or a dash when unknown. */
@@ -232,6 +260,7 @@ async function playRound(signal, heard) {
     }
     round.seconds = (performance.now() - started) / 1000;
     settleUnsure(round.summary.n);
+    settleHeard(round.summary);
     addDirection(round.element, round.summary.event);
     if (show.run.debug) {
         const written = { firstLineS: round.firstLineS, seconds: round.seconds }; // The voice's timings come once said
@@ -278,6 +307,14 @@ function settleUnsure(n) {
     show.lastN = n;
 }
 
+/** The round after the listener's turn: when its summary says the words counted as silence, the caption says why. */
+function settleHeard(summary) {
+    if (show.heardCaption && summary.heard && summary.heard.silence) {
+        addVerdict(show.heardCaption, `counted as silence: ${summary.heard.silence}`);
+    }
+    show.heardCaption = null;
+}
+
 /** Simulated playback (step 3.1): wait as long as the round's lines take to say, then count them as played. */
 async function onAir(round, signal) {
     const seconds = speakingSeconds(round.lines.map((line) => line.text).join(" "));
@@ -306,12 +343,13 @@ async function listenerTurn(signal) {
         try {
             const heard = await hear(blob, mic.mime, show.run.run_id, signal);
             const seconds = formatSeconds((performance.now() - started) / 1000);
+            if (invitation) show.heardCaption = addHeardCaption(invitation.element, heard);
             if (show.run.debug && invitation) addDebugLine(invitation.element, `heard "${heard.text}" in ${seconds} s`);
             return heard;
         } catch (err) {
             if (signal.aborted) throw err;
             console.warn("Show: the transcription failed; counted as silence:", err);
-            if (show.run.debug && invitation) addNote(invitation.element, `(${err.message}; counted as silence)`);
+            if (invitation) addVerdict(addHeardCaption(invitation.element, null), `${err.message}; counted as silence`);
             return null;
         }
     } finally {
@@ -473,6 +511,48 @@ function addDebugLine(block, text) {
     block.appendChild(line);
     scrollToEnd();
     return line;
+}
+
+/**
+ * The caption of what the listener said: "You: " and each word marked by how
+ * sure Whisper was (its percentage on hover, from data-percent); "(nothing
+ * heard)" for an empty recording, "(not heard)" when heard is null. Returns
+ * it, for the verdict.
+ */
+function addHeardCaption(block, heard) {
+    const line = document.createElement("p");
+    line.className = "line listener";
+    const who = document.createElement("span");
+    who.className = "speaker";
+    who.textContent = "You";
+    line.appendChild(who);
+    line.appendChild(document.createTextNode(": "));
+    const words = heard ? heardWords(heard) : [];
+    if (!words.length) {
+        const none = document.createElement("span");
+        none.className = "verdict";
+        none.textContent = heard ? "(nothing heard)" : "(not heard)";
+        line.appendChild(none);
+    }
+    words.forEach((w, i) => {
+        if (i) line.appendChild(document.createTextNode(" "));
+        const word = document.createElement("span");
+        word.className = `word word-${w.band}`;
+        word.textContent = w.text;
+        if (w.percent !== null) word.dataset.percent = `${w.percent}%`;
+        line.appendChild(word);
+    });
+    block.appendChild(line);
+    scrollToEnd();
+    return line;
+}
+
+/** Say on the listener's caption why the words did not count: "(counted as silence: …)". */
+function addVerdict(caption, text) {
+    const verdict = document.createElement("span");
+    verdict.className = "verdict";
+    verdict.textContent = ` (${text})`;
+    caption.appendChild(verdict);
 }
 
 /** A note under a round that stopped or failed; returns it, to be corrected if the server kept the round. */

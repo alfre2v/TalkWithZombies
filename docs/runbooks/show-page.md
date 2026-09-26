@@ -91,9 +91,18 @@ rounds one after another until you press **Stop**.
 - **No press before the window ends**, and the next round is the static
   one: the operator reacts to the silence, and the broadcast goes on.
   A transcription that fails counts as silence too.
-- With debug on, the invitation's block shows what Whisper heard
-  (`heard "…" in 0.4 s`), and the next round's debug line whether it
-  counted as words or as silence, and why.
+- **What Whisper heard shows at once**, under the invitation, as a
+  caption line: `You: Hello Samantha, are you there?`. Each word is
+  marked by how sure Whisper was of it: plain from 80 %, a dotted
+  underline from 50 %, dimmed with a wavy underline below; hover over a
+  word for its percentage. If the words count as silence, the caption
+  says why once the next round starts — for example `You: Thank you.
+  (counted as silence: a known Whisper hallucination)`; an empty
+  recording shows `You: (nothing heard)`. The captions toggle hides it
+  with the other lines.
+- With debug on, the invitation's block also shows how long hearing
+  took (`heard "…" in 0.4 s`), and the next round's debug line whether
+  it counted as words or as silence, and why.
 - **If the browser pane will not give the page the microphone**, open
   <http://127.0.0.1:8010/show> in Chrome.
 

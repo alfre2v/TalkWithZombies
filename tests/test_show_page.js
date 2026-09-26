@@ -25,7 +25,10 @@
  *     transcription route stubbed: a press and a release give what was
  *     heard, no press gives silence, the press cap ends a long press, a stop
  *     discards the recording, a failed transcription counts as silence —
- *     and the microphone is closed after each; the round request's body.
+ *     and the microphone is closed after each; the round request's body;
+ *   - the listener's caption: Whisper's words in three bands of confidence,
+ *     the whole text when there are no words, "(nothing heard)", and the
+ *     filter's verdict added when the next summary says it was silence.
  *
  * How it works: the show's scripts are browser globals (classic scripts,
  * like upstream's), so each test evaluates sse.js + player.js + mic.js +
@@ -412,7 +415,7 @@ function element() {
             remove: (name) => classes.delete(name),
             contains: (name) => classes.has(name),
         },
-        setAttribute() {}, addEventListener() {}, setPointerCapture() {},
+        dataset: {}, setAttribute() {}, addEventListener() {}, setPointerCapture() {},
         appendChild(child) { this.children.push(child); }, prepend(child) { this.children.unshift(child); },
     };
 }
@@ -429,6 +432,7 @@ function turnHarness({ listenStatus = 200 } = {}) {
         addEventListener() {},
         getElementById: (id) => (elements.has(id) ? elements.get(id) : elements.set(id, element()).get(id)),
         createElement: () => element(),
+        createTextNode: (text) => ({ textContent: text }),
         body: element(),
     };
     const log = [];
@@ -462,7 +466,9 @@ function turnHarness({ listenStatus = 200 } = {}) {
     const fetchStub = async (url, options) => {
         requests.push({ url, body: JSON.parse(options.body) });
         if (listenStatus !== 200) return { ok: false, status: listenStatus, json: async () => ({}) };
-        const heard = { text: "Moira, is it airborne?", no_speech_prob: 0.01, avg_logprob: -0.2 };
+        const heard = { text: "Moira, is it airborne?", no_speech_prob: 0.01, avg_logprob: -0.2,
+            words: [{ word: "Moira,", probability: 0.85 }, { word: "is", probability: 0.99 },
+                { word: "it", probability: 0.6 }, { word: "airborne?", probability: 0.4 }] };
         return { ok: true, json: async () => heard };
     };
     const { sandbox, warnings } = loadShow({ document, navigator, MediaRecorder: MediaRecorderStub, fetch: fetchStub });
@@ -486,7 +492,8 @@ test("the listener's turn: a press and a release send the recording; what was he
     sandbox.talkRelease();
     const heard = await turn;
 
-    assert.deepEqual(plain(heard), { text: "Moira, is it airborne?", no_speech_prob: 0.01, avg_logprob: -0.2 });
+    assert.equal(heard.text, "Moira, is it airborne?");
+    assert.equal(heard.words.length, 4);
     assert.deepEqual(log, ["open", "record", "stop", "close"]);
     assert.deepEqual(requests.map((r) => r.url), ["/api/show/listen"]);
     assert.deepEqual(requests[0].body, { run_id: "r", audio_base64: btoa("voice"),
@@ -543,4 +550,78 @@ test("the listener's turn: a failed transcription counts as silence", async () =
     assert.equal(await turn, null);
     assert.equal(requests.length, 1);
     assert.equal(warnings.length, 1);
+});
+
+/* ==========================================================================
+   The listener's caption
+   ========================================================================== */
+
+test("wordBand: sure from 0.80, unsure from 0.50, doubtful below; no probability counts as sure", () => {
+    const { sandbox } = loadShow();
+
+    assert.deepEqual([0.99, 0.8, 0.79, 0.5, 0.49, 0.1, null, undefined].map((p) => sandbox.wordBand(p)),
+        ["sure", "sure", "unsure", "unsure", "doubtful", "doubtful", "sure", "sure"]);
+});
+
+test("heardWords: Whisper's words with their band and percent; the whole text without words; none for nothing", () => {
+    const { sandbox } = loadShow();
+
+    assert.deepEqual(plain(sandbox.heardWords({ text: "Hello Samantha", words: [
+        { word: "Hello", probability: 0.866 }, { word: "Samantha,", probability: 0.45 }] })), [
+        { text: "Hello", band: "sure", percent: 87 }, { text: "Samantha,", band: "doubtful", percent: 45 }]);
+    assert.deepEqual(plain(sandbox.heardWords({ text: "Hello Samantha", words: [] })),
+        [{ text: "Hello Samantha", band: "sure", percent: null }]);
+    assert.deepEqual(plain(sandbox.heardWords({ text: "", words: [] })), []);
+});
+
+/** The words of a caption line as "text[band title]", from the stub page's elements. */
+function captionWords(line) {
+    return line.children.filter((c) => /^word /.test(c.className || ""))
+        .map((c) => {
+            const band = c.className.replace("word word-", "");
+            return `${c.textContent}[${band}${c.dataset.percent ? " " + c.dataset.percent : ""}]`;
+        });
+}
+
+test("the listener's turn puts a caption under the invitation, each word marked by Whisper's confidence", async () => {
+    const { sandbox, state, until } = turnHarness();
+    vm.runInContext("show.current = { element: document.createElement('div') };", sandbox);
+
+    const turn = sandbox.listenerTurn(new AbortController().signal);
+    await until(() => state() === "listening");
+    sandbox.talkPress();
+    await until(() => state() === "recording");
+    sandbox.talkRelease();
+    await turn;
+
+    const [caption] = vm.runInContext("show.current.element.children", sandbox);
+    assert.equal(caption.className, "line listener");
+    assert.equal(caption.children[0].textContent, "You");
+    assert.deepEqual(captionWords(caption),
+        ["Moira,[sure 85%]", "is[sure 99%]", "it[unsure 60%]", "airborne?[doubtful 40%]"]);
+    assert.equal(vm.runInContext("show.heardCaption === show.current.element.children[0]", sandbox), true);
+});
+
+test("the next summary adds the filter's verdict to the caption when the words counted as silence", () => {
+    const { sandbox } = turnHarness();
+    const said = vm.runInContext(`show.heardCaption = addHeardCaption(document.createElement('div'),
+        { text: "Thank you.", words: [{ word: "Thank", probability: 0.9 }, { word: "you.", probability: 0.9 }] });
+        show.heardCaption`, sandbox);
+
+    const heard = { text: "Thank you.", silence: "a known Whisper hallucination" };
+    sandbox.settleHeard({ n: 5, kind: "static", heard });
+
+    assert.equal(said.children.at(-1).textContent, " (counted as silence: a known Whisper hallucination)");
+    assert.equal(vm.runInContext("show.heardCaption", sandbox), null);
+});
+
+test("words that counted as words get no verdict; an empty recording says so", () => {
+    const { sandbox } = turnHarness();
+    const said = vm.runInContext(`show.heardCaption = addHeardCaption(document.createElement('div'),
+        { text: "Moira?", words: [{ word: "Moira?", probability: 0.9 }] }); show.heardCaption`, sandbox);
+    sandbox.settleHeard({ n: 5, kind: "answer", heard: { text: "Moira?", silence: null } });
+    assert.equal(said.children.at(-1).className, "word word-sure");
+
+    const empty = vm.runInContext("addHeardCaption(document.createElement('div'), { text: '', words: [] })", sandbox);
+    assert.equal(empty.children.at(-1).textContent, "(nothing heard)");
 });
