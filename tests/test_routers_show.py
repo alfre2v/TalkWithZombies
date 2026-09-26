@@ -244,8 +244,8 @@ class TestListenerTurn:
         assert answered.agenda == exchange["agenda"]
         assert fake_model[2]["grammar"].splitlines()[1].startswith('pinned  ::= "Moira"')
         assert fake_model[2]["messages"][-1]["content"].startswith(
-            'A voice on the frequency says: "Moira, is it airborne?" Answer what the voice said, then: Find out who '
-            'the voice is.')
+            'A voice on the frequency says: "Moira, is it airborne?" Speak to the voice directly. Answer what the '
+            'voice said, then: Find out who the voice is.')
 
     def test_a_silent_window_gives_the_re_call(self, client, show_env, fake_model):
         run_id, _ = _to_the_call(client)
@@ -253,7 +253,8 @@ class TestListenerTurn:
 
         assert (summary["kind"], summary["heard"], summary["listens"]) == ("re-call", None, True)
         assert load_run(run_id).rounds[2].instruction.startswith(
-            "Only static answers. Samantha calls out once more to anyone listening to answer.")
+            "Only static answers. Samantha calls out once more to anyone listening, asking them to answer now; the "
+            "receiver is still on.")
 
     def test_a_transcript_outside_a_listening_window_is_ignored(self, client, show_env, fake_model, caplog):
         run_id = _start(client)["run_id"]

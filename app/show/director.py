@@ -167,11 +167,15 @@ def _orientation(run: Run, story: Story, show: ShowConfig, rng: random.Random, s
     overtone = _kind_overtone(story, "orientation", rng)
     tone = _tone(run, story, show, overtone, rng)
     moods = _moods(run, story, overtone)
-    facts = story.orientation or "who the cast are, where they are, and that they can only transmit for now."
+    facts = story.orientation or "who the cast are and where they are."
+    receiver = "that the lab's receiver is dead — they can only transmit, and will call out for listeners when it " \
+               "works — and"
     if sign_on:
-        lead = f"The broadcast begins. {first} opens it, telling anyone listening, in their own words: {facts}"
+        lead = f"The broadcast begins. {first} opens it and tells anyone listening, in their own words, {receiver} " \
+               f"who they are and where: {facts}"
     else:
-        lead = f"For listeners just tuning in, {first} tells them, in their own words: {facts}"
+        lead = f"For listeners just tuning in, {first} tells them, in their own words, {receiver} who they are and " \
+               f"where: {facts}"
     turns = _turns(story.cast, show.beat_max_lines, moods, tone, first=first)
     return _plan("orientation", story.cast, show.beat_max_lines, moods, instruction=f"{lead} {turns}",
                  first=first, tone=tone, overtone=overtone)
@@ -244,8 +248,8 @@ def _exchange(run: Run, story: Story, show: ShowConfig, heard: str, rng: random.
     tone = _tone(run, story, show, overtone, rng)
     moods = _moods(run, story, overtone)
     ask = f"Answer what the voice said, then: {item} " if item else "Answer what the voice said. "
-    text = f'A voice on the frequency says: "{heard}" {_restatement(run, show)}{ask}End with a question to ' \
-           f"the voice. " + _turns(story.cast, lines, moods, tone, first=first)
+    text = f'A voice on the frequency says: "{heard}" {_restatement(run, show)}Speak to the voice directly. ' \
+           f"{ask}The last line asks the voice a question. " + _turns(story.cast, lines, moods, tone, first=first)
     return _plan("exchange", story.cast, lines, moods, instruction=text, min_lines=lines, first=first, tone=tone,
                  listener=heard, overtone=overtone, agenda=item, answers=answers)
 
@@ -260,9 +264,9 @@ def _breakdown(run: Run, story: Story, show: ShowConfig, heard: str, rng: random
     moods = _moods(run, story, overtone)
     direction = story.directions.get("breakdown")
     fails = f"something happens that the listeners cannot see: {direction}" if direction else "the receiver fails."
-    text = f'A voice on the frequency says: "{heard}" {_restatement(run, show)}Answer what the voice said. ' \
-           f"Then {fails} The one who notices tells the listeners on air that the lab can no longer hear them, " \
-           f"only transmit, and that the broadcast goes on while they fix it. " \
+    text = f'A voice on the frequency says: "{heard}" {_restatement(run, show)}First answer what the voice just ' \
+           f"said, speaking to them directly. Then {fails} The one who notices tells the listeners on air that the " \
+           f"lab can no longer hear them, only transmit, and that the broadcast goes on while they fix it. " \
            + _turns(story.cast, lines, moods, tone, first=first)
     return _plan("breakdown", story.cast, lines, moods, instruction=text, min_lines=lines, first=first, tone=tone,
                  listener=heard, overtone=overtone, answers=answers)
@@ -280,13 +284,14 @@ def _re_call(run: Run, story: Story, show: ShowConfig, rng: random.Random,
     moods = _moods(run, story, overtone)
     if not any(r.listener for r in _receiver_period(run)):
         caller = story.operator
-        text = f"Only static answers. {caller} calls out once more to anyone listening to answer. "
+        text = f"Only static answers. {caller} calls out once more to anyone listening, asking them to answer now; " \
+               f"the receiver is still on. "
     else:
         caller = _asker(run, story)
         question = _last_question(run)
         again = f', and asks again: "{question}"' if question else ""
         text = f"The voice has gone quiet. {_restatement(run, show)}" \
-               + _ended(f"{caller} calls them back, by name if they gave one{again}") + " "
+               + _ended(f"{caller} speaks to the voice, calls them by name if they gave one{again}") + " "
     text += _turns(story.cast, 1, moods, tone, first=caller)
     return _plan("re-call", story.cast, 1, moods, instruction=text, first=caller, tone=tone, overtone=overtone,
                  answers=answers)
@@ -386,8 +391,9 @@ def _restatement(run: Run, show: ShowConfig) -> str:
     text = _ended(f"Earlier in this contact the voice said: {_quoted(now)}") + " " if now else ""
     if before:
         listed = "; ".join(f"{i}: {_quoted(words)}" for i, words in enumerate(before, 1))
-        text += _ended(f"Voices that reached you before, oldest first — {listed}") + " If this voice is one you " \
-                "spoke with before, greet them as a returning friend and use what they told you. "
+        text += _ended(f"Voices that reached you before, oldest first — {listed}") + " Only a voice that says the " \
+                "name of one of them is someone you spoke with before: greet them as a returning friend and use " \
+                "what they told you. Any other voice is someone new. "
     return text
 
 

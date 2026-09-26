@@ -158,8 +158,10 @@ class TestSignOnAndOrientation:
 
         assert (plan.kind, _pins(plan), plan.max_lines, plan.overtone) == (
             "orientation", ("Samantha", "first"), 2, "level")
-        assert plan.instruction.startswith("The broadcast begins. Samantha opens it, telling anyone listening, in "
-                                           "their own words: Four scientists are trapped in a lab. Samantha speaks "
+        assert plan.instruction.startswith("The broadcast begins. Samantha opens it and tells anyone listening, in "
+                                           "their own words, that the lab's receiver is dead — they can only "
+                                           "transmit, and will call out for listeners when it works — and who they "
+                                           "are and where: Four scientists are trapped in a lab. Samantha speaks "
                                            "first, then Daniel, Moira or Ralph: the next two lines")
 
     @pytest.mark.parametrize("every, jitter", [(5, 0), (6, 2)])
@@ -341,9 +343,9 @@ class TestContact:
             "exchange", "Hello?", AGENDA[0], ("Samantha", "first"))
         assert 2 <= plan.max_lines <= 3
         assert plan.grammar.startswith(f"root    ::= pinned line{{{plan.max_lines - 1},{plan.max_lines - 1}}}")
-        assert plan.instruction.startswith(f'A voice on the frequency says: "Hello?" Answer what the voice said, '
-                                           f"then: {AGENDA[0]} End with a question to the voice. Samantha speaks "
-                                           f"first, then Daniel, Moira or Ralph")
+        assert plan.instruction.startswith(f'A voice on the frequency says: "Hello?" Speak to the voice directly. '
+                                           f"Answer what the voice said, then: {AGENDA[0]} The last line asks the "
+                                           f"voice a question. Samantha speaks first, then Daniel, Moira or Ralph")
 
     @pytest.mark.parametrize("words, first", [
         ("Is Ralph there? And Moira?", "Ralph"), ("Moira and Ralph, listen.", "Moira"),
@@ -377,11 +379,11 @@ class TestContact:
             "breakdown", "Moira, we're coming.", "Moira", False)
         assert plan.overtone in ("level", "down")
         assert plan.instruction.startswith('A voice on the frequency says: "Moira, we\'re coming." Earlier in this '
-                                           'contact the voice said: "I\'m Alfredo." Answer what the voice said. Then '
-                                           "something happens that the listeners cannot see: Smoke pours from the "
-                                           "receiver. The one who notices tells the listeners on air that the lab can "
-                                           "no longer hear them")
-        assert "End with a question" not in plan.instruction
+                                           'contact the voice said: "I\'m Alfredo." First answer what the voice just '
+                                           "said, speaking to them directly. Then something happens that the "
+                                           "listeners cannot see: Smoke pours from the receiver. The one who notices "
+                                           "tells the listeners on air that the lab can no longer hear them")
+        assert "asks the voice a question" not in plan.instruction
 
     def test_each_round_after_a_window_reports_the_answers_so_far_and_the_number_that_ends_the_contact(self):
         show = _show(contact_exchanges=3, contact_jitter=0)
@@ -415,7 +417,8 @@ class TestContact:
         last = [r for r in run.rounds if r.kind == "breakdown"][-1].instruction
         listed = last.split("oldest first — ")[1].split(" If this voice")[0]
         assert listed.startswith("1: ") and "2: " not in listed
-        assert "greet them as a returning friend and use what they told you" in last
+        assert "Only a voice that says the name of one of them is someone you spoke with before" in last
+        assert "Any other voice is someone new." in last
 
 
 class TestSilence:
@@ -425,7 +428,8 @@ class TestSilence:
         switch_off = plan_round(run, STORY, SHOW, 215)
 
         assert (re_call.kind, _pins(re_call), re_call.max_lines) == ("re-call", ("Samantha", "first"), 1)
-        assert re_call.instruction.startswith("Only static answers. Samantha calls out once more")
+        assert re_call.instruction.startswith("Only static answers. Samantha calls out once more to anyone "
+                                              "listening, asking them to answer now; the receiver is still on.")
         assert (switch_off.kind, _pins(switch_off)[0], switch_off.listens) == ("switch-off", "Samantha", False)
         assert switch_off.instruction.startswith("Nobody answered the call. Samantha tells the listeners the lab is "
                                                  "switching the receiver off, to save power or to spare the fragile "
@@ -440,8 +444,8 @@ class TestSilence:
         switch_off = plan_round(run, STORY, SHOW, 225)
 
         assert _pins(re_call)[0] == "Ralph"
-        assert ('Ralph calls them back, by name if they gave one, and asks again: "Where are you? Over." '
-                in re_call.instruction)
+        assert ('Ralph speaks to the voice, calls them by name if they gave one, and asks again: "Where are you? '
+                'Over." ' in re_call.instruction)
         assert 'Earlier in this contact the voice said: "I\'m Alfredo."' in re_call.instruction
         assert (switch_off.kind, _pins(switch_off)[0]) == ("switch-off", "Ralph")
         assert switch_off.instruction.startswith("The voice is gone. Ralph tells the listeners the lab has lost them")
