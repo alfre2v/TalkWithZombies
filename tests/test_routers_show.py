@@ -15,6 +15,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+import yaml
 
 import app.config as app_config
 import app.routers.show as show_router
@@ -147,15 +148,27 @@ class TestRound:
         assert [line.raw for line in recorded.lines] == [line.raw for line in REAL_LINES]
         assert recorded.timings == FINAL["timings"]
         assert recorded.finish_reason == "stop"
-        assert recorded.event is not None
         assert recorded.speakers == summary["speakers"]
-        assert summary["event"] == recorded.event
-        assert (recorded.kind, recorded.played_s, recorded.listener) == ("free", 0.0, None)
+        assert (recorded.kind, recorded.played_s, recorded.listener, recorded.event) == (
+            "orientation", 0.0, None, None)
+        assert (recorded.overtone, summary["overtone"]) == ("neutral", "neutral")
         assert recorded.tone is not None
-        assert (summary["kind"], summary["tone"]) == ("free", recorded.tone)
+        assert (summary["kind"], summary["tone"], summary["listens"]) == ("orientation", recorded.tone, False)
+        assert (summary["agenda"], summary["slot"], summary["direction"]) == (None, None, None)
         assert (summary["heard"], recorded.heard) == (None, None)
         assert summary["trimmed"] == []
         assert (recorded.tokens, recorded.trims) == (None, [])
+
+    def test_a_free_round_records_its_event_and_overtone(self, client, show_env, fake_model):
+        run_id = _start(client)["run_id"]
+        _round(client, run_id)
+        summary = _summary(_round(client, run_id, played_s=5))
+
+        recorded = load_run(run_id).rounds[1]
+        assert (recorded.kind, summary["kind"]) == ("free", "free")
+        assert recorded.event is not None and summary["event"] == recorded.event
+        assert recorded.overtone == summary["overtone"]
+        assert recorded.event in [e for items in _pools()[recorded.overtone].values() for e in items]
 
     def test_the_request_carries_the_plan_budget_and_round_seed(self, client, show_env, fake_model):
         run_id = _start(client)["run_id"]
@@ -165,7 +178,8 @@ class TestRound:
         recorded = load_run(run_id).rounds[0]
         assert call["max_tokens"] == 512
         assert call["seed"] == 42 + 1
-        assert call["grammar"].splitlines()[0] == f"root    ::= line{{1,{recorded.max_lines}}}"
+        assert call["grammar"].splitlines()[:2] == [
+            "root    ::= pinned line{0,1}", 'pinned  ::= "Samantha" " (" emotion "): " text "\\n"']
         assert [m["role"] for m in call["messages"]] == ["system", "user"]
         assert call["messages"][1]["content"] == recorded.instruction
 
@@ -201,42 +215,58 @@ class TestRound:
         assert load_run(run_id).rounds == []
 
 
+def _pools():
+    """The shipped story's events by overtone, then theme."""
+    return yaml.safe_load((SHIPPED_STORIES / "lab-outbreak" / "events.yaml").read_text())["events"]
+
+
+def _to_the_call(client):
+    """A run whose second round is the Repair: the sign-on, then the call once the cadence's maximum has played."""
+    run_id = _start(client)["run_id"]
+    _round(client, run_id)
+    call = _summary(_round(client, run_id, played_s=180))
+    assert (call["kind"], call["listens"]) == ("repair", True)
+    return run_id, call
+
+
 class TestListenerTurn:
-    def test_an_invitation_then_the_answer_to_the_transcript(self, client, show_env, fake_model):
-        run_id = _start(client)["run_id"]
-        invitation = _summary(_round(client, run_id, played_s=180))
-        answer = _summary(_round(client, run_id, played_s=190, transcript="Moira, is it airborne?"))
+    def test_the_call_then_the_exchange_that_answers_the_transcript(self, client, show_env, fake_model):
+        run_id, call = _to_the_call(client)
+        exchange = _summary(_round(client, run_id, played_s=190, transcript="Moira, is it airborne?"))
 
-        assert (invitation["kind"], invitation["speakers"]) == ("invitation", ["Samantha"])
-        assert (answer["kind"], answer["speakers"], answer["tone"]) == ("answer", ["Moira"], None)
-        first, second = load_run(run_id).rounds
-        assert (first.kind, first.played_s) == ("invitation", 180.0)
-        assert (second.kind, second.played_s, second.listener) == ("answer", 190.0, "Moira, is it airborne?")
-        assert fake_model[1]["grammar"].splitlines()[2] == 'speaker ::= "Moira"'
-        assert fake_model[1]["messages"][-1]["content"].startswith(
-            'A voice on the frequency says: "Moira, is it airborne?" Moira answers the voice:')
+        assert call["direction"] == "The receiver crackles back to life."
+        assert (exchange["kind"], exchange["speakers"], exchange["listens"]) == ("exchange", CAST, True)
+        assert exchange["agenda"].startswith("Find out who the voice is.")
+        _, repair, answered = load_run(run_id).rounds
+        assert (repair.kind, repair.played_s) == ("repair", 180.0)
+        assert (answered.kind, answered.played_s, answered.listener) == ("exchange", 190.0, "Moira, is it airborne?")
+        assert answered.agenda == exchange["agenda"]
+        assert fake_model[2]["grammar"].splitlines()[1].startswith('pinned  ::= "Moira"')
+        assert fake_model[2]["messages"][-1]["content"].startswith(
+            'A voice on the frequency says: "Moira, is it airborne?" Answer what the voice said, then: Find out who '
+            'the voice is.')
 
-    def test_a_silent_window_gives_the_static_round(self, client, show_env, fake_model):
-        run_id = _start(client)["run_id"]
-        _round(client, run_id, played_s=180)
+    def test_a_silent_window_gives_the_re_call(self, client, show_env, fake_model):
+        run_id, _ = _to_the_call(client)
         summary = _summary(_round(client, run_id, played_s=190))
 
-        assert (summary["kind"], summary["speakers"], summary["heard"]) == ("static", ["Samantha"], None)
-        assert load_run(run_id).rounds[1].instruction.startswith(
-            "Only static answers; the broadcast goes on. Samantha speaks next:")
+        assert (summary["kind"], summary["heard"], summary["listens"]) == ("re-call", None, True)
+        assert load_run(run_id).rounds[2].instruction.startswith(
+            "Only static answers. Samantha calls out once more to anyone listening to answer.")
 
     def test_a_transcript_outside_a_listening_window_is_ignored(self, client, show_env, fake_model, caplog):
         run_id = _start(client)["run_id"]
         with caplog.at_level(logging.WARNING):
             summary = _summary(_round(client, run_id, transcript="Moira, is it airborne?"))
 
-        assert summary["kind"] == "free"
+        assert summary["kind"] == "orientation"
         assert load_run(run_id).rounds[0].listener is None
         assert "outside a listening window" in caplog.text
 
 
 class TestTranscriptFilter:
-    """After an invitation, what Whisper heard becomes words (an answer) or silence (static), recorded either way."""
+    """After a listening round, what Whisper heard becomes words (an exchange) or silence (a re-call), recorded
+    either way."""
 
     @pytest.mark.parametrize("text, no_speech_prob, avg_logprob, reason", [
         ("", None, None, "nothing heard"),
@@ -245,27 +275,25 @@ class TestTranscriptFilter:
         ("Thank you.", 0.1, -0.2, "a known Whisper hallucination"),
         ("No response received from STT server", None, None, "a known Whisper hallucination"),
     ])
-    def test_whisper_noise_gives_the_static_round(self, client, show_env, fake_model, text, no_speech_prob,
-                                                   avg_logprob, reason):
-        run_id = _start(client)["run_id"]
-        _round(client, run_id, played_s=180)
+    def test_whisper_noise_gives_the_re_call(self, client, show_env, fake_model, text, no_speech_prob,
+                                             avg_logprob, reason):
+        run_id, _ = _to_the_call(client)
         summary = _summary(_round(client, run_id, played_s=190, transcript=text, no_speech_prob=no_speech_prob,
                                   avg_logprob=avg_logprob))
 
-        assert summary["kind"] == "static"
-        recorded = load_run(run_id).rounds[1]
+        assert summary["kind"] == "re-call"
+        recorded = load_run(run_id).rounds[2]
         assert recorded.listener is None
         assert (recorded.heard.text, recorded.heard.silence) == (text, reason)
         assert summary["heard"] == recorded.heard.model_dump()
 
-    def test_clear_words_give_the_answer_and_are_recorded(self, client, show_env, fake_model):
-        run_id = _start(client)["run_id"]
-        _round(client, run_id, played_s=180)
+    def test_clear_words_give_the_exchange_and_are_recorded(self, client, show_env, fake_model):
+        run_id, _ = _to_the_call(client)
         summary = _summary(_round(client, run_id, played_s=190, transcript="Moira, is it airborne?",
                                   no_speech_prob=0.05, avg_logprob=-0.3))
 
-        assert (summary["kind"], summary["speakers"]) == ("answer", ["Moira"])
-        recorded = load_run(run_id).rounds[1]
+        assert summary["kind"] == "exchange"
+        recorded = load_run(run_id).rounds[2]
         assert recorded.listener == "Moira, is it airborne?"
         assert recorded.heard.model_dump() == {"text": "Moira, is it airborne?", "no_speech_prob": 0.05,
                                                "avg_logprob": -0.3, "silence": None}

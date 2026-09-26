@@ -1,41 +1,59 @@
-"""The director, v1: the kind of each round, who may speak, and when the radio listens.
+"""The director, v2 (step 3.4c): the show's two modes, the receiver story, and the emotional overtone.
 
-A pure function of the run's record, the story, the settings, the seconds of
-show audio the page has played since the run started, and the listener's
-transcript. Everything it remembers — who spoke when, which events were used,
-when the radio last listened — is read from the record. The random choices
-come from a generator seeded by the run's seed and the round number, so a run
-replays the same plans with nothing extra to store. Every constraint put in
-the grammar is also said in the instruction's words.
+A pure function of the run's record, the story, the settings, the seconds of show audio the page has played
+since the run started, and the listener's words. Everything it remembers — who spoke when, which events and
+agenda items were used, when the receiver came back or went off, what each listener said — is read from the
+record. The random choices come from generators seeded by the run's seed and the round number, so a run replays
+the same plans with nothing extra to store. Every constraint put in the grammar is also said in the
+instruction's words.
 
-The kinds: "free" (the cast talks), "invitation" (the operator asks anyone
-listening to answer; the page listens next), "answer" (after an invitation,
-the character the listener addressed answers), "static" (after an invitation
-that heard nothing, the operator reacts to the silence).
+Broadcast: the lab's receiver is down. The cast talk among themselves in free rounds, whose event slot may hold
+an event, an aftermath (the first free round after a contact the listener spoke in: what they said) or a
+recollection (every few free rounds: a past caller, and how they could help). An orientation tells newcomers
+who the cast are and why the radio only listens sometimes: the sign-on at round 1, then every few free rounds.
+When the cadence says so, a Repair brings the receiver back: someone announces it, the operator calls out, and
+the page listens.
 
-Events and tone words are paced in rounds: an event every few free rounds
-(the gap), a tone word kept for a few rounds (the hold). Each gap and hold is
-drawn once, when it begins, from a generator seeded by the run's seed and that
-round, so its length is the same whenever the record is read again.
+Contact: a listener answered. Each exchange answers them first — the character they named, else whoever asked
+them last — then asks the next agenda item, and the page listens again. After N of the listener's answers, a
+Breakdown answers the last words and the receiver fails. Silence in any listening window counts: a re-call asks
+again, and after enough silences in a row a Switch-off turns the receiver off by choice. Both return the show
+to Broadcast, and the cadence counts from the moment the receiver went off.
+
+Each round has an overtone (the story's overtones.yaml). The beats use the overtones the story allows their
+kind; free rounds hold one for a stretch, then drift to a neighbor. The grammar's moods, the tone word and the
+event all come from the round's overtone, so they never pull against each other.
 """
 
 import itertools
 import random
 import re
 from dataclasses import dataclass
-from typing import Optional, Sequence, Set, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from app.config import ShowConfig
-from app.show.grammar import MOODS, build_grammar
-from app.show.script import Run
-from app.show.story import Story
+from app.show.grammar import build_grammar
+from app.show.script import Round, Run
+from app.show.story import Story, all_moods
 
 _NUMBERS = {2: "two", 3: "three", 4: "four"}
+
+# The page listens after these rounds ("invitation" comes from records made before step 3.4c); the receiver
+# goes off with these; free rounds drift on from the overtone of these.
+LISTENS = frozenset({"repair", "exchange", "re-call", "invitation"})
+_OPENS = frozenset({"repair", "invitation"})
+_OFF = frozenset({"breakdown", "switch-off"})
+_DRIFTS = frozenset({"free", "breakdown", "switch-off"})
 
 
 @dataclass(frozen=True)
 class RoundPlan:
-    """One round's plan: its kind, who may speak, the line budget, and the words and grammar that state them."""
+    """One round's plan: its kind, who may speak, the line budget, and the words and grammar that state them.
+
+    overtone is the round's overtone; agenda the item an exchange asks; slot what fills a free round's event
+    slot besides an event ("aftermath" or "recollection"); recollects the Repair that opened the contact an
+    aftermath or a recollection talks about.
+    """
     kind: str
     speakers: Tuple[str, ...]
     max_lines: int
@@ -44,33 +62,61 @@ class RoundPlan:
     listener: Optional[str]
     instruction: str
     grammar: str
+    overtone: Optional[str] = None
+    agenda: Optional[str] = None
+    slot: Optional[str] = None
+    recollects: Optional[int] = None
+
+    @property
+    def listens(self) -> bool:
+        """Whether the page listens after this round."""
+        return self.kind in LISTENS
 
 
 def plan_round(run: Run, story: Story, show: ShowConfig, played_s: float = 0.0,
                transcript: Optional[str] = None) -> RoundPlan:
     """Plan the run's next round.
-    After an invitation, the listener's transcript decides: words give an
-    answer round, silence a static one. Otherwise the cadence decides
-    between an invitation and a free round.
+
+    The sign-on opens the run. After a round the page listened to, the listener's words or silence decide: an
+    exchange or a Breakdown, a re-call or a Switch-off. Otherwise the show is in Broadcast: a Repair when the
+    cadence calls, else the aftermath of a contact, an orientation when one is due, or a free round.
     """
     n = len(run.rounds) + 1
     rng = random.Random(f"{run.seed}:{n}")
-    if run.rounds and run.rounds[-1].kind == "invitation":
-        heard = (transcript or "").strip()
-        return _answer(story, run.moods, heard) if heard else _static(run, story, show, rng)
+    if not run.rounds:
+        return _orientation(run, story, show, rng, sign_on=True)
+    if run.rounds[-1].kind in LISTENS:
+        return _after_listening(run, story, show, (transcript or "").strip(), rng)
     if _time_to_listen(run, show, played_s, rng):
-        return _invitation(run, story, show, rng)
+        return _repair(run, story, show, rng)
+    ended = _aftermath(run)
+    if ended:
+        return _free(run, story, show, rng, slot="aftermath", words=ended[1], recollects=ended[0])
+    if _orientation_due(run, show):
+        return _orientation(run, story, show, rng, sign_on=False)
+    recalled = _recollection_due(run, show, rng)
+    if recalled:
+        return _free(run, story, show, rng, slot="recollection", words=recalled[1], recollects=recalled[0])
     return _free(run, story, show, rng)
 
 
+# --- Broadcast ------------------------------------------------------------------------------------------------
+
 def _time_to_listen(run: Run, show: ShowConfig, played_s: float, rng: random.Random) -> bool:
-    """Decide whether this round invites the listeners.
-    Counts the seconds played since the last invitation (or since the
-    start): never below interaction_min_s, always at interaction_max_s, a
-    chance rising linearly in between.
+    """Decide whether this round is a Repair.
+
+    Counts the seconds played since the receiver went off: since the start, or since the round after the last
+    Breakdown or Switch-off. Never below interaction_min_s, always at interaction_max_s, a chance rising
+    linearly in between.
     """
-    marks = [r.played_s for r in run.rounds if r.kind == "invitation"]
-    since = played_s - (marks[-1] if marks else 0.0)
+    off = _last_index(run, _OFF)
+    if off is None:
+        mark = 0.0
+    elif off + 1 < len(run.rounds):
+        mark = run.rounds[off + 1].played_s
+    else:
+        mark = played_s
+    since = played_s - mark
     if since >= show.interaction_max_s:
         return True
     if since < show.interaction_min_s:
@@ -78,12 +124,13 @@ def _time_to_listen(run: Run, show: ShowConfig, played_s: float, rng: random.Ran
     return rng.random() < (since - show.interaction_min_s) / (show.interaction_max_s - show.interaction_min_s)
 
 
-def _free(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> RoundPlan:
-    """Plan a round of the cast talking.
-    Two or three names: whoever has been silent longest, anyone named in
-    the last round, then random fill. A line budget drawn from the
-    settings (1-4 lines weighted to 2-3 by default), an event when its gap
-    has passed, the tone word of the hold.
+def _free(run: Run, story: Story, show: ShowConfig, rng: random.Random, *, slot: Optional[str] = None,
+          words: Sequence[str] = (), recollects: Optional[int] = None) -> RoundPlan:
+    """Plan a round of the cast talking among themselves.
+
+    Two or three names: whoever has been silent longest, anyone named in the last round, then random fill. A
+    line budget drawn from the settings, the overtone of the drift, and in the event slot an event when its gap
+    has passed — unless the slot holds an aftermath or a recollection, the listener's words.
     """
     silent = _silent_longest(run, story, rng)
     named = sorted(_named_last_round(run, story) - {silent}, key=story.cast.index)
@@ -93,47 +140,428 @@ def _free(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> Round
     chosen += rng.sample([name for name in story.cast if name not in chosen], size - len(chosen))
     speakers = tuple(name for name in story.cast if name in chosen)
     max_lines = rng.choices(show.free_lines, weights=show.free_line_weights)[0]
-    event = _next_event(run, story, rng) if _event_due(run, show) else None
-    tone = _tone(run, story, show, rng)
-    return _plan("free", speakers, max_lines, run.moods, event=event, tone=tone,
-                 instruction=instruction_for(speakers, max_lines, event, run.moods, tone, show.event_report))
+    overtone = _drift(run, story, show)
+    event = _next_event(run, story, overtone, rng) if slot is None and _event_due(run, show) else None
+    tone = _tone(run, story, show, overtone, rng)
+    moods = _moods(run, story, overtone)
+    text = instruction_for(speakers, max_lines, event, moods, tone, show.event_report)
+    if slot == "aftermath":
+        text = f"{_ended('The voice on the frequency told you: ' + _quoted(words))} Talk among yourselves about " \
+               f"what it means for you. {text}"
+    elif slot == "recollection":
+        text = f"{_ended('Earlier, a voice on the frequency told you: ' + _quoted(words))} Talk among yourselves " \
+               f"about what they told you, and imagine how they could help you if they call again. {text}"
+    return _plan("free", speakers, max_lines, moods, instruction=text, event=event, tone=tone, overtone=overtone,
+                 slot=slot, recollects=recollects)
 
 
-def _invitation(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> RoundPlan:
-    """Plan the operator's one line asking anyone listening to answer."""
-    tone = _tone(run, story, show, rng)
-    text = f"{story.operator} turns to the microphone and asks anyone listening to answer: {_count(1, run.moods)}."
-    return _plan("invitation", (story.operator,), 1, run.moods, tone=tone, instruction=text + _tone_sentence(tone))
+def _orientation(run: Run, story: Story, show: ShowConfig, rng: random.Random, sign_on: bool) -> RoundPlan:
+    """Tell the listeners who the cast are, where they are and the receiver's state, in the speaker's own words.
 
-
-def _answer(story: Story, moods: bool, heard: str) -> RoundPlan:
-    """Plan the one-line answer to the listener's words.
-    Cast names found in the words narrow who may answer; with none, the
-    whole cast may, and the model picks whom the voice addressed.
+    The sign-on is the operator's; a repeat is opened by whoever has been silent longest. Up to beat_max_lines
+    lines, the first speaker pinned.
     """
-    addressed = tuple(name for name in story.cast if name in names_in(heard, story.cast))
-    if addressed:
-        who = f"{_names(addressed, 'or')} answers the voice"
+    first = story.operator if sign_on else _silent_longest(run, story, rng)
+    overtone = _kind_overtone(story, "orientation", rng)
+    tone = _tone(run, story, show, overtone, rng)
+    moods = _moods(run, story, overtone)
+    facts = story.orientation or "who the cast are, where they are, and that they can only transmit for now."
+    if sign_on:
+        lead = f"The broadcast begins. {first} opens it, telling anyone listening, in their own words: {facts}"
     else:
-        who = "The character the voice addressed answers; if it addressed no one, whoever fits best answers"
-    text = f'A voice on the frequency says: "{heard}" {who}: {_count(1, moods)}.'
-    return _plan("answer", addressed or story.cast, 1, moods, listener=heard, instruction=text)
+        lead = f"For listeners just tuning in, {first} tells them, in their own words: {facts}"
+    turns = _turns(story.cast, show.beat_max_lines, moods, tone, first=first)
+    return _plan("orientation", story.cast, show.beat_max_lines, moods, instruction=f"{lead} {turns}",
+                 first=first, tone=tone, overtone=overtone)
 
 
-def _static(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> RoundPlan:
-    """Plan the operator's one line reacting to a listening window that heard nothing."""
-    tone = _tone(run, story, show, rng)
-    constraint = instruction_for((story.operator,), 1, None, run.moods, tone)
-    text = "Only static answers; the broadcast goes on. " + constraint
-    return _plan("static", (story.operator,), 1, run.moods, tone=tone, instruction=text)
+def _orientation_due(run: Run, show: ShowConfig) -> bool:
+    """Whether an orientation is due: orientation_every +/- jitter free rounds have passed since the last one."""
+    last = next((r for r in reversed(run.rounds) if r.kind == "orientation"), None)
+    if show.orientation_every == 0 or last is None:
+        return False
+    since = sum(1 for r in run.rounds if r.n > last.n and r.kind == "free")
+    return since >= _drawn(run.seed, "orientation", last.n, show.orientation_every, show.orientation_jitter)
 
 
-def _plan(kind: str, speakers: Sequence[str], max_lines: int, moods: bool, *, instruction: str,
-          event: Optional[str] = None, tone: Optional[str] = None, listener: Optional[str] = None) -> RoundPlan:
-    """Assemble a plan, building its grammar from the same speakers and budget as its words."""
+def _repair(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> RoundPlan:
+    """The receiver comes back: someone announces it, then the operator's call closes the round; the page listens.
+
+    Two lines, the operator's pinned last; the wording follows how the receiver went off.
+    """
+    op = story.operator
+    others = [name for name in story.cast if name != op]
+    overtone = _kind_overtone(story, "repair", rng)
+    tone = _tone(run, story, show, overtone, rng)
+    moods = _moods(run, story, overtone)
+    off = _last_index(run, _OFF)
+    back = "switches the receiver back on" if off is not None and run.rounds[off].kind == "switch-off" \
+        else "has fixed the receiver"
+    seen = f"The lab {back}. " + (f"{story.directions['repair']} " if story.directions.get("repair") else "")
+    if not others:
+        text = f"{seen}{op} calls out to anyone listening to answer now. " + _turns((op,), 1, moods, tone)
+        return _plan("repair", (op,), 1, moods, instruction=text, tone=tone, overtone=overtone)
+    text = f"{seen}{_names(others, 'or')} tells the listeners it works, then {op} calls out to anyone listening " \
+           f"to answer now. " + _turns(story.cast, 2, moods, tone, last=op)
+    return _plan("repair", story.cast, 2, moods, instruction=text, min_lines=2, last=op, tone=tone,
+                 overtone=overtone)
+
+
+# --- Contact --------------------------------------------------------------------------------------------------
+
+def _after_listening(run: Run, story: Story, show: ShowConfig, heard: str, rng: random.Random) -> RoundPlan:
+    """The round after a listening window.
+
+    Words: an exchange, or the Breakdown once the listener has answered N times in this contact (N drawn when
+    the receiver came back). Silence: a re-call, or the Switch-off after silences_to_switch_off in a row.
+    """
+    period = _receiver_period(run)
+    if heard:
+        answers = sum(1 for r in period if r.listener) + 1
+        if answers >= _drawn(run.seed, "contact", period[0].n, show.contact_exchanges, show.contact_jitter):
+            return _breakdown(run, story, show, heard, rng)
+        return _exchange(run, story, show, heard, rng)
+    if _silences(period) + 1 >= show.silences_to_switch_off:
+        return _switch_off(run, story, show, rng)
+    return _re_call(run, story, show, rng)
+
+
+def _exchange(run: Run, story: Story, show: ShowConfig, heard: str, rng: random.Random) -> RoundPlan:
+    """Answer the listener, then ask the next agenda item; the page listens again.
+
+    contact_min_lines to contact_max_lines lines, drawn; the first pinned to the character the listener named,
+    else to whoever asked them last; the rest by the other speakers.
+    """
+    first = _addressed(run, story, heard)
+    lines = rng.randint(show.contact_min_lines, show.contact_max_lines)
+    item = _agenda_item(run, story, rng)
+    overtone = _kind_overtone(story, "exchange", rng)
+    tone = _tone(run, story, show, overtone, rng)
+    moods = _moods(run, story, overtone)
+    ask = f"Answer what the voice said, then: {item} " if item else "Answer what the voice said. "
+    text = f'A voice on the frequency says: "{heard}" {_restatement(run, show)}{ask}End with a question to ' \
+           f"the voice. " + _turns(story.cast, lines, moods, tone, first=first)
+    return _plan("exchange", story.cast, lines, moods, instruction=text, min_lines=lines, first=first, tone=tone,
+                 listener=heard, overtone=overtone, agenda=item)
+
+
+def _breakdown(run: Run, story: Story, show: ShowConfig, heard: str, rng: random.Random) -> RoundPlan:
+    """Answer the listener's last words, then the receiver fails: built like an exchange, without the question."""
+    first = _addressed(run, story, heard)
+    lines = rng.randint(show.contact_min_lines, show.contact_max_lines)
+    overtone = _kind_overtone(story, "breakdown", rng)
+    tone = _tone(run, story, show, overtone, rng)
+    moods = _moods(run, story, overtone)
+    direction = story.directions.get("breakdown")
+    fails = f"something happens that the listeners cannot see: {direction}" if direction else "the receiver fails."
+    text = f'A voice on the frequency says: "{heard}" {_restatement(run, show)}Answer what the voice said. ' \
+           f"Then {fails} The one who notices tells the listeners on air that the lab can no longer hear them, " \
+           f"only transmit, and that the broadcast goes on while they fix it. " \
+           + _turns(story.cast, lines, moods, tone, first=first)
+    return _plan("breakdown", story.cast, lines, moods, instruction=text, min_lines=lines, first=first, tone=tone,
+                 listener=heard, overtone=overtone)
+
+
+def _re_call(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> RoundPlan:
+    """A listening window came to silence: call once more, and the page listens again.
+
+    Before anyone answered, the operator calls out again; inside a contact, whoever was talking to the listener
+    calls them back and repeats the question that went unanswered. One line.
+    """
+    overtone = _kind_overtone(story, "re-call", rng)
+    tone = _tone(run, story, show, overtone, rng)
+    moods = _moods(run, story, overtone)
+    if not any(r.listener for r in _receiver_period(run)):
+        caller = story.operator
+        text = f"Only static answers. {caller} calls out once more to anyone listening to answer. "
+    else:
+        caller = _asker(run, story)
+        question = _last_question(run)
+        again = f', and asks again: "{question}"' if question else ""
+        text = f"The voice has gone quiet. {_restatement(run, show)}" \
+               + _ended(f"{caller} calls them back, by name if they gave one{again}") + " "
+    text += _turns(story.cast, 1, moods, tone, first=caller)
+    return _plan("re-call", story.cast, 1, moods, instruction=text, first=caller, tone=tone, overtone=overtone)
+
+
+def _switch_off(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> RoundPlan:
+    """Silences in a row: the lab switches the receiver off by choice; the broadcast goes on.
+
+    Up to beat_max_lines lines, the first pinned to whoever called last: the operator before anyone answered,
+    else whoever was talking to the listener.
+    """
+    answered = any(r.listener for r in _receiver_period(run))
+    caller = _asker(run, story) if answered else story.operator
+    overtone = _kind_overtone(story, "switch-off", rng)
+    tone = _tone(run, story, show, overtone, rng)
+    moods = _moods(run, story, overtone)
+    if answered:
+        why = f"The voice is gone. {caller} tells the listeners the lab has lost them and is switching the " \
+              f"receiver off"
+    else:
+        why = f"Nobody answered the call. {caller} tells the listeners the lab is switching the receiver off"
+    text = f"{why}, to save power or to spare the fragile receiver for a time when someone is more likely to be " \
+           f"listening; the broadcast goes on. " \
+           + _turns(story.cast, show.beat_max_lines, moods, tone, first=caller)
+    return _plan("switch-off", story.cast, show.beat_max_lines, moods, instruction=text, first=caller, tone=tone,
+                 overtone=overtone)
+
+
+def _receiver_period(run: Run) -> List[Round]:
+    """The rounds since the receiver last came back: from the last Repair (or an old record's invitation) on."""
+    start = _last_index(run, _OPENS)
+    return run.rounds[start or 0:]
+
+
+def _silences(period: Sequence[Round]) -> int:
+    """How many listening windows in a row, up to the last round, came to silence."""
+    return sum(1 for _ in itertools.takewhile(lambda r: not r.listener, reversed(period[1:])))
+
+
+def _addressed(run: Run, story: Story, heard: str) -> str:
+    """Who answers the listener first: the first cast name in their words, else whoever asked them last."""
+    found = []
+    for name in story.cast:
+        match = re.search(rf"(?<!\w){re.escape(name)}(?!\w)", heard)
+        if match:
+            found.append((match.start(), name))
+    return min(found)[1] if found else _asker(run, story)
+
+
+def _asker(run: Run, story: Story) -> str:
+    """Whoever spoke to the listener last: the last line of the last round the page listened to, else the operator."""
+    last = next((r for r in reversed(run.rounds) if r.kind in LISTENS), None)
+    if last and last.lines and last.lines[-1].speaker in story.cast:
+        return last.lines[-1].speaker
+    return story.operator
+
+
+def _last_question(run: Run) -> Optional[str]:
+    """What the last round the page listened to ended on: the question that went unanswered."""
+    last = next((r for r in reversed(run.rounds) if r.kind in LISTENS and r.lines), None)
+    return last.lines[-1].spoken if last else None
+
+
+def _agenda_item(run: Run, story: Story, rng: random.Random) -> Optional[str]:
+    """What the cast ask next: the story's first item opens every contact; then items not asked in this
+    contact, and across the run none again until the rest of the list is used up."""
+    if not story.agenda:
+        return None
+    asked = [r.agenda for r in _receiver_period(run) if r.agenda]
+    if not asked:
+        return story.agenda[0]
+    rest = story.agenda[1:]
+    used = [r.agenda for r in run.rounds if r.agenda in rest]
+    choices = [item for item in _fresh(rest, used) if item not in asked] or [i for i in rest if i not in asked]
+    return rng.choice(choices) if choices else None
+
+
+def _contacts(run: Run) -> List[Tuple[int, List[str]]]:
+    """Every contact with words so far, oldest first: the n of the Repair that opened it, and the words."""
+    contacts: List[Tuple[int, List[str]]] = []
+    for r in run.rounds:
+        if r.kind in _OPENS:
+            contacts.append((r.n, []))
+        elif r.listener and contacts:
+            contacts[-1][1].append(r.listener)
+    return [(n, words) for n, words in contacts if words]
+
+
+def _restatement(run: Run, show: ShowConfig) -> str:
+    """The listener's words restated next to the question: this contact's so far, then the last few earlier
+    contacts', oldest first, with a line to greet a returning voice."""
+    opened = _receiver_period(run)[0].n if run.rounds else None
+    contacts = _contacts(run)
+    now = next((words for n, words in contacts if n == opened), [])
+    before = [words for n, words in contacts if n != opened][-show.restatement_contacts:]
+    text = _ended(f"Earlier in this contact the voice said: {_quoted(now)}") + " " if now else ""
+    if before:
+        listed = "; ".join(f"{i}: {_quoted(words)}" for i, words in enumerate(before, 1))
+        text += _ended(f"Voices that reached you before, oldest first — {listed}") + " If this voice is one you " \
+                "spoke with before, greet them as a returning friend and use what they told you. "
+    return text
+
+
+# --- After a contact ------------------------------------------------------------------------------------------
+
+def _aftermath(run: Run) -> Optional[Tuple[int, List[str]]]:
+    """The contact that just ended — the n of its Repair and the listener's words — if the listener spoke in it
+    and no free round has followed it yet; None otherwise."""
+    off = _last_index(run, _OFF)
+    if off is None or any(r.kind == "free" for r in run.rounds[off + 1:]):
+        return None
+    start = max((i for i in range(off) if run.rounds[i].kind in _OPENS), default=0)
+    words = [r.listener for r in run.rounds[start:off + 1] if r.listener]
+    return (run.rounds[start].n, words) if words else None
+
+
+def _recollection_due(run: Run, show: ShowConfig, rng: random.Random) -> Optional[Tuple[int, List[str]]]:
+    """The past contact a free round recalls, when a recollection is due; None otherwise.
+
+    Due recollection_every +/- jitter free rounds after the last recollection (before the first one, after the
+    first aftermath); an aftermath does not reset the count, but a recollection never follows one directly. The
+    contact is drawn among those not talked about since all of them were — an aftermath counts — and never the
+    one talked about last while there is another.
+    """
+    talked = [r for r in run.rounds if r.slot in ("aftermath", "recollection")]
+    anchor = next((r for r in reversed(talked) if r.slot == "recollection"), talked[0] if talked else None)
+    if show.recollection_every == 0 or anchor is None or run.rounds[-1].slot == "aftermath":
+        return None
+    since = sum(1 for r in run.rounds if r.n > anchor.n and r.kind == "free") + 1
+    if since < _drawn(run.seed, "recollection", anchor.n, show.recollection_every, show.recollection_jitter):
+        return None
+    contacts = dict(_contacts(run))
+    if not contacts:
+        return None
+    used = [r.recollects for r in talked if r.recollects in contacts]
+    last = used[-1] if used else None
+    choices = [n for n in _fresh(list(contacts), used) if n != last] or [n for n in contacts if n != last] \
+        or list(contacts)
+    chosen = rng.choice(choices)
+    return chosen, contacts[chosen]
+
+
+# --- The overtone ---------------------------------------------------------------------------------------------
+
+def _kind_overtone(story: Story, kind: str, rng: random.Random) -> Optional[str]:
+    """One of the overtones the story allows this kind of round; None for a story without overtones."""
+    allowed = story.kinds.get(kind)
+    return rng.choice(allowed) if allowed else None
+
+
+def _drift(run: Run, story: Story, show: ShowConfig) -> Optional[str]:
+    """A free round's overtone: the current one while its hold lasts, else a draw among it and its neighbors.
+
+    The current overtone is that of the last free round, Breakdown or Switch-off (before the first, the
+    sign-on's). Each hold lasts overtone_hold +/- jitter of those rounds, drawn when it began; a draw that stays
+    begins a new hold.
+    """
+    names = [o.name for o in story.overtones]
+    if not names:
+        return None
+    rng = random.Random(f"{run.seed}:drift:{len(run.rounds) + 1}")
+    chain = [r for r in run.rounds if r.kind in _DRIFTS and r.overtone in names]
+    if not chain:
+        start = next((r.overtone for r in run.rounds if r.overtone in names), names[len(names) // 2])
+        return _step(names, story.weights, start, rng)
+    current = chain[-1].overtone
+    p = len(chain) - 1
+    while p > 0 and chain[p - 1].overtone == current:
+        p -= 1
+    while True:
+        hold = _drawn(run.seed, "overtone", chain[p].n, show.overtone_hold, show.overtone_jitter)
+        if len(chain) < p + hold:
+            return current
+        if len(chain) == p + hold:
+            return _step(names, story.weights, current, rng)
+        p += hold
+
+
+def _step(names: Sequence[str], weights: Dict[str, float], current: str, rng: random.Random) -> str:
+    """A draw among the current overtone and its neighbors, with the story's weights."""
+    i = names.index(current)
+    near = list(names[max(0, i - 1):i + 2])
+    shares = [weights.get(name, 0) for name in near]
+    return rng.choices(near, weights=shares)[0] if sum(shares) else current
+
+
+def _moods(run: Run, story: Story, overtone: Optional[str]) -> Optional[Tuple[str, ...]]:
+    """The moods a round's lines may carry: its overtone's, or every mood without one; None with moods off."""
+    if not run.moods:
+        return None
+    return next((o.moods for o in story.overtones if o.name == overtone), tuple(all_moods(story)))
+
+
+def _event_due(run: Run, show: ShowConfig) -> bool:
+    """Decide whether this free round carries an event.
+
+    The run's first free round does. After an event, the next one comes when its gap has passed: event_every
+    +/- event_jitter free rounds, drawn once at that event. Only free rounds count.
+    """
+    if show.event_every == 0:
+        return False
+    last = next((r for r in reversed(run.rounds) if r.event), None)
+    if last is None:
+        return True
+    since = sum(1 for r in run.rounds if r.n > last.n and r.kind == "free") + 1
+    return since >= _drawn(run.seed, "gap", last.n, show.event_every, show.event_jitter)
+
+
+def _next_event(run: Run, story: Story, overtone: Optional[str], rng: random.Random) -> Optional[str]:
+    """Draw an event from the round's overtone's pool, not used since that pool was last used up; None when the
+    overtone has no events (the event then waits for a later round)."""
+    if overtone is None or not story.event_pools:
+        pool = story.events
+    else:
+        pool = tuple(e for items in story.event_pools.get(overtone, {}).values() for e in items)
+    if not pool:
+        return None
+    return rng.choice(_fresh(pool, [r.event for r in run.rounds if r.event in pool]))
+
+
+def _fresh(pool: Sequence, used: Sequence) -> list:
+    """The items of the pool not used since the pool was last used up (`used`: every draw so far, in order)."""
+    in_cycle = len(used) % len(pool)
+    recent = set(used[len(used) - in_cycle:]) if in_cycle else set()
+    return [item for item in pool if item not in recent]
+
+
+def _tone(run: Run, story: Story, show: ShowConfig, overtone: Optional[str], rng: random.Random) -> Optional[str]:
+    """The round's tone word, from its overtone's words: the current word while its hold lasts and it fits,
+    else a new one.
+
+    The hold is tone_hold +/- tone_jitter rounds, drawn once when the word began; only the rounds that carry a
+    tone word count. A new word is one of the overtone's not used since they were last used up, and never the
+    word just held. None when tone_hold is 0 or the overtone has no tone words.
+    """
+    words = _tone_words(story, overtone)
+    if show.tone_hold == 0 or not words:
+        return None
+    toned = [r for r in run.rounds if r.tone]
+    current = toned[-1].tone if toned else None
+    if current in words:
+        hold = list(itertools.takewhile(lambda r: r.tone == current, reversed(toned)))
+        if len(hold) < _drawn(run.seed, "hold", hold[-1].n, show.tone_hold, show.tone_jitter):
+            return current
+    used = [word for word, _ in itertools.groupby(r.tone for r in toned) if word in words]
+    return rng.choice([w for w in _fresh(words, used) if w != current] or [w for w in words if w != current]
+                      or list(words))
+
+
+def _tone_words(story: Story, overtone: Optional[str]) -> Tuple[str, ...]:
+    """The tone words of an overtone; every tone word for a story without overtones."""
+    for o in story.overtones:
+        if o.name == overtone:
+            return tuple(w for words in o.tones.values() for w in words)
+    return story.tones
+
+
+# --- Shared ---------------------------------------------------------------------------------------------------
+
+def _plan(kind: str, speakers: Sequence[str], max_lines: int, moods: Optional[Sequence[str]], *, instruction: str,
+          min_lines: int = 1, first: Optional[str] = None, last: Optional[str] = None, event: Optional[str] = None,
+          tone: Optional[str] = None, listener: Optional[str] = None, overtone: Optional[str] = None,
+          agenda: Optional[str] = None, slot: Optional[str] = None, recollects: Optional[int] = None) -> RoundPlan:
+    """Assemble a plan, building its grammar from the same speakers, budget, pins and moods as its words."""
     return RoundPlan(kind=kind, speakers=tuple(speakers), max_lines=max_lines, event=event, tone=tone,
                      listener=listener, instruction=instruction,
-                     grammar=build_grammar(speakers, max_lines, MOODS if moods else None))
+                     grammar=build_grammar(speakers, max_lines, moods, min_lines=min_lines, first=first, last=last),
+                     overtone=overtone, agenda=agenda, slot=slot, recollects=recollects)
+
+
+def _last_index(run: Run, kinds: Set[str]) -> Optional[int]:
+    """The index of the last round of one of these kinds; None if there is none."""
+    return next((i for i in range(len(run.rounds) - 1, -1, -1) if run.rounds[i].kind in kinds), None)
+
+
+def _quoted(words: Sequence[str]) -> str:
+    """The listener's words, each in quotes: "a" / "b"."""
+    return " / ".join(f'"{w}"' for w in words)
+
+
+def _ended(text: str) -> str:
+    """The text as a sentence: a period added unless it already ends on one, a quoted one included."""
+    return text if text.rstrip('"').endswith((".", "!", "?")) else text + "."
 
 
 def _silent_longest(run: Run, story: Story, rng: random.Random) -> str:
@@ -164,55 +592,6 @@ def names_in(text: str, cast: Sequence[str]) -> Set[str]:
     return {name for name in cast if re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text)}
 
 
-def _event_due(run: Run, show: ShowConfig) -> bool:
-    """Decide whether this free round carries an event.
-
-    The run's first free round does. After an event, the next one comes when
-    its gap has passed: event_every +/- event_jitter free rounds, drawn once at
-    that event. Only free rounds count.
-    """
-    if show.event_every == 0:
-        return False
-    last = next((r for r in reversed(run.rounds) if r.event), None)
-    if last is None:
-        return True
-    since = sum(1 for r in run.rounds if r.n > last.n and r.kind == "free") + 1
-    return since >= _drawn(run.seed, "gap", last.n, show.event_every, show.event_jitter)
-
-
-def _next_event(run: Run, story: Story, rng: random.Random) -> str:
-    """Draw an event not used since the pool was last used up."""
-    return rng.choice(_fresh(story.events, [r.event for r in run.rounds if r.event]))
-
-
-def _fresh(pool: Sequence[str], used: Sequence[str]) -> list:
-    """The items of the pool not used since the pool was last used up (`used`: every draw so far, in order)."""
-    in_cycle = len(used) % len(pool)
-    recent = set(used[len(used) - in_cycle:]) if in_cycle else set()
-    return [item for item in pool if item not in recent]
-
-
-def _tone(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> Optional[str]:
-    """The round's tone word: the current one while its hold lasts, else a new one.
-
-    The hold is tone_hold +/- tone_jitter rounds, drawn once when the word
-    began; only the rounds that carry a tone word count. A new word is one not
-    used since the list was last used up, and never the word just held. None
-    when tone_hold is 0 or the story has no tone words.
-    """
-    if show.tone_hold == 0 or not story.tones:
-        return None
-    toned = [r for r in run.rounds if r.tone]
-    if not toned:
-        return rng.choice(story.tones)
-    current = toned[-1].tone
-    hold = list(itertools.takewhile(lambda r: r.tone == current, reversed(toned)))
-    if len(hold) < _drawn(run.seed, "hold", hold[-1].n, show.tone_hold, show.tone_jitter):
-        return current
-    words = [word for word, _ in itertools.groupby(r.tone for r in toned)]
-    return rng.choice([tone for tone in _fresh(story.tones, words) if tone != current] or list(story.tones))
-
-
 def _drawn(seed: int, what: str, start: int, mean: int, jitter: int) -> int:
     """The length of the gap or hold that began at round `start`: mean +/- jitter, never below 1."""
     return max(1, mean + random.Random(f"{seed}:{what}:{start}").randint(-jitter, jitter))
@@ -230,23 +609,39 @@ def _names(speakers: Sequence[str], conjunction: str = "and") -> str:
     return ", ".join(speakers[:-1]) + f" {conjunction} " + speakers[-1]
 
 
-def _count(max_lines: int, moods: bool) -> str:
-    """The line budget in words, "the next line" or "the next two lines", with the emotion clause when moods are on."""
+def _count(max_lines: int, moods: Optional[Sequence[str]]) -> str:
+    """The line budget in words, "the next line" or "the next two lines", with the emotion clause naming the
+    allowed moods when moods are on."""
+    clause = f"with the emotion in its voice, one of: {', '.join(moods)}" if moods else ""
     if max_lines == 1:
-        return "the next line" + (", with the emotion in its voice" if moods else "")
+        return "the next line" + (f", {clause}" if clause else "")
     number = _NUMBERS.get(max_lines, str(max_lines))
-    return f"the next {number} lines" + (", each with the emotion in its voice" if moods else "")
+    return f"the next {number} lines" + (f", each {clause}" if clause else "")
 
 
-def instruction_for(speakers: Sequence[str], max_lines: int, event: Optional[str], moods: bool,
-                    tone: Optional[str] = None, report: bool = False) -> str:
-    """Word a round's constraints: the event if any, who speaks next, how many lines, and the tone.
+def _turns(speakers: Sequence[str], max_lines: int, moods: Optional[Sequence[str]], tone: Optional[str] = None,
+           first: Optional[str] = None, last: Optional[str] = None) -> str:
+    """Who speaks, in what order, how many lines, and the tone: the words for what the grammar enforces."""
+    others = [name for name in speakers if name not in (first, last)]
+    if first is not None and max_lines > 1 and others:
+        who = f"{first} speaks first, then {_names(others, 'or')}"
+    elif last is not None and others:
+        who = f"{_names(others, 'or')} speaks first, then {last}"
+    elif first is not None or last is not None:
+        who = f"{first or last} speaks next"
+    else:
+        who = f"{_names(speakers)} {'speaks' if len(speakers) == 1 else 'speak'} next"
+    return f"{who}: {_count(max_lines, moods)}.{_tone_sentence(tone)}"
 
-    With report, the event is worded for the broadcast: the listeners cannot
-    see it, and the first to speak tells them on air what is happening.
+
+def instruction_for(speakers: Sequence[str], max_lines: int, event: Optional[str],
+                    moods: Optional[Sequence[str]], tone: Optional[str] = None, report: bool = False) -> str:
+    """Word a free round's constraints: the event if any, who speaks next, how many lines, the moods, the tone.
+
+    With report, the event is worded for the broadcast: the listeners cannot see it, and the first to speak
+    tells them on air what is happening.
     """
-    verb = "speaks" if len(speakers) == 1 else "speak"
-    text = f"{_names(speakers)} {verb} next: {_count(max_lines, moods)}.{_tone_sentence(tone)}"
+    text = _turns(speakers, max_lines, moods, tone)
     if not event:
         return text
     if report:

@@ -17,7 +17,7 @@ rule snippet the emotion switch picks, ``episode`` from the current episode.
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import yaml
 from jinja2 import Environment, StrictUndefined
@@ -225,15 +225,21 @@ def _load_agenda(name: str, path: Path) -> Tuple[str, ...]:
     return agenda
 
 
-def format_rules(emotion_tags: bool) -> str:
+def all_moods(story: Story) -> List[str]:
+    """Every mood of the story's overtones, in order; the engine's nine for a story without overtones."""
+    return [m for o in story.overtones for m in o.moods] or list(MOODS)
+
+
+def format_rules(emotion_tags: bool, moods: Sequence[str] = MOODS) -> str:
+    """The format paragraph of the cast sheet: the one with the emotion tags and their list, or the plain one."""
     snippet = (_RULES_DIR / ("format_moods.md" if emotion_tags else "format_plain.md")).read_text(encoding="utf-8")
-    return _JINJA.from_string(snippet.strip()).render(moods=", ".join(MOODS))
+    return _JINJA.from_string(snippet.strip()).render(moods=", ".join(moods))
 
 
 def render_cast_sheet(story: Story, show: ShowConfig, episode: str = "") -> str:
     rendered = _JINJA.from_string(story.template).render(
         model_prefix=show.model_prefix,
-        format_rules=format_rules(show.emotion_tags),
+        format_rules=format_rules(show.emotion_tags, all_moods(story)),
         episode=episode,
     )
     return rendered.strip()

@@ -7,14 +7,17 @@ the run's next round and streams the chat's SSE events (start / token /
 done) for each script line, then a "round" summary and "complete". The
 server keeps no show state between requests: the caller sends the run id,
 and the run is loaded from its record. Each request carries the running
-total of show audio played; after a round of kind "invitation" the page
-listens: POST /api/show/listen transcribes the recording with the show's
-Whisper settings, and the next round request carries what was heard, with
-Whisper's confidence. The round decides whether it counts as words (an
-answer round) or as silence (a static round) with the transcript filter
-(app/show/listen.py), records what was heard either way, and reports it
-on the "round" summary (`heard`: the text, Whisper's numbers, and why it
-counted as silence, if it did).
+total of show audio played. After a round whose summary says `listens`
+(a Repair, an exchange, a re-call) the page listens: POST /api/show/listen
+transcribes the recording with the show's Whisper settings, and the next
+round request carries what was heard, with Whisper's confidence. The round
+decides whether it counts as words or as silence with the transcript filter
+(app/show/listen.py) — the director then plans an exchange or a Breakdown,
+a re-call or a Switch-off — records what was heard either way, and reports
+it on the "round" summary (`heard`: the text, Whisper's numbers, and why it
+counted as silence, if it did). The summary also carries the round's
+overtone, the agenda item it asked, what filled its event slot, and the
+stage direction of a receiver beat (the story's).
 With show.debug on, each round also leaves its debug files
 (app/show/debug.py), failed rounds included, and a recorded round keeps
 them even when the client leaves while they are being written.
@@ -40,7 +43,7 @@ from app.models import (ShowListenRequest, ShowListenResponse, ShowRoundRequest,
 from app.services.llm import stream_round
 from app.services.stt_client import transcribe_for_show
 from app.show.debug import write_round
-from app.show.director import plan_round
+from app.show.director import LISTENS, plan_round
 from app.show.listen import usable
 from app.show.parser import LineParser
 from app.show.script import (Heard, Line, Round, Run, append_round, assemble_messages, load_run, new_run,
@@ -134,7 +137,7 @@ async def _round_stream(run: Run, story: Story, req: ShowRoundRequest) -> AsyncI
     n = len(run.rounds) + 1
     heard, words = None, None
     if req.transcript is not None:
-        if run.rounds and run.rounds[-1].kind == "invitation":
+        if run.rounds and run.rounds[-1].kind in LISTENS:
             words, silence = usable(req.transcript, req.no_speech_prob, req.avg_logprob, show)
             heard = Heard(text=req.transcript, no_speech_prob=req.no_speech_prob, avg_logprob=req.avg_logprob,
                           silence=silence)
@@ -189,6 +192,7 @@ async def _round_stream(run: Run, story: Story, req: ShowRoundRequest) -> AsyncI
         lines=[Line(**dataclasses.asdict(line)) for line in parser.lines],
         dropped=parser.dropped, timings=final.get("timings"), finish_reason=final.get("finish_reason"),
         tokens=round_share(size_before, trimmed_tokens, final.get("timings")), trims=trimmed,
+        overtone=plan.overtone, agenda=plan.agenda, slot=plan.slot, recollects=plan.recollects,
     )
     append_round(run, round_)
     if show.debug:
@@ -200,5 +204,7 @@ async def _round_stream(run: Run, story: Story, req: ShowRoundRequest) -> AsyncI
                        run.run_id, n, len(parser.dropped), round_.finish_reason)
     yield _sse({"type": "round", "n": n, "kind": plan.kind, "speakers": list(plan.speakers), "event": plan.event,
                 "tone": plan.tone, "heard": heard.model_dump() if heard else None, "trimmed": trimmed,
-                "dropped": parser.dropped, "finish_reason": round_.finish_reason})
+                "dropped": parser.dropped, "finish_reason": round_.finish_reason, "listens": plan.listens,
+                "overtone": plan.overtone, "agenda": plan.agenda, "slot": plan.slot,
+                "direction": story.directions.get(plan.kind)})
     yield _sse({"type": "complete"})

@@ -4,7 +4,8 @@ The two expected prompts are the system messages proven on the box on
 2026-09-22 (zombie-radio: docs/experiments/2026-09-22-adr-0003-gate/
 cast.py CAST_SHEET, and docs/experiments/2026-09-22-emotion-grammar-cost/
 cast.py CAST_SHEET_TAUGHT), byte for byte — plus, since step 3.4c
-(2026-09-26), the premise sentence about the failing receiver.
+(2026-09-26), the premise sentence about the failing receiver and, with
+moods on, the story's fourteen moods in the order of its overtones.
 """
 
 from pathlib import Path
@@ -15,7 +16,7 @@ import pytest
 import app.config as app_config
 from app.config import Persona, PersonasConfig, ShowConfig
 from app.show.grammar import MOODS
-from app.show.story import StoryError, load_story, render_cast_sheet
+from app.show.story import Story, StoryError, all_moods, load_story, render_cast_sheet
 
 SHIPPED = Path(__file__).resolve().parent.parent / "stories"
 CAST = ["Daniel", "Moira", "Ralph", "Samantha"]
@@ -40,7 +41,8 @@ RUN_1_PROMPT = _WORLD_AND_CAST + (
 RUN_2_PROMPT = _WORLD_AND_CAST + (
     "Format: write the next lines of the script, one line per transmission, as `Name (emotion): spoken words`. "
     "The emotion in parentheses is the one the listener should hear in the speaker's voice, exactly one of: "
-    "calm, happy, sad, afraid, terrified, doubtful, angry, urgent, exhausted. "
+    "happy, hopeful, excited, relieved, calm, doubtful, urgent, curious, determined, sad, afraid, terrified, angry, "
+    "exhausted. "
     'Each transmission is one or two short spoken sentences ending with "Over." No narration, no markdown, and nothing else in parentheses.'
 )
 
@@ -202,6 +204,12 @@ class TestStoryErrors:
     def test_missing_orientation_or_directions_fail(self, voices, tmp_path, front, match):
         with pytest.raises(StoryError, match=match):
             load_story("s", _write_story(tmp_path, front=front))
+
+    def test_all_moods_in_the_overtones_order_or_the_engines_nine(self, voices, tmp_path):
+        story = load_story("s", _write_story(tmp_path))
+        assert all_moods(story) == ["happy", "calm", "sad", "afraid"]
+        bare = Story(name="b", title="T", cast=("Daniel",), operator="Daniel", template="", events=("E.",))
+        assert all_moods(bare) == list(MOODS)
 
     def test_the_palette_is_read_in_order(self, voices, tmp_path):
         story = load_story("s", _write_story(tmp_path))

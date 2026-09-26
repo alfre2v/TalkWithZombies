@@ -46,8 +46,17 @@ class Heard(BaseModel):
 
 
 class Round(BaseModel):
+    """One round of the record.
+
+    The kinds of step 3.4c are "orientation", "free", "repair", "exchange", "re-call", "breakdown" and
+    "switch-off"; "invitation", "answer" and "static" come from older records and are kept loadable. overtone is
+    the round's overtone, agenda the item an exchange asked, slot what filled a free round's event slot besides
+    an event ("aftermath" or "recollection"), recollects the n of the Repair that opened the contact an
+    aftermath or a recollection talked about.
+    """
     n: int
-    kind: Literal["free", "invitation", "answer", "static"] = "free"
+    kind: Literal["orientation", "free", "repair", "exchange", "re-call", "breakdown", "switch-off",
+                  "invitation", "answer", "static"] = "free"
     played_s: float = 0.0
     instruction: str
     listener: Optional[str] = None
@@ -64,6 +73,10 @@ class Round(BaseModel):
     tokens: Optional[int] = None
     trims: List[int] = Field(default_factory=list)
     episode: str = ""
+    overtone: Optional[str] = None
+    agenda: Optional[str] = None
+    slot: Optional[str] = None
+    recollects: Optional[int] = None
 
 
 class Run(BaseModel):

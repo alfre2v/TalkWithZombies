@@ -7,6 +7,8 @@ the model wrote it.
 
 from datetime import datetime
 
+import pytest
+
 from app.config import ShowConfig
 from app.show.script import (
     Line, Round, Run, append_round, assemble_messages, load_run, new_run, reply_text, round_share, runs_root,
@@ -68,6 +70,21 @@ class TestRecord:
         old = Round.model_validate({"n": 1, "instruction": "I.", "speakers": ["Ralph"], "max_lines": 1})
         assert (old.event, old.kind, old.played_s, old.tone) == (None, "free", 0.0, None)
         assert (old.tokens, old.trims, old.heard) == (None, [], None)
+        assert (old.overtone, old.agenda, old.slot, old.recollects) == (None, None, None, None)
+
+    @pytest.mark.parametrize("kind", ["invitation", "answer", "static"])
+    def test_the_kinds_before_step_3_4c_still_load(self, kind):
+        old = Round.model_validate({"n": 1, "kind": kind, "instruction": "I.", "speakers": ["Samantha"],
+                                    "max_lines": 1})
+        assert old.kind == kind
+
+    def test_the_fields_of_step_3_4c_round_trip(self):
+        run = new_run(STORY, ShowConfig(), "S", seed=7, now=NOW)
+        append_round(run, _round(1, kind="exchange", listener="Hello?", overtone="positive",
+                                 agenda="Find out who the voice is."))
+        append_round(run, _round(2, kind="free", overtone="negative", slot="recollection", recollects=1))
+
+        assert load_run(run.run_id) == run
 
 
 class TestAssembler:
