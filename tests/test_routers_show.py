@@ -236,6 +236,7 @@ class TestListenerTurn:
 
         assert call["direction"] == "The receiver crackles back to life."
         assert (exchange["kind"], exchange["speakers"], exchange["listens"]) == ("exchange", CAST, True)
+        assert exchange["answers"][0] == 1 and call["answers"] is None
         assert exchange["agenda"].startswith("Find out who the voice is.")
         _, repair, answered = load_run(run_id).rounds
         assert (repair.kind, repair.played_s) == ("repair", 180.0)

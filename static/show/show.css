@@ -1,7 +1,8 @@
 /*
  * show.css — The show page: a plain, dark, readable layout.
  *
- * The header holds the title, the cast strip and the ON AIR sign; the
+ * The header holds the title, the cast strip, the ON AIR sign and the
+ * RECEIVER sign (lit while the radio may call on the listeners); the
  * script scrolls in the middle; the controls stay at the bottom. The
  * 1930s radio look is polish for later.
  */
@@ -13,6 +14,7 @@
     --muted: #8b919c;
     --accent: #e0a526;
     --on-air: #d6332f;
+    --receiver: #3a9d5d;
     --border: #2c313b;
 }
 
@@ -80,7 +82,7 @@ body {
     gap: 6px;
 }
 
-#on-air {
+#on-air, #receiver {
     padding: 4px 12px;
     border: 2px solid var(--border);
     border-radius: 4px;
@@ -93,6 +95,12 @@ body {
     border-color: var(--on-air);
     color: #fff;
     background: var(--on-air);
+}
+
+#receiver.lit {
+    border-color: var(--receiver);
+    color: #fff;
+    background: var(--receiver);
 }
 
 #btn-captions {

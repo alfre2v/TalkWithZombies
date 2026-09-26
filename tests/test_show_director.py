@@ -383,6 +383,16 @@ class TestContact:
                                            "no longer hear them")
         assert "End with a question" not in plan.instruction
 
+    def test_each_round_after_a_window_reports_the_answers_so_far_and_the_number_that_ends_the_contact(self):
+        show = _show(contact_exchanges=3, contact_jitter=0)
+        run = _in_contact(show=show)
+        plans = [_next(run, show=show, played_s=210, transcript=t) for t in (None, "One.", None, "Two.", "Three.")]
+
+        assert [(p.kind, p.answers) for p in plans] == [
+            ("re-call", (0, 3)), ("exchange", (1, 3)), ("re-call", (1, 3)), ("exchange", (2, 3)),
+            ("breakdown", (3, 3))]
+        assert plan_round(run, STORY, show, 220).answers is None
+
     def test_agenda_items_never_repeat_within_a_contact(self):
         show = _show(contact_exchanges=5, contact_jitter=0, interaction_min_s=20, interaction_max_s=40)
         for seed in range(10):

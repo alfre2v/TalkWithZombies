@@ -12,7 +12,10 @@
  *     not JSON are skipped;
  *   - the reading loop over a response body, chunk by chunk;
  *   - the simulated clock of ?voice=off (about 15 characters a second);
- *   - the debug line under a round;
+ *   - the debug line under a round, with the overtone, the event slot's
+ *     filling, the agenda item asked and a contact's answers when present;
+ *   - the RECEIVER sign, which follows a round when its last line starts:
+ *     lit after the call, dark after the Breakdown;
  *   - which rounds that ended early the server kept anyway (a Stop that
  *     lands after the round was recorded);
  *   - the accumulator's packing rules (ruled 2026-09-22): whole sentences
@@ -174,19 +177,36 @@ test("debugLine: a free round with its event, tone, trim and timings", () => {
         + " · trimmed rounds 3, 4, 5 · first line 0.8 s · round 1.9 s · run 2026-09-25T20-00-00");
 });
 
-test("debugLine: an invitation without event or tone; what was heard, words or silence", () => {
+test("debugLine: a re-call without event or tone; what was heard, words or silence", () => {
     const { sandbox } = loadShow();
-    const base = { n: 8, kind: "invitation", speakers: ["Samantha"], event: null, tone: null, trimmed: [],
+    const base = { n: 8, kind: "re-call", speakers: ["Samantha"], event: null, tone: null, trimmed: [],
         dropped: ["Samantha (calm): cut"] };
     const times = { firstLineS: null, seconds: 1.2 };
 
     assert.equal(sandbox.debugLine({ ...base, heard: null }, times, "r"),
-        "round 8 · invitation · speakers Samantha · event — · tone — · dropped 1 · first line — s"
+        "round 8 · re-call · speakers Samantha · event — · tone — · dropped 1 · first line — s"
         + " · round 1.2 s · run r");
     assert.match(sandbox.debugLine({ ...base, heard: { text: "", silence: "nothing heard" } }, times, "r"),
         / · heard "" \(silence: nothing heard\) · /);
     assert.match(sandbox.debugLine({ ...base, heard: { text: "Moira?", silence: null } }, times, "r"),
         / · heard "Moira\?" \(words\) · /);
+});
+
+test("debugLine: an exchange's overtone, the agenda item it asks, and the contact's answers so far", () => {
+    const { sandbox } = loadShow();
+    const summary = {
+        n: 9, kind: "exchange", overtone: "positive", speakers: ["Daniel", "Moira"], event: null, tone: "radiant",
+        slot: null, agenda: "Find out who the voice is. If the voice already said their name, greet them by it.",
+        answers: [2, 3], heard: { text: "It's Alfredo.", silence: null }, trimmed: [], dropped: [],
+    };
+
+    assert.equal(sandbox.debugLine(summary, { firstLineS: 0.8, seconds: 1.4 }, "r"),
+        "round 9 · exchange · overtone positive · speakers Daniel, Moira · event — · tone radiant"
+        + ' · asks "Find out who the voice is. If the voice…" · answers 2 of 3 · heard "It\'s Alfredo." (words)'
+        + " · first line 0.8 s · round 1.4 s · run r");
+    assert.match(sandbox.debugLine({ n: 10, kind: "free", overtone: "negative", speakers: ["Ralph"], event: null,
+        tone: "grim", slot: "aftermath", heard: null }, { firstLineS: 0.8, seconds: 1.4 }, "r"),
+    / · overtone negative · speakers Ralph · event — · tone grim · aftermath · first line/);
 });
 
 /* ==========================================================================
@@ -583,7 +603,8 @@ function captionWords(line) {
         });
 }
 
-test("the listener's turn puts a caption under the invitation, each word marked by Whisper's confidence", async () => {
+test("the listener's turn puts a caption under the round that listened, each word marked by Whisper's confidence",
+    async () => {
     const { sandbox, state, until } = turnHarness();
     vm.runInContext("show.current = { element: document.createElement('div') };", sandbox);
 
@@ -609,7 +630,7 @@ test("the next summary adds the filter's verdict to the caption when the words c
         show.heardCaption`, sandbox);
 
     const heard = { text: "Thank you.", silence: "a known Whisper hallucination" };
-    sandbox.settleHeard({ n: 5, kind: "static", heard });
+    sandbox.settleHeard({ n: 5, kind: "re-call", heard });
 
     assert.equal(said.children.at(-1).textContent, " (counted as silence: a known Whisper hallucination)");
     assert.equal(vm.runInContext("show.heardCaption", sandbox), null);
@@ -619,9 +640,49 @@ test("words that counted as words get no verdict; an empty recording says so", (
     const { sandbox } = turnHarness();
     const said = vm.runInContext(`show.heardCaption = addHeardCaption(document.createElement('div'),
         { text: "Moira?", words: [{ word: "Moira?", probability: 0.9 }] }); show.heardCaption`, sandbox);
-    sandbox.settleHeard({ n: 5, kind: "answer", heard: { text: "Moira?", silence: null } });
+    sandbox.settleHeard({ n: 5, kind: "exchange", heard: { text: "Moira?", silence: null } });
     assert.equal(said.children.at(-1).className, "word word-sure");
 
     const empty = vm.runInContext("addHeardCaption(document.createElement('div'), { text: '', words: [] })", sandbox);
     assert.equal(empty.children.at(-1).textContent, "(nothing heard)");
+});
+
+/* ==========================================================================
+   The RECEIVER sign
+   ========================================================================== */
+
+test("the RECEIVER sign lights when the call's last line starts and goes dark with the Breakdown's", () => {
+    const { sandbox } = turnHarness();
+    const lit = () => vm.runInContext('document.getElementById("receiver").classList.contains("lit")', sandbox);
+    const round = (listens) => vm.runInContext(`({ summary: null, lines: [{}, {}], lastStarted: null,
+        firstSoundS: null, started: 0, listens: ${listens} })`, sandbox);
+    const line = () => vm.runInContext("document.createElement('p')", sandbox);
+
+    const call = round(true);
+    sandbox.lineStarts(call, line(), "Daniel", 0);
+    call.summary = { listens: true };
+    sandbox.receiverCue(call);
+    assert.equal(lit(), false, "not while the first line plays");
+    sandbox.lineStarts(call, line(), "Samantha", 1);
+    assert.equal(lit(), true, "lit when the operator's call starts");
+
+    const breakdown = round(false);
+    breakdown.summary = { listens: false };
+    sandbox.lineStarts(breakdown, line(), "Moira", 0);
+    assert.equal(lit(), true, "still lit while the answer plays");
+    sandbox.lineStarts(breakdown, line(), "Ralph", 1);
+    assert.equal(lit(), false, "dark when the receiver fails");
+});
+
+test("the RECEIVER sign: a last line that starts before its summary arrives is followed once the summary comes", () => {
+    const { sandbox } = turnHarness();
+    const lit = () => vm.runInContext('document.getElementById("receiver").classList.contains("lit")', sandbox);
+    const call = vm.runInContext("({ summary: null, lines: [{}], lastStarted: null, firstSoundS: null, started: 0 })",
+        sandbox);
+
+    sandbox.lineStarts(call, vm.runInContext("document.createElement('p')", sandbox), "Samantha", 0);
+    assert.equal(lit(), false);
+    call.summary = { listens: true };
+    sandbox.receiverCue(call);
+    assert.equal(lit(), true);
 });

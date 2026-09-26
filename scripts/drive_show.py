@@ -4,11 +4,12 @@ Run from the repository root while the app is serving, for example:
 
     python3 scripts/drive_show.py --base http://127.0.0.1:8010 --rounds 10
 
-The listener: after each invitation, the next --heard item answers, in turn
-("-" is a silent window). By default the words go into the next round request
-as text; with --speak they go the real way: the app's TTS speaks them in the
-operator's voice and /api/show/listen transcribes them (a silent window sends
-two seconds of silence). Without --heard, or once the items run out, nothing
+The listener: after each round that listens (the Repair's call, an exchange, a
+re-call), the next --heard item answers, in turn ("-" is a silent window). By
+default the words go into the next round request as text; with --speak they go
+the real way: the app's TTS speaks them in the operator's voice and
+/api/show/listen transcribes them (a silent window sends two seconds of
+silence). Without --heard, or once the items run out, nothing
 is sent and the window counts as silence.
 
 --report judges the drive against the checkpoint's criteria, from the run's
@@ -111,14 +112,30 @@ def listener_says(base, run, item, speak):
             "avg_logprob": heard["avg_logprob"]}
 
 
+_WORDS = ("exchange", "breakdown", "answer")      # the rounds that answer the listener's words
+_SILENCE = ("re-call", "switch-off", "static")  # the rounds that answer a silent window
+
+
 def heard_line(summary):
-    """What the listening window came to, printed after the round that follows an invitation; None otherwise."""
+    """What the listening window came to, printed after the round that follows it; None after other rounds."""
     heard = summary.get("heard")
-    if summary.get("kind") == "answer":
+    if summary.get("kind") in _WORDS:
         return f'  listener: "{heard["text"]}"'
-    if summary.get("kind") == "static":
+    if summary.get("kind") in _SILENCE:
         return f'  heard: "{heard["text"]}" -> silence: {heard["silence"]}' if heard else "  heard: nothing sent"
     return None
+
+
+def contact_line(summary):
+    """The overtone, the agenda item asked and a contact's answers so far, as printed under a round; None without."""
+    parts = [f"overtone {summary['overtone']}"] if summary.get("overtone") else []
+    if summary.get("slot"):
+        parts.append(summary["slot"])
+    if summary.get("agenda"):
+        parts.append(f'asks "{summary["agenda"]}"')
+    if summary.get("answers"):
+        parts.append(f"answers {summary['answers'][0]} of {summary['answers'][1]}")
+    return "  " + " · ".join(parts) if parts else None
 
 
 def report(runs_dir, run_id, asked):
@@ -138,15 +155,16 @@ def report(runs_dir, run_id, asked):
                                f"lines, {sum(len(r['dropped']) for r in rounds)} dropped"
                                + (f"; {'; '.join(faults)}" if faults else "")))
 
-    answers = [r for r in rounds if r["kind"] == "answer" and r["lines"]]
-    checks.append((bool(answers), "an invitation answered from the listener's words: " + (
+    answers = [r for r in rounds if r["kind"] in _WORDS and r["lines"]]
+    checks.append((bool(answers), "a call answered from the listener's words: " + (
         "; ".join(f'round {r["n"]} heard "{r["listener"]}" -> '
                   f'{", ".join(dict.fromkeys(line["speaker"] for line in r["lines"]))}' for r in answers)
         or "none (give --heard with words)")))
 
-    statics = [r for r in rounds if r["kind"] == "static" and r["lines"]]
-    checks.append((bool(statics), "a silent window gave the static round: " + (
-        "; ".join(f'round {r["n"]} ({r["heard"]["silence"] if r["heard"] else "nothing sent"})' for r in statics)
+    statics = [r for r in rounds if r["kind"] in _SILENCE and r["lines"]]
+    checks.append((bool(statics), "a silent window gave a re-call or the Switch-off: " + (
+        "; ".join(f'round {r["n"]} {r["kind"]} ({r["heard"]["silence"] if r["heard"] else "nothing sent"})'
+                  for r in statics)
         or "none")))
 
     trims = [r for r in rounds if r["trims"]]
@@ -213,7 +231,7 @@ def main():
     parser.add_argument("--played", type=float, default=20.0,
                         help="seconds of audio each round is taken to play; the running total is reported")
     parser.add_argument("--heard", action="append", default=[], metavar="WORDS",
-                        help='what the listener says at the next invitation, one per invitation; "-" is silence')
+                        help='what the listener says at the next listening window, one per window; "-" is silence')
     parser.add_argument("--speak", action="store_true",
                         help="send each --heard item the real way: spoken by the app's TTS, heard by Whisper")
     parser.add_argument("--report", action="store_true",
@@ -239,7 +257,7 @@ def main():
     results, windows, failed = [], list(args.heard), False
     for i in range(args.rounds):
         heard = None
-        if results and (results[-1]["summary"] or {}).get("kind") == "invitation" and windows:
+        if results and (results[-1]["summary"] or {}).get("listens") and windows:
             heard = listener_says(args.base, run, windows.pop(0), args.speak)
         result = play_round(args.base, run["run_id"], args.played * i, heard)
         summary = result["summary"] or {}
@@ -255,6 +273,8 @@ def main():
               f" round {result['seconds']:.2f}s")
         if heard_line(summary):
             print(heard_line(summary))
+        if contact_line(summary):
+            print(contact_line(summary))
         if summary.get("trimmed"):
             print(f"  trimmed before this round: rounds {', '.join(map(str, summary['trimmed']))}"
                   " (the model no longer reads them)")
@@ -269,7 +289,7 @@ def main():
               f"script after the last round: {size} tokens")
         print(f"record: {record}")
         if windows:
-            print(f"{len(windows)} --heard item(s) unused: the drive had fewer invitations")
+            print(f"{len(windows)} --heard item(s) unused: the drive had fewer listening windows")
     if args.report:
         print()
         failed = not report(args.runs_dir, run["run_id"], args.rounds) or failed

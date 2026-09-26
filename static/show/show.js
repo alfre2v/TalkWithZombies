@@ -1,6 +1,6 @@
 /**
  * show.js — The show page: open a run, play its rounds one after another,
- * and give the listener a turn when the director invites them.
+ * and give the listener a turn whenever the radio listens.
  *
  * Each line goes to the voice (player.js) as soon as it is written, and
  * appears on the page when its voice starts; the next round is asked for
@@ -9,15 +9,23 @@
  * of step 3.1: it waits as long as a round's lines would take to say, about
  * 15 characters a second.
  *
- * After an invitation has been said, the listener's turn: the listening
+ * After a round whose summary says it listens (the Repair's call, an
+ * exchange, a re-call) has been said, the listener's turn: the listening
  * window opens with the microphone (mic.js) and counts down
  * listen_window_s; holding the talk button (or the space bar) records, up
  * to press_cap_s; on release what Whisper heard rides the next round
  * request, and the director answers it. No press, and the next round goes
- * without a transcript: the static round. What Whisper heard shows at once
- * as a caption under the invitation ("You: …"), each word marked by how
- * sure Whisper was of it; when the next round's summary says the words
- * counted as silence, the caption says why.
+ * without a transcript: silence, which the director answers with a re-call
+ * or the Switch-off. What Whisper heard shows at once as a caption under
+ * the round that listened ("You: …"), each word marked by how sure Whisper
+ * was of it; when the next round's summary says the words counted as
+ * silence, the caption says why.
+ *
+ * The RECEIVER sign tells the room when the radio may call on them: it
+ * lights when the last line of a round that listens starts (the operator's
+ * call), and goes dark when the last line of one that does not starts (the
+ * Breakdown, the Switch-off). A receiver beat's stage direction goes above
+ * its lines, like an event's.
  *
  * A classic script sharing globals, like upstream's; sse.js, player.js and
  * mic.js load first. At load time it only defines functions and wires the page on
@@ -45,7 +53,7 @@ const show = {
     playedS: 0,         // seconds of show audio played so far (simulated with ?voice=off)
     voice: true,        // false with ?voice=off: text only, on the simulated clock
     current: null,      // the round being said, which the played clips count towards
-    lastKind: null,     // the kind of the last round that completed
+    listens: false,     // whether the last round that completed said the radio listens next
     lastN: 0,           // the number of the last round whose summary arrived
     unsure: [],         // rounds that ended early since then: {note, reason}; the next summary tells if kept
     heardCaption: null, // the caption of what the listener said, until the next summary gives its verdict
@@ -115,16 +123,24 @@ function formatSeconds(seconds) {
 /**
  * The debug line under a round: what the director chose, what was heard,
  * how long the round took to write, and — once it has been said — how long
- * the listener waited for its first sound and how much audio it played.
+ * the listener waited for its first sound and how much audio it played. The
+ * overtone, the event slot's filling, the agenda item asked and a contact's
+ * answers so far appear when the summary has them.
  */
 function debugLine(summary, times, runId) {
-    const parts = [
-        `round ${summary.n}`,
-        summary.kind,
+    const parts = [`round ${summary.n}`, summary.kind];
+    if (summary.overtone) parts.push(`overtone ${summary.overtone}`);
+    parts.push(
         `speakers ${summary.speakers.join(", ")}`,
         `event ${summary.event || "—"}`,
         `tone ${summary.tone || "—"}`,
-    ];
+    );
+    if (summary.slot) parts.push(summary.slot);
+    if (summary.agenda) {
+        const asks = summary.agenda.length > 40 ? `${summary.agenda.slice(0, 40).trimEnd()}…` : summary.agenda;
+        parts.push(`asks "${asks}"`);
+    }
+    if (summary.answers) parts.push(`answers ${summary.answers[0]} of ${summary.answers[1]}`);
     if (summary.heard) {
         const verdict = summary.heard.silence ? `silence: ${summary.heard.silence}` : "words";
         parts.push(`heard "${summary.heard.text}" (${verdict})`);
@@ -160,7 +176,8 @@ async function startShow() {
         if (!resp.ok) throw new Error(body.detail || `HTTP ${resp.status}`);
         show.run = body;
         show.playedS = 0;
-        show.lastKind = null;
+        show.listens = false;
+        setReceiver(false);
         show.lastN = 0;
         show.unsure = [];
         el("show-title").textContent = body.title;
@@ -176,17 +193,17 @@ async function startShow() {
 /**
  * Play rounds one after another until Stop or a failure.
  *
- * After an invitation the listener's turn comes first, so a Resume after a
- * stop there opens it again.
+ * After a round that listens the listener's turn comes first, so a Resume
+ * after a stop there opens it again.
  */
 async function runShow() {
     const controller = new AbortController();
     show.controller = controller;
     try {
         while (true) {
-            const heard = show.lastKind === "invitation" ? await listenerTurn(controller.signal) : null;
+            const heard = show.listens ? await listenerTurn(controller.signal) : null;
             const round = await playRound(controller.signal, heard);
-            show.lastKind = round.summary.kind;
+            show.listens = Boolean(round.summary.listens);
             if (show.voice) await playOut(round, controller.signal);
             else await onAir(round, controller.signal);
         }
@@ -206,7 +223,8 @@ async function runShow() {
  * once. Resolves with the round's summary, its lines and its timings; throws
  * on an HTTP error, an "error" event, or a stream that ends without its
  * summary. The stage direction goes above the round's lines when the
- * summary brings the event.
+ * summary brings an event or a receiver beat's direction; the RECEIVER sign
+ * follows the round when its last line starts (at once with ?voice=off).
  */
 async function playRound(signal, heard) {
     setState("thinking");
@@ -215,6 +233,7 @@ async function playRound(signal, heard) {
     const round = {
         summary: null, lines: [], started, firstLineS: null, seconds: null, element: addRoundElement(),
         firstSoundS: show.voice ? null : undefined, playedS: show.voice ? 0 : undefined, debugElement: null,
+        lastStarted: null,
     };
     show.current = round;
     let mood = null;
@@ -233,11 +252,12 @@ async function playRound(signal, heard) {
             } else if (event.type === "done") {
                 if (round.firstLineS === null) round.firstLineS = (performance.now() - started) / 1000;
                 round.lines.push(event);
+                const index = round.lines.length - 1;
                 const line = addLine(round.element, event.persona, mood, event.text, show.voice);
                 if (show.voice) {
                     const persona = event.persona;
                     speakLine(persona, event.text, {
-                        onStart: () => lineStarts(round, line, persona),
+                        onStart: () => lineStarts(round, line, persona, index),
                         onFail: (err) => voiceFailed(round, persona, err),
                     });
                 } else {
@@ -261,7 +281,9 @@ async function playRound(signal, heard) {
     round.seconds = (performance.now() - started) / 1000;
     settleUnsure(round.summary.n);
     settleHeard(round.summary);
-    addDirection(round.element, round.summary.event);
+    addDirection(round.element, round.summary.event || round.summary.direction);
+    if (show.voice) receiverCue(round);
+    else setReceiver(Boolean(round.summary.listens));
     if (show.run.debug) {
         const written = { firstLineS: round.firstLineS, seconds: round.seconds }; // The voice's timings come once said
         round.debugElement = addDebugLine(round.element, debugLine(round.summary, written, show.run.run_id));
@@ -270,12 +292,23 @@ async function playRound(signal, heard) {
 }
 
 /** A line's voice has started: show the line, light its speaker, and say the show is on air. */
-function lineStarts(round, line, persona) {
+function lineStarts(round, line, persona, index) {
     if (round.firstSoundS === null) round.firstSoundS = (performance.now() - round.started) / 1000;
     line.hidden = false;
     lightSpeaker(persona);
+    round.lastStarted = index;
+    receiverCue(round);
     if (show.state === "thinking") setState("on air");
     scrollToEnd();
+}
+
+/**
+ * The RECEIVER sign follows a round when its last line starts: lit if the
+ * round listens, dark if not. Nothing until the summary says how many lines
+ * the round has and whether it listens.
+ */
+function receiverCue(round) {
+    if (round.summary && round.lastStarted === round.lines.length - 1) setReceiver(Boolean(round.summary.listens));
 }
 
 /** A chunk could not be said: it is skipped, and with debug on the round says so. */
@@ -288,6 +321,7 @@ async function playOut(round, signal) {
     await drained();
     if (signal.aborted) throw new Error("stopped");
     lightSpeaker(null);
+    setReceiver(Boolean(round.summary.listens)); // In case the last line's voice never started
     if (round.debugElement) round.debugElement.textContent = debugLine(round.summary, round, show.run.run_id);
 }
 
@@ -324,7 +358,7 @@ async function onAir(round, signal) {
 }
 
 /**
- * The listener's turn after an invitation.
+ * The listener's turn after a round that listens.
  *
  * The window opens with the microphone and counts down; a press records
  * until release or the press cap; resolves with what Whisper heard, or null
@@ -333,7 +367,7 @@ async function onAir(round, signal) {
  * as played.
  */
 async function listenerTurn(signal) {
-    const invitation = show.current;
+    const asking = show.current; // The round that listened: the caption goes under it
     await openMic();
     try {
         if (!(await waitForPress(signal))) return null;
@@ -343,13 +377,13 @@ async function listenerTurn(signal) {
         try {
             const heard = await hear(blob, mic.mime, show.run.run_id, signal);
             const seconds = formatSeconds((performance.now() - started) / 1000);
-            if (invitation) show.heardCaption = addHeardCaption(invitation.element, heard);
-            if (show.run.debug && invitation) addDebugLine(invitation.element, `heard "${heard.text}" in ${seconds} s`);
+            if (asking) show.heardCaption = addHeardCaption(asking.element, heard);
+            if (show.run.debug && asking) addDebugLine(asking.element, `heard "${heard.text}" in ${seconds} s`);
             return heard;
         } catch (err) {
             if (signal.aborted) throw err;
             console.warn("Show: the transcription failed; counted as silence:", err);
-            if (invitation) addVerdict(addHeardCaption(invitation.element, null), `${err.message}; counted as silence`);
+            if (asking) addVerdict(addHeardCaption(asking.element, null), `${err.message}; counted as silence`);
             return null;
         }
     } finally {
@@ -445,6 +479,11 @@ function setState(name, detail) {
     talk.textContent = name === "recording" ? "Release to send" : "Hold to talk";
 }
 
+/** Light the RECEIVER sign, or put it out: lit, the radio may call on the listeners. */
+function setReceiver(on) {
+    el("receiver").classList.toggle("lit", on);
+}
+
 /** The cast strip: one name per cast member. */
 function renderCast(cast) {
     const strip = el("cast");
@@ -494,7 +533,7 @@ function addLine(block, speaker, mood, text, hidden) {
     return line;
 }
 
-/** The round's event as a stage direction, above its lines; captions off hide it with them. */
+/** The round's event, or its receiver beat, as a stage direction above its lines; captions off hide it with them. */
 function addDirection(block, event) {
     if (!event) return;
     const direction = document.createElement("p");

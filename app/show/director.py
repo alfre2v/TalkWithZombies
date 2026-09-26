@@ -52,7 +52,8 @@ class RoundPlan:
 
     overtone is the round's overtone; agenda the item an exchange asks; slot what fills a free round's event
     slot besides an event ("aftermath" or "recollection"); recollects the Repair that opened the contact an
-    aftermath or a recollection talks about.
+    aftermath or a recollection talks about; answers, after a listening window, the listener's answers in this
+    contact so far and the number that ends it.
     """
     kind: str
     speakers: Tuple[str, ...]
@@ -66,6 +67,7 @@ class RoundPlan:
     agenda: Optional[str] = None
     slot: Optional[str] = None
     recollects: Optional[int] = None
+    answers: Optional[Tuple[int, int]] = None
 
     @property
     def listens(self) -> bool:
@@ -216,17 +218,20 @@ def _after_listening(run: Run, story: Story, show: ShowConfig, heard: str, rng: 
     the receiver came back). Silence: a re-call, or the Switch-off after silences_to_switch_off in a row.
     """
     period = _receiver_period(run)
+    target = _drawn(run.seed, "contact", period[0].n, show.contact_exchanges, show.contact_jitter)
+    answered = sum(1 for r in period if r.listener)
     if heard:
-        answers = sum(1 for r in period if r.listener) + 1
-        if answers >= _drawn(run.seed, "contact", period[0].n, show.contact_exchanges, show.contact_jitter):
-            return _breakdown(run, story, show, heard, rng)
-        return _exchange(run, story, show, heard, rng)
+        progress = (answered + 1, target)
+        if answered + 1 >= target:
+            return _breakdown(run, story, show, heard, rng, progress)
+        return _exchange(run, story, show, heard, rng, progress)
     if _silences(period) + 1 >= show.silences_to_switch_off:
-        return _switch_off(run, story, show, rng)
-    return _re_call(run, story, show, rng)
+        return _switch_off(run, story, show, rng, (answered, target))
+    return _re_call(run, story, show, rng, (answered, target))
 
 
-def _exchange(run: Run, story: Story, show: ShowConfig, heard: str, rng: random.Random) -> RoundPlan:
+def _exchange(run: Run, story: Story, show: ShowConfig, heard: str, rng: random.Random,
+              answers: Optional[Tuple[int, int]] = None) -> RoundPlan:
     """Answer the listener, then ask the next agenda item; the page listens again.
 
     contact_min_lines to contact_max_lines lines, drawn; the first pinned to the character the listener named,
@@ -242,10 +247,11 @@ def _exchange(run: Run, story: Story, show: ShowConfig, heard: str, rng: random.
     text = f'A voice on the frequency says: "{heard}" {_restatement(run, show)}{ask}End with a question to ' \
            f"the voice. " + _turns(story.cast, lines, moods, tone, first=first)
     return _plan("exchange", story.cast, lines, moods, instruction=text, min_lines=lines, first=first, tone=tone,
-                 listener=heard, overtone=overtone, agenda=item)
+                 listener=heard, overtone=overtone, agenda=item, answers=answers)
 
 
-def _breakdown(run: Run, story: Story, show: ShowConfig, heard: str, rng: random.Random) -> RoundPlan:
+def _breakdown(run: Run, story: Story, show: ShowConfig, heard: str, rng: random.Random,
+               answers: Optional[Tuple[int, int]] = None) -> RoundPlan:
     """Answer the listener's last words, then the receiver fails: built like an exchange, without the question."""
     first = _addressed(run, story, heard)
     lines = rng.randint(show.contact_min_lines, show.contact_max_lines)
@@ -259,10 +265,11 @@ def _breakdown(run: Run, story: Story, show: ShowConfig, heard: str, rng: random
            f"only transmit, and that the broadcast goes on while they fix it. " \
            + _turns(story.cast, lines, moods, tone, first=first)
     return _plan("breakdown", story.cast, lines, moods, instruction=text, min_lines=lines, first=first, tone=tone,
-                 listener=heard, overtone=overtone)
+                 listener=heard, overtone=overtone, answers=answers)
 
 
-def _re_call(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> RoundPlan:
+def _re_call(run: Run, story: Story, show: ShowConfig, rng: random.Random,
+             answers: Optional[Tuple[int, int]] = None) -> RoundPlan:
     """A listening window came to silence: call once more, and the page listens again.
 
     Before anyone answered, the operator calls out again; inside a contact, whoever was talking to the listener
@@ -281,10 +288,12 @@ def _re_call(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> Ro
         text = f"The voice has gone quiet. {_restatement(run, show)}" \
                + _ended(f"{caller} calls them back, by name if they gave one{again}") + " "
     text += _turns(story.cast, 1, moods, tone, first=caller)
-    return _plan("re-call", story.cast, 1, moods, instruction=text, first=caller, tone=tone, overtone=overtone)
+    return _plan("re-call", story.cast, 1, moods, instruction=text, first=caller, tone=tone, overtone=overtone,
+                 answers=answers)
 
 
-def _switch_off(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> RoundPlan:
+def _switch_off(run: Run, story: Story, show: ShowConfig, rng: random.Random,
+                answers: Optional[Tuple[int, int]] = None) -> RoundPlan:
     """Silences in a row: the lab switches the receiver off by choice; the broadcast goes on.
 
     Up to beat_max_lines lines, the first pinned to whoever called last: the operator before anyone answered,
@@ -304,7 +313,7 @@ def _switch_off(run: Run, story: Story, show: ShowConfig, rng: random.Random) ->
            f"listening; the broadcast goes on. " \
            + _turns(story.cast, show.beat_max_lines, moods, tone, first=caller)
     return _plan("switch-off", story.cast, show.beat_max_lines, moods, instruction=text, first=caller, tone=tone,
-                 overtone=overtone)
+                 overtone=overtone, answers=answers)
 
 
 def _receiver_period(run: Run) -> List[Round]:
@@ -541,12 +550,13 @@ def _tone_words(story: Story, overtone: Optional[str]) -> Tuple[str, ...]:
 def _plan(kind: str, speakers: Sequence[str], max_lines: int, moods: Optional[Sequence[str]], *, instruction: str,
           min_lines: int = 1, first: Optional[str] = None, last: Optional[str] = None, event: Optional[str] = None,
           tone: Optional[str] = None, listener: Optional[str] = None, overtone: Optional[str] = None,
-          agenda: Optional[str] = None, slot: Optional[str] = None, recollects: Optional[int] = None) -> RoundPlan:
+          agenda: Optional[str] = None, slot: Optional[str] = None, recollects: Optional[int] = None,
+          answers: Optional[Tuple[int, int]] = None) -> RoundPlan:
     """Assemble a plan, building its grammar from the same speakers, budget, pins and moods as its words."""
     return RoundPlan(kind=kind, speakers=tuple(speakers), max_lines=max_lines, event=event, tone=tone,
                      listener=listener, instruction=instruction,
                      grammar=build_grammar(speakers, max_lines, moods, min_lines=min_lines, first=first, last=last),
-                     overtone=overtone, agenda=agenda, slot=slot, recollects=recollects)
+                     overtone=overtone, agenda=agenda, slot=slot, recollects=recollects, answers=answers)
 
 
 def _last_index(run: Run, kinds: Set[str]) -> Optional[int]:

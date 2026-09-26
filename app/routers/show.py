@@ -16,8 +16,9 @@ decides whether it counts as words or as silence with the transcript filter
 a re-call or a Switch-off — records what was heard either way, and reports
 it on the "round" summary (`heard`: the text, Whisper's numbers, and why it
 counted as silence, if it did). The summary also carries the round's
-overtone, the agenda item it asked, what filled its event slot, and the
-stage direction of a receiver beat (the story's).
+overtone, the agenda item it asked, what filled its event slot, the
+listener's answers so far in a contact and the number that ends it, and
+the stage direction of a receiver beat (the story's).
 With show.debug on, each round also leaves its debug files
 (app/show/debug.py), failed rounds included, and a recorded round keeps
 them even when the client leaves while they are being written.
@@ -206,5 +207,6 @@ async def _round_stream(run: Run, story: Story, req: ShowRoundRequest) -> AsyncI
                 "tone": plan.tone, "heard": heard.model_dump() if heard else None, "trimmed": trimmed,
                 "dropped": parser.dropped, "finish_reason": round_.finish_reason, "listens": plan.listens,
                 "overtone": plan.overtone, "agenda": plan.agenda, "slot": plan.slot,
+                "answers": list(plan.answers) if plan.answers else None,
                 "direction": story.directions.get(plan.kind)})
     yield _sse({"type": "complete"})
