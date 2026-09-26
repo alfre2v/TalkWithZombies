@@ -1,0 +1,563 @@
+# The story's emotional palette (step 3.4c). Each round's overtone is chosen first, and the moods the grammar
+# allows and the tone word ("Let the tone be: <word>.") both come from it, so the two never pull against each
+# other. The order below is the overtones' order: neighbors are next to each other.
+#
+# moods: the emotion tags a line may carry; each mood belongs to one overtone. The emotion tag colors how a line
+#   sounds; the tone word colors what is said, so a tone word is never a mood.
+# tones: the tone words under their themes (the themes are data, for uses to come); a theme may appear under two
+#   overtones when its words differ. A tone word is kept for a few rounds (show.tone_hold, with jitter).
+overtones:
+  positive:
+    moods: [happy, hopeful, excited, relieved]
+    tones:
+      Hope and warmth:
+        - bright
+        - cheerful
+        - radiant
+        - joyful
+        - optimistic
+        - upbeat
+        - buoyant
+        - heartening
+        - uplifting
+        - reassuring
+        - soothing
+        - comforting
+        - forgiving
+        - gentle
+        - tender
+        - warm-hearted
+        - affectionate
+        - compassionate
+        - big-hearted
+        - grateful
+        - cozy
+        - comradely
+        - convivial
+        - heartfelt
+      Resolve and defiance:
+        - brave
+        - defiant
+        - resolute
+        - steadfast
+        - stubborn
+        - dogged
+        - tenacious
+        - unyielding
+        - unbowed
+        - gritty
+        - dauntless
+        - fearless
+        - heroic
+        - valiant
+        - gallant
+        - self-sacrificing
+        - protective
+        - rallying
+        - rousing
+        - galvanizing
+      Levity and play:
+        - whimsical
+        - kooky
+        - quirky
+        - bubbly
+        - jubilant
+        - playful
+        - giddy
+        - zany
+        - madcap
+        - screwball
+        - farcical
+        - absurd
+        - light-hearted
+        - breezy
+        - jaunty
+        - vaudevillian
+        - effervescent
+        - boisterous
+        - jolly
+        - punch-drunk
+      Pride and bravado:
+        - exultant
+        - adventurous
+        - triumphant
+        - proud
+        - boastful
+        - swaggering
+        - cocky
+        - brash
+        - daring
+        - reckless
+        - devil-may-care
+        - cavalier
+        - swashbuckling
+        - smug
+      Intimacy:
+        - intimate
+        - confiding
+        - vulnerable
+        - unguarded
+        - trusting
+        - loving
+        - doting
+        - flirtatious
+        - coquettish
+        - bashful
+        - sheepish
+        - smitten
+      Innocence:
+        - naive
+        - innocent
+        - guileless
+        - wide-eyed
+        - idealistic
+        - childlike
+  neutral:
+    moods: [calm, doubtful, urgent, curious, determined]
+    tones:
+      Manner of speech:
+        - ornate
+        - terse
+        - laconic
+        - clipped
+        - curt
+        - brusque
+        - blunt
+        - candid
+        - plainspoken
+        - taciturn
+        - understated
+        - restrained
+        - measured
+        - halting
+        - hesitant
+        - faltering
+        - rambling
+        - chatty
+        - gruff
+        - long-winded
+        - rapid-fire
+        - staccato
+        - lyrical
+        - poetic
+        - folksy
+        - formal
+        - bombastic
+        - melodramatic
+      The laboratory:
+        - clinical
+        - sterile
+        - antiseptic
+        - forensic
+        - diagnostic
+        - analytical
+        - methodical
+        - procedural
+        - meticulous
+        - obsessive
+        - rigorous
+        - empirical
+        - speculative
+        - morbidly curious
+        - experimental
+        - scholarly
+        - pedantic
+        - didactic
+        - professorial
+        - technical
+        - jargon-laden
+        - businesslike
+        - matter-of-fact
+        - detached
+        - dispassionate
+        - grimly fascinated
+      Wonder and the uncanny:
+        - dreamlike
+        - surreal
+        - hypnotic
+        - trance-like
+        - spellbound
+        - awestruck
+        - wonderstruck
+        - reverent
+        - rapt
+        - inquisitive
+        - fascinated
+        - intrigued
+        - mystical
+        - oracular
+        - prophetic
+        - liminal
+        - bewildered
+      Gallows humor and wit:
+        - jocular
+        - sly
+        - wry
+        - dry
+        - droll
+        - deadpan
+        - sardonic
+        - sarcastic
+        - ironic
+        - mordant
+        - acerbic
+        - caustic
+        - witty
+        - tongue-in-cheek
+        - facetious
+        - flippant
+        - cheeky
+        - impish
+        - mischievous
+        - gallows-humored
+        - darkly comic
+        - satirical
+        - mocking
+        - teasing
+        - bantering
+        - self-deprecating
+      Stillness:
+        - mellow
+        - hushed
+        - quiet
+        - muted
+        - subdued
+        - serene
+        - tranquil
+        - placid
+        - lulling
+        - unhurried
+        - patient
+        - contemplative
+        - meditative
+        - reflective
+        - pensive
+        - introspective
+        - philosophical
+      On the air, 1930s:
+        - broadcast-polished
+        - newsreel
+        - static-laced
+        - crackling
+        - far-off
+        - long-distance
+        - wartime
+        - blitz-spirited
+        - hard-boiled
+        - noir
+        - pulpy
+        - cliffhanging
+        - Hitchcockian
+        - official
+        - telegraphic
+        - Kafkaesque
+      Faith and ritual:
+        - prayerful
+        - devout
+        - hymn-like
+        - liturgical
+        - solemn
+        - sermonizing
+        - confessional
+        - penitent
+        - irreverent
+      The everyday:
+        - mundane
+        - everyday
+        - domestic
+        - humdrum
+        - prosaic
+        - down-to-earth
+        - nonchalant
+        - "blas\xE9"
+        - bored
+        - absent-minded
+      Resolve and defiance:
+        - stoic
+        - stiff-upper-lip
+        - dutiful
+        - unflappable
+      Suspicion and secrecy:
+        - skeptical
+        - incredulous
+        - cryptic
+        - enigmatic
+        - mysterious
+        - probing
+      Pleading:
+        - insistent
+        - emphatic
+        - peremptory
+      Longing and regret:
+        - bittersweet
+        - nostalgic
+        - reminiscent
+      Command and coldness:
+        - commanding
+        - authoritative
+  negative:
+    moods: [sad, afraid, terrified, angry, exhausted]
+    tones:
+      Dread and horror:
+        - macabre
+        - ominous
+        - foreboding
+        - menacing
+        - sinister
+        - eerie
+        - creepy
+        - chilling
+        - bloodcurdling
+        - hair-raising
+        - harrowing
+        - nightmarish
+        - hellish
+        - grisly
+        - gruesome
+        - ghoulish
+        - morbid
+        - grim
+        - gothic
+        - sepulchral
+        - funereal
+        - doom-laden
+        - apocalyptic
+        - portentous
+        - unsettling
+        - disquieting
+        - Lovecraftian
+        - claustrophobic
+        - suffocating
+        - oppressive
+        - predatory
+        - creeping
+        - haunted
+        - ghastly
+      Friction and hostility:
+        - bitter
+        - peevish
+        - scornful
+        - testy
+        - irritable
+        - prickly
+        - snappish
+        - bickering
+        - curmudgeonly
+        - cantankerous
+        - surly
+        - sullen
+        - petulant
+        - exasperated
+        - quarrelsome
+        - combative
+        - belligerent
+        - accusatory
+        - recriminating
+        - resentful
+        - spiteful
+        - seething
+        - vindictive
+        - venomous
+        - scathing
+        - withering
+        - contemptuous
+        - condescending
+        - mutinous
+        - snide
+        - needling
+        - taunting
+      Nerves and tension:
+        - tense
+        - brittle
+        - taut
+        - edgy
+        - jittery
+        - jumpy
+        - skittish
+        - twitchy
+        - anxious
+        - fretful
+        - uneasy
+        - restless
+        - agitated
+        - keyed-up
+        - high-strung
+        - white-knuckled
+        - breathless
+        - panicky
+        - rattled
+        - tremulous
+        - hunted
+        - cornered
+        - besieged
+        - watchful
+        - wary
+        - strained
+        - fraught
+        - nail-biting
+      Grief and despair:
+        - woeful
+        - miserable
+        - mournful
+        - elegiac
+        - grief-stricken
+        - heartbroken
+        - heartsick
+        - sorrowful
+        - fatalistic
+        - lugubrious
+        - plaintive
+        - keening
+        - tearful
+        - desolate
+        - forlorn
+        - forsaken
+        - lonely
+        - bleak
+        - hopeless
+        - despairing
+        - anguished
+        - wretched
+        - inconsolable
+        - bereft
+        - somber
+        - gloomy
+        - melancholy
+        - resigned
+      Suspicion and secrecy:
+        - suspicious
+        - distrustful
+        - paranoid
+        - cynical
+        - guarded
+        - cagey
+        - evasive
+        - secretive
+        - conspiratorial
+        - clandestine
+        - furtive
+        - shifty
+        - treacherous
+        - veiled
+        - insinuating
+        - knowing
+        - cunning
+        - scheming
+        - calculating
+        - tight-lipped
+      Fever and chaos:
+        - delirious
+        - feverish
+        - frantic
+        - frenzied
+        - manic
+        - hysterical
+        - unhinged
+        - deranged
+        - wild-eyed
+        - chaotic
+        - tumultuous
+        - turbulent
+        - tempestuous
+        - volcanic
+        - explosive
+        - incendiary
+        - fiery
+        - breakneck
+        - headlong
+        - spiraling
+        - unraveling
+        - berserk
+        - feral
+        - primal
+        - fractured
+        - incoherent
+      Weariness and numbness:
+        - weary
+        - bone-weary
+        - world-weary
+        - drained
+        - sleep-deprived
+        - bleary
+        - drowsy
+        - listless
+        - lethargic
+        - languid
+        - numb
+        - hollow
+        - dazed
+        - shell-shocked
+        - stunned
+        - burned-out
+        - frayed
+        - threadbare
+        - worn-down
+        - ragged
+      Longing and regret:
+        - yearning
+        - longing
+        - aching
+        - pining
+        - sentimental
+        - maudlin
+        - wistful
+        - homesick
+        - regretful
+        - rueful
+        - remorseful
+        - guilt-ridden
+        - apologetic
+        - contrite
+        - valedictory
+      Command and coldness:
+        - icy
+        - frosty
+        - aloof
+        - distant
+        - glacial
+        - stony
+        - steely
+        - stern
+        - severe
+        - austere
+        - uncompromising
+        - imperious
+        - ruthless
+        - cold-blooded
+      Pleading:
+        - desperate
+        - pleading
+        - imploring
+        - beseeching
+        - frenetic
+      Resolve and defiance:
+        - last-ditch
+      Wonder and the uncanny:
+        - uncanny
+        - hallucinatory
+        - otherworldly
+        - unearthly
+        - eldritch
+        - spectral
+        - ghostly
+        - disoriented
+      Faith and ritual:
+        - fire-and-brimstone
+      Stillness:
+        - brooding
+
+# The overtones each kind of round may use: one, or two neighbors; the director draws one per round.
+kinds:
+  orientation: [neutral]
+  repair: [positive]
+  exchange: [positive, neutral]
+  re-call: [neutral]
+  breakdown: [neutral, negative]
+  switch-off: [neutral, negative]
+
+# Free rounds: an overtone is held for a stretch (show.overtone_hold, with jitter); when the hold ends, the next
+# is drawn among the current one and its neighbors, with these weights.
+weights:
+  positive: 1
+  neutral: 2
+  negative: 3
