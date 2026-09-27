@@ -1,0 +1,46 @@
+# The receiver beats' fixed lines (2026-09-27): said word for word by a cast member, not written by the model, so
+# the listeners always hear what happened to the radio and what it means for them. Four versions each, drawn
+# without repeats, like the events. "Over." is added to each line when it is said.
+repair:
+  # Two lines: whoever of the rest of the cast has been silent longest announces it, then the operator's call.
+  after-breakdown:
+    - ["We've fixed the receiver! It's working again.", "We can hear you now. If you're out there, answer us."]
+    - ["The receiver's back! New fuse, fresh wiring, and it's picking up the band again.",
+       "We can hear you again. Anyone listening, talk to us now."]
+    - ["Good news: the receiver works again. We patched the burnt circuit.",
+       "The receiver's on, so we can hear you. Please, answer."]
+    - ["We got the receiver running again. The static's clearing.",
+       "We're listening now. Whoever hears this, answer us."]
+  after-switch-off:
+    - ["We're switching the receiver back on.", "We can hear you now. If you're out there, answer us."]
+    - ["The receiver's on again. Let's see who's out there.",
+       "We can hear you again. Anyone listening, talk to us now."]
+    - ["Receiver back on. We saved enough power for another try.",
+       "The receiver's on, so we can hear you. Please, answer."]
+    - ["We've turned the receiver back on.", "We're listening again. Whoever hears this, answer us."]
+# The operator's closing line, after the others answered the voice and reacted.
+breakdown:
+  - "Smoke's pouring out of the receiver, it's dead! We can't hear you anymore, but we're still on the air."
+  - "The receiver just burned out. We can't hear you now, but we're still transmitting."
+  - "Sparks, and the receiver's gone dark. We can't hear anyone anymore, but keep listening: we're still on the air."
+  - "The receiver's fried again. We can't hear you, but we'll keep broadcasting while we fix it."
+switch-off:
+  # The operator's opening line; the rest of the cast react after it.
+  nobody-answered:
+    - "Nobody's answering, so we're switching the receiver off to save power. We won't hear you until it's back
+      on, but we're still on the air."
+    - "No one's out there right now. We're turning the receiver off to save it, so we can't hear you until we
+      switch it back on, but we keep broadcasting."
+    - "Still nothing. We're switching off the receiver to spare it for later. We won't hear you for now, but we're
+      still on the air."
+    - "No answer. The receiver goes off now, to save power. We can't hear you until it's back on, but stay tuned:
+      we're still broadcasting."
+  voice-lost:
+    - "We've lost you. We're switching the receiver off to save it for later. We won't hear you until it's back on,
+      but we're still on the air."
+    - "You've gone quiet, so we're turning the receiver off to save power. We can't hear you now, but we're still
+      broadcasting."
+    - "We can't reach you anymore. The receiver goes off for now, to spare it. We won't hear you until we switch it
+      back on, but we're still on the air."
+    - "Nothing from you. We're shutting the receiver off to save power. We won't hear you for a while, but keep
+      listening: we're still on the air."

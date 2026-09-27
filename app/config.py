@@ -277,7 +277,7 @@ class ShowConfig(BaseModel):
     # exchange is contact_min_lines to contact_max_lines lines. silences_to_switch_off silences in a row switch
     # the receiver off; the Repair and the Switch-off take beat_max_lines lines, the orientation up to that many,
     # and the Breakdown breakdown_lines.
-    contact_exchanges: int = Field(default=3, ge=1)
+    contact_exchanges: int = Field(default=5, ge=1)
     contact_jitter: int = Field(default=1, ge=0)
     contact_min_lines: int = Field(default=2, ge=1)
     contact_max_lines: int = Field(default=3, ge=1)
@@ -294,8 +294,12 @@ class ShowConfig(BaseModel):
     restatement_contacts: int = Field(default=5, ge=1)
     # How an event is worded: on (the default since the A/B of 2026-09-25), the listeners cannot see it and the
     # first to speak tells them on air what is happening; off, "Offstage: <event>" (the characters only react,
-    # which a listener cannot follow)
+    # which a listener cannot follow). With fixed_lines on, an event is read as a fixed line and this does not apply.
     event_report: bool = True
+    # Fixed lines (2026-09-27): a free round's event is read word for word by its first speaker, and the receiver
+    # beats' key lines come from the story's beats.yaml, said by a cast member instead of written by the model;
+    # off, the model writes them all.
+    fixed_lines: bool = True
     interaction_min_s: float = Field(default=60.0, ge=0)
     interaction_max_s: float = Field(default=180.0, ge=0)
     listen_window_s: float = Field(default=10.0, gt=0)

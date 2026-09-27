@@ -78,7 +78,7 @@ All commands run from this repository's root,
   1-4 weighted 1:3:3:1); `overtone_hold` / `overtone_jitter` (a free
   round's overtone held 4 ± 1 free rounds, then drifting to a
   neighbor); `contact_exchanges` / `contact_jitter` (a contact lasts
-  3 ± 1 of the listener's answers); `contact_min_lines` /
+  5 ± 1 of the listener's answers); `contact_min_lines` /
   `contact_max_lines` (an exchange's 2-3 lines);
   `silences_to_switch_off` (2); `beat_max_lines` (the Repair's and the
   Switch-off's 2 lines, the orientation's up to 2); `breakdown_lines`
@@ -92,7 +92,11 @@ All commands run from this repository's root,
   went off. The palette itself — the overtones, their moods and tone
   words, the overtones each kind of round may use, the drift's weights
   — is the story's `overtones.yaml`; the events are filed by overtone in
-  `events.yaml`; the agenda is `agenda.yaml`.
+  `events.yaml`; the agenda is `agenda.yaml`. `fixed_lines` (on) has
+  the cast say the key lines word for word — an event read out, the
+  call, the Breakdown's closing line, the Switch-off's opening line —
+  from the event's text and the story's `beats.yaml`; the driver marks
+  them `[fixed]`.
 
 ## Play rounds
 

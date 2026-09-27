@@ -35,7 +35,8 @@ class TestShowConfig:
         assert show.stt_language == "en"
         assert (show.free_lines, show.free_line_weights) == ([1, 2, 3, 4], [1.0, 3.0, 3.0, 1.0])
         assert (show.overtone_hold, show.overtone_jitter) == (4, 1)
-        assert (show.contact_exchanges, show.contact_jitter) == (3, 1)
+        assert (show.contact_exchanges, show.contact_jitter) == (5, 1)
+        assert show.fixed_lines is True
         assert (show.contact_min_lines, show.contact_max_lines) == (2, 3)
         assert (show.silences_to_switch_off, show.beat_max_lines, show.breakdown_lines) == (2, 2, 3)
         assert (show.orientation_every, show.orientation_jitter) == (20, 5)

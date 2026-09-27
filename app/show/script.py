@@ -28,10 +28,12 @@ from app.show.story import Story
 
 
 class Line(BaseModel):
+    """A script line; fixed when the director wrote it and a cast member said it word for word."""
     speaker: str
     mood: Optional[str] = None
     raw: str
     spoken: str
+    fixed: bool = False
 
 
 class Heard(BaseModel):

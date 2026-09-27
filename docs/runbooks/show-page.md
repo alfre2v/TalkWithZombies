@@ -58,8 +58,9 @@ Step 3.4c's director (the fork's `app/show/director.py`; zombie-radio's
 the defaults, all in `settings.yaml` under `show:`.
 
 - **Broadcast — the receiver is down.** The cast talk among
-  themselves; an event (something the listeners cannot see) is reported
-  on air every few rounds. The show opens with the operator's sign-on:
+  themselves; every few rounds an event (something the listeners cannot
+  see) is read out on air, word for word, by one of the cast, and the
+  others react. The show opens with the operator's sign-on:
   who the cast are, where they are, and that they can only transmit for
   now. An orientation repeats it for newcomers every 20 ± 5 free rounds
   (`orientation_every`), opened by whoever has been silent longest.
@@ -72,17 +73,16 @@ the defaults, all in `settings.yaml` under `show:`.
   first (else whoever asked you last), then the cast ask you something:
   who you are first, then what they need (the story's `agenda.yaml`) —
   and they remember what you said, earlier callers included. After each
-  exchange the radio listens again. After 3 ± 1 of your answers
+  exchange the radio listens again. After 5 ± 1 of your answers
   (`contact_exchanges`), the Breakdown: they answer you, then the
-  receiver fails — they tell you what they see, and that they can no
-  longer hear you but go on broadcasting — and the RECEIVER sign goes
-  dark.
+  receiver fails, and the operator tells you they can no longer hear
+  you but go on broadcasting; the RECEIVER sign goes dark.
 - **Silence.** A silent window gets a re-call: before anyone answered,
   the operator calls once more; inside a contact, whoever was talking
   calls you back and repeats the question. Two silences in a row
-  (`silences_to_switch_off`), and they switch the receiver off — to save
-  power, or to spare it for a better time — and tell you they will not
-  hear you until it is back on; the broadcast goes on.
+  (`silences_to_switch_off`), and the operator switches the receiver
+  off — to save power, or to spare it for a better time — and tells you
+  they will not hear you until it is back on; the broadcast goes on.
 - **After a contact** the next round talks about what you said (the
   aftermath); every 15 ± 5 free rounds (`recollection_every`) the cast
   recall a past caller and imagine how they could help if they call
@@ -92,6 +92,14 @@ the defaults, all in `settings.yaml` under `show:`.
   lines may carry and its tone word: the call is hopeful, a contact
   hopeful or level, a Breakdown level or grim; the broadcast drifts
   between neighbors, a stretch at a time.
+- **Fixed lines** (`fixed_lines`, on). The lines the listener must not
+  miss are not left to the model: the event read out, the call (both of
+  its lines), the Breakdown's closing line and the Switch-off's opening
+  line are said word for word by the cast — the event's own text, and
+  for the receiver the story's `beats.yaml` (four versions of each,
+  drawn without repeats). The model writes the lines around them, and
+  sees them in the script like any other; a call is not sent to the
+  model at all. Off, the model writes every line.
 
 ## The voice
 

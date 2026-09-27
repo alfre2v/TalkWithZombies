@@ -68,7 +68,7 @@ def play_round(base, run_id, played_s, heard=None):
             elif event["type"] == "done":
                 first = first if first is not None else elapsed
                 lines += 1
-                tag = f" ({mood})" if mood else ""
+                tag = (f" ({mood})" if mood else "") + (" [fixed]" if event.get("fixed") else "")
                 print(f"  [{elapsed:5.2f}s] {event['persona']}{tag}: {event['text']}")
             elif event["type"] == "round":
                 summary = event

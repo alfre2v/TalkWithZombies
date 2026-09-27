@@ -47,13 +47,22 @@ _DRIFTS = frozenset({"free", "breakdown", "switch-off"})
 
 
 @dataclass(frozen=True)
+class FixedLine:
+    """A line the director writes, said word for word by a cast member: the speaker, the mood, the text."""
+    speaker: str
+    mood: Optional[str]
+    text: str
+
+
+@dataclass(frozen=True)
 class RoundPlan:
     """One round's plan: its kind, who may speak, the line budget, and the words and grammar that state them.
 
     overtone is the round's overtone; agenda the item an exchange asks; slot what fills a free round's event
     slot besides an event ("aftermath" or "recollection"); recollects the Repair that opened the contact an
     aftermath or a recollection talks about; answers, after a listening window, the listener's answers in this
-    contact so far and the number that ends it.
+    contact so far and the number that ends it. before and after are the fixed lines said before and after the
+    model's; max_lines counts the model's lines only, and with 0 the model is not asked (grammar is empty).
     """
     kind: str
     speakers: Tuple[str, ...]
@@ -68,6 +77,8 @@ class RoundPlan:
     slot: Optional[str] = None
     recollects: Optional[int] = None
     answers: Optional[Tuple[int, int]] = None
+    before: Tuple[FixedLine, ...] = ()
+    after: Tuple[FixedLine, ...] = ()
 
     @property
     def listens(self) -> bool:
@@ -132,7 +143,9 @@ def _free(run: Run, story: Story, show: ShowConfig, rng: random.Random, *, slot:
 
     Two or three names: whoever has been silent longest, anyone named in the last round, then random fill. A
     line budget drawn from the settings, the overtone of the drift, and in the event slot an event when its gap
-    has passed — unless the slot holds an aftermath or a recollection, the listener's words.
+    has passed — unless the slot holds an aftermath or a recollection, the listener's words. With fixed_lines,
+    the first name reads the event word for word as the round's first line, and the model writes the rest of the
+    budget, opened by the second name.
     """
     silent = _silent_longest(run, story, rng)
     named = sorted(_named_last_round(run, story) - {silent}, key=story.cast.index)
@@ -146,6 +159,14 @@ def _free(run: Run, story: Story, show: ShowConfig, rng: random.Random, *, slot:
     event = _next_event(run, story, overtone, rng) if slot is None and _event_due(run, show) else None
     tone = _tone(run, story, show, overtone, rng)
     moods = _moods(run, story, overtone)
+    if event and show.fixed_lines:
+        reader = chosen[0]
+        told = f'Something happens that the listeners cannot see, and {reader} has just told them on air: "{event}"'
+        rest = max_lines - 1
+        opener = chosen[1] if len(chosen) > 1 else reader
+        text = f"{told} Carry on from there. " + _turns(speakers, rest, moods, tone, first=opener) if rest else told
+        return _plan("free", speakers, rest, moods, instruction=text, first=opener if rest else None, event=event,
+                     tone=tone, overtone=overtone, before=(_fixed(reader, moods, event, rng),))
     text = instruction_for(speakers, max_lines, event, moods, tone, show.event_report)
     if slot == "aftermath":
         text = f"{_ended('The voice on the frequency told you: ' + _quoted(words))} Talk among yourselves about " \
@@ -195,7 +216,9 @@ def _repair(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> Rou
     lab can hear them and calls for an answer, closing the round; the page listens.
 
     beat_max_lines lines, the operator's pinned last; with one line, or a cast of one, the operator says it all.
-    The wording follows how the receiver went off.
+    The wording follows how the receiver went off. With fixed_lines and the story's beats, both lines are fixed —
+    the announcement by whoever of the rest has been silent longest, then the operator's call — and the model is
+    not asked.
     """
     op = story.operator
     others = [name for name in story.cast if name != op]
@@ -203,11 +226,19 @@ def _repair(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> Rou
     tone = _tone(run, story, show, overtone, rng)
     moods = _moods(run, story, overtone)
     off = _last_index(run, _OFF)
-    back = "switches the receiver, the part of the radio that hears, back on" \
-        if off is not None and run.rounds[off].kind == "switch-off" \
+    switched = off is not None and run.rounds[off].kind == "switch-off"
+    back = "switches the receiver, the part of the radio that hears, back on" if switched \
         else "has fixed the receiver, the part of the radio that hears"
     seen = f"Something happens that the listeners cannot see: the lab {back}. " \
            + (f"{story.directions['repair']} " if story.directions.get("repair") else "")
+    if show.fixed_lines and story.beats and others:
+        pool = story.beats.repair_after_switch_off if switched else story.beats.repair_after_breakdown
+        announcement, call = _version(run, pool, rng, first_line=lambda pair: pair[0])
+        announcer = _silent_longest(run, story, rng, among=others)
+        said = (_fixed(announcer, moods, announcement, rng), _fixed(op, moods, call, rng))
+        return _plan("repair", (announcer, op), 0, moods, tone=tone, overtone=overtone, before=said,
+                     instruction=f"{seen}{announcer} tells the listeners on air, then {op} calls out to anyone "
+                                 f"listening.")
     call = 'in their own words: "We can hear you now. Answer us."'
     lines = show.beat_max_lines
     if not others or lines == 1:
@@ -268,7 +299,9 @@ def _breakdown(run: Run, story: Story, show: ShowConfig, heard: str, rng: random
 
     breakdown_lines lines. Each job has its line when the count allows: the first answers the voice, the second
     tells the listeners what is happening to the receiver, the last what it means for them, in the cast's own
-    words; with two lines the last does both.
+    words; with two lines the last does both. With fixed_lines and the story's beats, the last line is the
+    operator's fixed one and the model writes the lines before it: the answer, then the others react; the
+    operator speaks among them only when the voice addressed them.
     """
     first = _addressed(run, story, heard)
     lines = show.breakdown_lines
@@ -279,6 +312,25 @@ def _breakdown(run: Run, story: Story, show: ShowConfig, heard: str, rng: random
     fails = f"Then something happens that the listeners cannot see: {direction}"
     means = 'in their own words: "We can\'t hear you anymore, but we\'re still on the air."'
     answer = "answers what the voice just said, speaking to them directly."
+    if show.fixed_lines and story.beats:
+        op = story.operator
+        closing = _fixed(op, moods, _version(run, story.beats.breakdown, rng), rng)
+        rest = lines - 1
+        speakers = tuple(name for name in story.cast if name != op or name == first)
+        closes = f"{op} closes the round, telling the listeners the lab can no longer hear them: do not say that " \
+                 f"for {op}."
+        if rest >= 2:
+            react = "second line reacts" if rest == 2 else "other lines react"
+            jobs = f"The first line {answer} {fails} The {react} to it. {closes}"
+        elif rest == 1:
+            jobs = f"The line {answer} {fails} {closes}"
+        else:
+            jobs = fails
+        text = f'A voice on the frequency says: "{heard}" {_restatement(run, show)}{jobs}' \
+               + (" " + _turns(speakers, rest, moods, tone, first=first) if rest else "")
+        return _plan("breakdown", speakers if rest else (op,), rest, moods, instruction=text, min_lines=rest or 1,
+                     first=first if rest else None, tone=tone, listener=heard, overtone=overtone, answers=answers,
+                     after=(closing,))
     if lines >= 3:
         jobs = f"The first line {answer} {fails} The second line tells the listeners on air, in detail, what is " \
                f"happening to the receiver: what they see and hear. The last line tells them, {means}"
@@ -325,7 +377,9 @@ def _switch_off(run: Run, story: Story, show: ShowConfig, rng: random.Random,
 
     beat_max_lines lines, the first pinned to whoever called last: the operator before anyone answered, else
     whoever was talking to the listener. The first line says the receiver is going off and why, the last what it
-    means for the listeners; with one line, that line says it all.
+    means for the listeners; with one line, that line says it all. With fixed_lines and the story's beats, the
+    first line is the operator's fixed one, told apart by whether the voice was lost or nobody answered, and the
+    rest of the cast react in the lines after it.
     """
     answered = any(r.listener for r in _receiver_period(run))
     caller = _asker(run, story) if answered else story.operator
@@ -334,6 +388,17 @@ def _switch_off(run: Run, story: Story, show: ShowConfig, rng: random.Random,
     moods = _moods(run, story, overtone)
     lines = show.beat_max_lines
     opening = "The voice is gone. " if answered else "Nobody answered the call. "
+    if show.fixed_lines and story.beats:
+        op = story.operator
+        pool = story.beats.switch_off_voice_lost if answered else story.beats.switch_off_nobody_answered
+        version = _version(run, pool, rng)
+        told = f'{opening}{op} has just told the listeners on air: "{version}"'
+        others = tuple(name for name in story.cast if name != op)
+        rest = lines - 1 if others else 0
+        react = "line reacts" if rest == 1 else "lines react"
+        text = f"{told} The next {react} to it. " + _turns(others, rest, moods, tone) if rest else told
+        return _plan("switch-off", others if rest else (op,), rest, moods, instruction=text, min_lines=rest or 1,
+                     tone=tone, overtone=overtone, answers=answers, before=(_fixed(op, moods, version, rng),))
     what = "that the lab has lost them and is switching the receiver off now" if answered \
         else "that the lab is switching the receiver off now"
     says = f"{caller} tells the listeners on air {what}, and why: to save power, or to spare the fragile receiver " \
@@ -584,12 +649,40 @@ def _plan(kind: str, speakers: Sequence[str], max_lines: int, moods: Optional[Se
           min_lines: int = 1, first: Optional[str] = None, last: Optional[str] = None, event: Optional[str] = None,
           tone: Optional[str] = None, listener: Optional[str] = None, overtone: Optional[str] = None,
           agenda: Optional[str] = None, slot: Optional[str] = None, recollects: Optional[int] = None,
-          answers: Optional[Tuple[int, int]] = None) -> RoundPlan:
-    """Assemble a plan, building its grammar from the same speakers, budget, pins and moods as its words."""
+          answers: Optional[Tuple[int, int]] = None, before: Sequence[FixedLine] = (),
+          after: Sequence[FixedLine] = ()) -> RoundPlan:
+    """Assemble a plan, building its grammar from the same speakers, budget, pins and moods as its words; no
+    grammar when the model writes no line."""
+    grammar = build_grammar(speakers, max_lines, moods, min_lines=min_lines, first=first, last=last) \
+        if max_lines else ""
     return RoundPlan(kind=kind, speakers=tuple(speakers), max_lines=max_lines, event=event, tone=tone,
-                     listener=listener, instruction=instruction,
-                     grammar=build_grammar(speakers, max_lines, moods, min_lines=min_lines, first=first, last=last),
-                     overtone=overtone, agenda=agenda, slot=slot, recollects=recollects, answers=answers)
+                     listener=listener, instruction=instruction, grammar=grammar,
+                     overtone=overtone, agenda=agenda, slot=slot, recollects=recollects, answers=answers,
+                     before=tuple(before), after=tuple(after))
+
+
+def _fixed(speaker: str, moods: Optional[Sequence[str]], text: str, rng: random.Random) -> FixedLine:
+    """A fixed line: the text as a transmission, ending on "Over." like every line, and a mood drawn from the
+    round's moods (None with moods off)."""
+    return FixedLine(speaker, rng.choice(tuple(moods)) if moods else None, _over(text))
+
+
+def _over(text: str) -> str:
+    """The text ending on "Over.", added unless it already does."""
+    text = text.strip()
+    return text if text.endswith("Over.") else f"{text} Over."
+
+
+def _version(run: Run, pool: Sequence, rng: random.Random, first_line=lambda version: version):
+    """Draw a version of a fixed line (or of a pair, told apart by its first line): one not said since the pool
+    was last used up, read back from the record's fixed lines."""
+    def key(text: str) -> str:
+        return re.sub(r"[^a-z]", "", text.lower())
+
+    versions = {key(_over(first_line(v))): v for v in pool}
+    said = [versions[key(line.spoken)] for r in run.rounds for line in r.lines
+            if line.fixed and key(line.spoken) in versions]
+    return rng.choice(_fresh(pool, said))
 
 
 def _last_index(run: Run, kinds: Set[str]) -> Optional[int]:
@@ -607,16 +700,17 @@ def _ended(text: str) -> str:
     return text if text.rstrip('"').endswith((".", "!", "?")) else text + "."
 
 
-def _silent_longest(run: Run, story: Story, rng: random.Random) -> str:
-    """Name the cast member whose last line is the oldest.
+def _silent_longest(run: Run, story: Story, rng: random.Random, among: Optional[Sequence[str]] = None) -> str:
+    """Name the cast member (or, with among, the one of those) whose last line is the oldest.
     Never having spoken counts as oldest; ties are drawn at random.
     """
-    last_line = {name: -1 for name in story.cast}
+    names = [name for name in story.cast if among is None or name in among]
+    last_line = {name: -1 for name in names}
     for i, line in enumerate(line for r in run.rounds for line in r.lines):
         if line.speaker in last_line:
             last_line[line.speaker] = i
     oldest = min(last_line.values())
-    return rng.choice([name for name in story.cast if last_line[name] == oldest])
+    return rng.choice([name for name in names if last_line[name] == oldest])
 
 
 def _named_last_round(run: Run, story: Story) -> Set[str]:

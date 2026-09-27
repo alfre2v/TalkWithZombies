@@ -19,6 +19,10 @@ counted as silence, if it did). The summary also carries the round's
 overtone, the agenda item it asked, what filled its event slot, the
 listener's answers so far in a contact and the number that ends it, and
 the stage direction of a receiver beat (the story's).
+A round's fixed lines (the director's, said word for word: an event read
+aloud, a receiver beat's key line) are streamed in their place with the
+same events, marked `fixed`, and recorded with the model's; a round made
+only of fixed lines does not ask the model.
 With show.debug on, each round also leaves its debug files
 (app/show/debug.py), failed rounds included, and a recorded round keeps
 them even when the client leaves while they are being written.
@@ -159,21 +163,47 @@ async def _round_stream(run: Run, story: Story, req: ShowRoundRequest) -> AsyncI
     messages = assemble_messages(run, plan.instruction)
     request = {"grammar": plan.grammar, "max_tokens": show.max_tokens, "seed": run.seed + n}
     parser = LineParser(run.moods)
-    line_no = 0
+    counted = {"lines": 0}
+    fixed_at = set()
     final: dict = {}
     pieces = []
+
+    def feed(piece: str, fixed: bool = False) -> list:
+        """Feed the parser the model's tokens, or a fixed line whole; the SSE events it gives, fixed ones marked."""
+        known = len(parser.lines)
+        events = []
+        for event in parser.feed(piece):
+            if event["type"] == "start":
+                counted["lines"] += 1
+            if event["type"] in ("start", "done"):
+                event["message_id"] = f"{run.run_id}-r{n:03d}-l{counted['lines']}"
+                if fixed:
+                    event["fixed"] = True
+            events.append(_sse(event))
+        if fixed:
+            fixed_at.update(range(known, len(parser.lines)))
+        return events
+
+    def said(line) -> str:
+        """A fixed line as the model would have written it: the speaker, the mood, the text, the line break."""
+        return f"{line.speaker} ({line.mood}): {line.text}\n" if line.mood else f"{line.speaker}: {line.text}\n"
+
     try:
-        async for item in stream_round(messages, **request):
-            if "token" not in item:
-                final = item
-                continue
-            pieces.append(item["token"])
-            for event in parser.feed(item["token"]):
-                if event["type"] == "start":
-                    line_no += 1
-                if event["type"] in ("start", "done"):
-                    event["message_id"] = f"{run.run_id}-r{n:03d}-l{line_no}"
-                yield _sse(event)
+        for line in plan.before:
+            for event in feed(said(line), fixed=True):
+                yield event
+        if plan.max_lines:
+            async for item in stream_round(messages, **request):
+                if "token" not in item:
+                    final = item
+                    continue
+                pieces.append(item["token"])
+                for event in feed(item["token"]):
+                    yield event
+            parser.finish()  # A line the model left unfinished is dropped before a fixed line follows
+        for line in plan.after:
+            for event in feed(said(line), fixed=True):
+                yield event
     except (asyncio.CancelledError, GeneratorExit):
         logger.info("Show run %s, round %s abandoned by the client; nothing recorded", run.run_id, n)
         raise
@@ -190,7 +220,7 @@ async def _round_stream(run: Run, story: Story, req: ShowRoundRequest) -> AsyncI
     round_ = Round(
         n=n, kind=plan.kind, played_s=req.played_s, instruction=plan.instruction, listener=plan.listener,
         heard=heard, speakers=list(plan.speakers), max_lines=plan.max_lines, event=plan.event, tone=plan.tone,
-        lines=[Line(**dataclasses.asdict(line)) for line in parser.lines],
+        lines=[Line(**dataclasses.asdict(line), fixed=i in fixed_at) for i, line in enumerate(parser.lines)],
         dropped=parser.dropped, timings=final.get("timings"), finish_reason=final.get("finish_reason"),
         tokens=round_share(size_before, trimmed_tokens, final.get("timings")), trims=trimmed,
         overtone=plan.overtone, agenda=plan.agenda, slot=plan.slot, recollects=plan.recollects,

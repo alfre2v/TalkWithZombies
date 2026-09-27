@@ -8,7 +8,9 @@ A story is a folder ``stories/<name>/`` holding:
   moods a line may carry and its tone words by theme; the overtones each kind of round may use; the weights of the
   free rounds' drift from one overtone to a neighbor;
 - ``events.yaml`` — the events, filed by overtone, then by theme;
-- ``agenda.yaml`` — what the cast want from a listener, one item per exchange; the first opens every contact.
+- ``agenda.yaml`` — what the cast want from a listener, one item per exchange; the first opens every contact;
+- ``beats.yaml`` (optional) — the receiver beats' fixed lines, said word for word by a cast member instead of written
+  by the model; without it, the model writes the beats.
 
 The body's placeholders are filled at render time: ``model_prefix`` from the settings, ``format_rules`` from the
 rule snippet the emotion switch picks, ``episode`` from the current episode.
@@ -50,6 +52,21 @@ class Overtone:
 
 
 @dataclass(frozen=True)
+class Beats:
+    """The receiver beats' fixed lines (beats.yaml), several versions of each, drawn without repeats.
+
+    A Repair is two lines, the announcement and the operator's call, told apart by how the receiver went off; the
+    Breakdown's is the operator's closing line; the Switch-off's is the operator's opening line, told apart by
+    whether nobody answered the call or the voice of a contact was lost.
+    """
+    repair_after_breakdown: Tuple[Tuple[str, str], ...]
+    repair_after_switch_off: Tuple[Tuple[str, str], ...]
+    breakdown: Tuple[str, ...]
+    switch_off_nobody_answered: Tuple[str, ...]
+    switch_off_voice_lost: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class Story:
     """A loaded story.
 
@@ -70,6 +87,7 @@ class Story:
     agenda: Tuple[str, ...] = ()
     orientation: str = ""
     directions: Dict[str, str] = field(default_factory=dict)
+    beats: Optional[Beats] = None
 
 
 def load_story(name: str, root: Optional[Path] = None) -> Story:
@@ -112,7 +130,8 @@ def load_story(name: str, root: Optional[Path] = None) -> Story:
                  tones=tuple(w for o in overtones for words in o.tones.values() for w in words),
                  overtones=overtones, kinds=kinds, weights=weights, event_pools=pools,
                  agenda=_load_agenda(name, folder / "agenda.yaml"), orientation=orientation.strip(),
-                 directions={beat: text.strip() for beat, text in directions.items()})
+                 directions={beat: text.strip() for beat, text in directions.items()},
+                 beats=_load_beats(name, folder / "beats.yaml"))
 
 
 def _read_yaml(name: str, path: Path) -> dict:
@@ -223,6 +242,38 @@ def _load_agenda(name: str, path: Path) -> Tuple[str, ...]:
     if agenda is None or len(agenda) < 2 or len(set(agenda)) != len(agenda):
         raise StoryError(f"story {name!r}: agenda.yaml needs 'agenda', a list of at least two different items")
     return agenda
+
+
+def _load_beats(name: str, path: Path) -> Optional[Beats]:
+    """Read beats.yaml, if the story has one: every list non-empty, every text a non-blank string, each Repair a
+    pair of lines. None without the file."""
+    if not path.is_file():
+        return None
+    data = _read_yaml(name, path)
+
+    def fail(what: str):
+        raise StoryError(f"story {name!r}: beats.yaml needs {what}")
+
+    def section(key: str) -> dict:
+        value = data.get(key)
+        return value if isinstance(value, dict) else fail(f"'{key}', a mapping")
+
+    def texts(value, where: str) -> Tuple[str, ...]:
+        return _texts(value) or fail(f"'{where}', a list of lines")
+
+    def pairs(value, where: str) -> Tuple[Tuple[str, str], ...]:
+        if not isinstance(value, list) or not value:
+            fail(f"'{where}', a list of pairs of lines")
+        found = [texts(pair, where) for pair in value]
+        return tuple((a, b) for a, b in found) if all(len(p) == 2 for p in found) else fail(
+            f"'{where}' of pairs: the announcement, then the call")
+
+    repair, switch_off = section("repair"), section("switch-off")
+    return Beats(repair_after_breakdown=pairs(repair.get("after-breakdown"), "repair: after-breakdown"),
+                 repair_after_switch_off=pairs(repair.get("after-switch-off"), "repair: after-switch-off"),
+                 breakdown=texts(data.get("breakdown"), "breakdown"),
+                 switch_off_nobody_answered=texts(switch_off.get("nobody-answered"), "switch-off: nobody-answered"),
+                 switch_off_voice_lost=texts(switch_off.get("voice-lost"), "switch-off: voice-lost"))
 
 
 def all_moods(story: Story) -> List[str]:

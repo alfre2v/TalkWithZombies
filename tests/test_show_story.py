@@ -68,15 +68,19 @@ OVERTONES = ("overtones:\n"
              "  down:\n    moods: [sad, afraid]\n    tones:\n      Dark: [grim, eerie]\n") + KINDS + WEIGHTS
 EVENTS = "events:\n  down:\n    Dark:\n      - Something happens.\n"
 AGENDA = "agenda:\n  - Who are you?\n  - Where are you?\n"
+BEATS = ("repair:\n  after-breakdown:\n    - [Fixed!, Answer us.]\n  after-switch-off:\n    - [Back on!, Answer us.]\n"
+         "breakdown:\n  - It's dead.\nswitch-off:\n  nobody-answered:\n    - Nobody. Off.\n  voice-lost:\n"
+         "    - Lost you. Off.\n")
 
 
 def _write_story(root, *, front=FRONT + DIRECTIONS,
                  body="{{ model_prefix }}\nWorld.\n\n{{ format_rules }}\n\n{{ episode }}\n",
-                 overtones=OVERTONES, events=EVENTS, agenda=AGENDA, name="s"):
+                 overtones=OVERTONES, events=EVENTS, agenda=AGENDA, beats=None, name="s"):
     folder = root / name
     folder.mkdir(parents=True)
     (folder / "cast_sheet.md").write_text(f"---\n{front}---\n{body}" if front is not None else body)
-    for file, text in (("overtones.yaml", overtones), ("events.yaml", events), ("agenda.yaml", agenda)):
+    for file, text in (("overtones.yaml", overtones), ("events.yaml", events), ("agenda.yaml", agenda),
+                       ("beats.yaml", beats)):
         if text is not None:
             (folder / file).write_text(text)
     return root
@@ -106,6 +110,10 @@ class TestShippedStory:
         assert story.agenda[0].startswith("Find out who the voice is.")
         assert "receiver is dead" in story.orientation
         assert set(story.directions) == {"repair", "breakdown", "switch-off"}
+        beats = story.beats
+        assert [len(beats.repair_after_breakdown), len(beats.repair_after_switch_off), len(beats.breakdown),
+                len(beats.switch_off_nobody_answered), len(beats.switch_off_voice_lost)] == [4, 4, 4, 4, 4]
+        assert all(len(pair) == 2 for pair in beats.repair_after_breakdown + beats.repair_after_switch_off)
 
     def test_moods_off_renders_the_run_1_prompt(self, voices):
         story = load_story("lab-outbreak", SHIPPED)
@@ -189,6 +197,22 @@ class TestStoryErrors:
     def test_malformed_overtones_fail(self, voices, tmp_path, overtones, match):
         with pytest.raises(StoryError, match=match):
             load_story("s", _write_story(tmp_path, overtones=overtones))
+
+    def test_beats_are_optional_and_read_when_present(self, voices, tmp_path):
+        assert load_story("s", _write_story(tmp_path / "a")).beats is None
+        beats = load_story("s", _write_story(tmp_path / "b", beats=BEATS)).beats
+        assert beats.repair_after_breakdown == (("Fixed!", "Answer us."),)
+        assert (beats.breakdown, beats.switch_off_voice_lost) == (("It's dead.",), ("Lost you. Off.",))
+
+    @pytest.mark.parametrize("beats, match", [
+        (BEATS.replace("repair:", "repairs:"), "'repair', a mapping"),
+        (BEATS.replace("[Fixed!, Answer us.]", "[Fixed!, Answer us., Again.]"), "pairs"),
+        (BEATS.replace("  - It's dead.\n", "  []\n"), "'breakdown'"),
+        (BEATS.replace("  voice-lost:\n    - Lost you. Off.\n", ""), "voice-lost"),
+    ])
+    def test_malformed_beats_fail(self, voices, tmp_path, beats, match):
+        with pytest.raises(StoryError, match=match):
+            load_story("s", _write_story(tmp_path, beats=beats))
 
     @pytest.mark.parametrize("agenda", [None, "agenda: []\n", "agenda:\n  - Only one.\n",
                                         "agenda:\n  - Twice.\n  - Twice.\n"])
