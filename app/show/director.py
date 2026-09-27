@@ -191,9 +191,11 @@ def _orientation_due(run: Run, show: ShowConfig) -> bool:
 
 
 def _repair(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> RoundPlan:
-    """The receiver comes back: someone announces it, then the operator's call closes the round; the page listens.
+    """The receiver comes back: someone tells the listeners what happened to it, then the operator tells them the
+    lab can hear them and calls for an answer, closing the round; the page listens.
 
-    Two lines, the operator's pinned last; the wording follows how the receiver went off.
+    beat_max_lines lines, the operator's pinned last; with one line, or a cast of one, the operator says it all.
+    The wording follows how the receiver went off.
     """
     op = story.operator
     others = [name for name in story.cast if name != op]
@@ -201,15 +203,21 @@ def _repair(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> Rou
     tone = _tone(run, story, show, overtone, rng)
     moods = _moods(run, story, overtone)
     off = _last_index(run, _OFF)
-    back = "switches the receiver back on" if off is not None and run.rounds[off].kind == "switch-off" \
-        else "has fixed the receiver"
-    seen = f"The lab {back}. " + (f"{story.directions['repair']} " if story.directions.get("repair") else "")
-    if not others:
-        text = f"{seen}{op} calls out to anyone listening to answer now. " + _turns((op,), 1, moods, tone)
+    back = "switches the receiver, the part of the radio that hears, back on" \
+        if off is not None and run.rounds[off].kind == "switch-off" \
+        else "has fixed the receiver, the part of the radio that hears"
+    seen = f"Something happens that the listeners cannot see: the lab {back}. " \
+           + (f"{story.directions['repair']} " if story.directions.get("repair") else "")
+    call = 'in their own words: "We can hear you now. Answer us."'
+    lines = show.beat_max_lines
+    if not others or lines == 1:
+        text = f"{seen}{op} tells the listeners on air what just happened to the receiver, then tells anyone " \
+               f"listening, {call} " + _turns((op,), 1, moods, tone)
         return _plan("repair", (op,), 1, moods, instruction=text, tone=tone, overtone=overtone)
-    text = f"{seen}{_names(others, 'or')} tells the listeners it works, then {op} calls out to anyone listening " \
-           f"to answer now. " + _turns(story.cast, 2, moods, tone, last=op)
-    return _plan("repair", story.cast, 2, moods, instruction=text, min_lines=2, last=op, tone=tone,
+    text = f"{seen}First, {_names(others, 'or')} tells the listeners on air, in detail, what just happened to the " \
+           f"receiver: what they see and hear. Last, {op} tells anyone listening, {call} " \
+           + _turns(story.cast, lines, moods, tone, last=op)
+    return _plan("repair", story.cast, lines, moods, instruction=text, min_lines=lines, last=op, tone=tone,
                  overtone=overtone)
 
 
@@ -256,17 +264,31 @@ def _exchange(run: Run, story: Story, show: ShowConfig, heard: str, rng: random.
 
 def _breakdown(run: Run, story: Story, show: ShowConfig, heard: str, rng: random.Random,
                answers: Optional[Tuple[int, int]] = None) -> RoundPlan:
-    """Answer the listener's last words, then the receiver fails: built like an exchange, without the question."""
+    """Answer the listener's last words, then the receiver fails: built like an exchange, without the question.
+
+    breakdown_lines lines. Each job has its line when the count allows: the first answers the voice, the second
+    tells the listeners what is happening to the receiver, the last what it means for them, in the cast's own
+    words; with two lines the last does both.
+    """
     first = _addressed(run, story, heard)
-    lines = rng.randint(show.contact_min_lines, show.contact_max_lines)
+    lines = show.breakdown_lines
     overtone = _kind_overtone(story, "breakdown", rng)
     tone = _tone(run, story, show, overtone, rng)
     moods = _moods(run, story, overtone)
-    direction = story.directions.get("breakdown")
-    fails = f"something happens that the listeners cannot see: {direction}" if direction else "the receiver fails."
-    text = f'A voice on the frequency says: "{heard}" {_restatement(run, show)}First answer what the voice just ' \
-           f"said, speaking to them directly. Then {fails} The one who notices tells the listeners on air that the " \
-           f"lab can no longer hear them, only transmit, and that the broadcast goes on while they fix it. " \
+    direction = story.directions.get("breakdown") or "The receiver fails."
+    fails = f"Then something happens that the listeners cannot see: {direction}"
+    means = 'in their own words: "We can\'t hear you anymore, but we\'re still on the air."'
+    answer = "answers what the voice just said, speaking to them directly."
+    if lines >= 3:
+        jobs = f"The first line {answer} {fails} The second line tells the listeners on air, in detail, what is " \
+               f"happening to the receiver: what they see and hear. The last line tells them, {means}"
+    elif lines == 2:
+        jobs = f"The first line {answer} {fails} The last line tells the listeners on air, in detail, what is " \
+               f"happening to the receiver, and then, {means}"
+    else:
+        jobs = f"The line first {answer} {fails} It goes on to tell the listeners on air what is happening to the " \
+               f"receiver, and then, {means}"
+    text = f'A voice on the frequency says: "{heard}" {_restatement(run, show)}{jobs} ' \
            + _turns(story.cast, lines, moods, tone, first=first)
     return _plan("breakdown", story.cast, lines, moods, instruction=text, min_lines=lines, first=first, tone=tone,
                  listener=heard, overtone=overtone, answers=answers)
@@ -301,23 +323,28 @@ def _switch_off(run: Run, story: Story, show: ShowConfig, rng: random.Random,
                 answers: Optional[Tuple[int, int]] = None) -> RoundPlan:
     """Silences in a row: the lab switches the receiver off by choice; the broadcast goes on.
 
-    Up to beat_max_lines lines, the first pinned to whoever called last: the operator before anyone answered,
-    else whoever was talking to the listener.
+    beat_max_lines lines, the first pinned to whoever called last: the operator before anyone answered, else
+    whoever was talking to the listener. The first line says the receiver is going off and why, the last what it
+    means for the listeners; with one line, that line says it all.
     """
     answered = any(r.listener for r in _receiver_period(run))
     caller = _asker(run, story) if answered else story.operator
     overtone = _kind_overtone(story, "switch-off", rng)
     tone = _tone(run, story, show, overtone, rng)
     moods = _moods(run, story, overtone)
-    if answered:
-        why = f"The voice is gone. {caller} tells the listeners the lab has lost them and is switching the " \
-              f"receiver off"
+    lines = show.beat_max_lines
+    opening = "The voice is gone. " if answered else "Nobody answered the call. "
+    what = "that the lab has lost them and is switching the receiver off now" if answered \
+        else "that the lab is switching the receiver off now"
+    says = f"{caller} tells the listeners on air {what}, and why: to save power, or to spare the fragile receiver " \
+           f"for a time when someone is more likely to be listening"
+    means = 'in their own words: "We won\'t hear you until we switch it back on, but we\'re still on the air."'
+    if lines == 1:
+        text = f"{opening}{says}; then tells them, {means} "
     else:
-        why = f"Nobody answered the call. {caller} tells the listeners the lab is switching the receiver off"
-    text = f"{why}, to save power or to spare the fragile receiver for a time when someone is more likely to be " \
-           f"listening; the broadcast goes on. " \
-           + _turns(story.cast, show.beat_max_lines, moods, tone, first=caller)
-    return _plan("switch-off", story.cast, show.beat_max_lines, moods, instruction=text, first=caller, tone=tone,
+        text = f"{opening}First, {says}. The last line tells them, {means} "
+    text += _turns(story.cast, lines, moods, tone, first=caller)
+    return _plan("switch-off", story.cast, lines, moods, instruction=text, min_lines=lines, first=caller, tone=tone,
                  overtone=overtone, answers=answers)
 
 

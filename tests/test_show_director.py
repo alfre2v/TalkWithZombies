@@ -320,9 +320,27 @@ class TestCadence:
 
         assert (plan.kind, plan.max_lines, _pins(plan), plan.overtone) == ("repair", 2, ("Samantha", "last"), "up")
         assert plan.grammar.startswith("root    ::= line{1,1} pinned")
-        assert plan.instruction.startswith("The lab has fixed the receiver. The receiver crackles. Daniel, Moira or "
-                                           "Ralph tells the listeners it works, then Samantha calls out to anyone "
-                                           "listening to answer now.")
+        assert plan.instruction.startswith(
+            "Something happens that the listeners cannot see: the lab has fixed the receiver, the part of the radio "
+            "that hears. The receiver crackles. First, Daniel, Moira or Ralph tells the listeners on air, in detail, "
+            "what just happened to the receiver: what they see and hear. Last, Samantha tells anyone listening, "
+            'in their own words: "We can hear you now. Answer us."')
+
+    @pytest.mark.parametrize("budget", [1, 3])
+    def test_the_repairs_lines_follow_beat_max_lines(self, budget):
+        show = _show(beat_max_lines=budget)
+        run = _run()
+        _next(run, show=show)
+        plan = plan_round(run, STORY, show, played_s=200)
+
+        assert (plan.kind, plan.max_lines) == ("repair", budget)
+        if budget == 1:
+            assert plan.speakers == ("Samantha",)
+            assert ('Samantha tells the listeners on air what just happened to the receiver, then tells anyone '
+                    'listening, in their own words: "We can hear you now. Answer us."' in plan.instruction)
+        else:
+            assert plan.grammar.startswith("root    ::= line{2,2} pinned")
+            assert _pins(plan) == ("Samantha", "last")
 
     def test_after_a_switch_off_the_receiver_is_switched_back_on(self):
         run = _in_contact()
@@ -332,7 +350,8 @@ class TestCadence:
         _next(run, played_s=220)
         plan = plan_round(run, STORY, SHOW, played_s=500)
         assert plan.kind == "repair"
-        assert plan.instruction.startswith("The lab switches the receiver back on.")
+        assert plan.instruction.startswith("Something happens that the listeners cannot see: the lab switches the "
+                                           "receiver, the part of the radio that hears, back on.")
 
 
 class TestContact:
@@ -370,20 +389,37 @@ class TestContact:
             assert set(kinds[:answers - 1]) <= {"exchange"}
 
     def test_the_breakdown_answers_the_last_words_then_the_receiver_fails(self):
-        show = _show(contact_exchanges=2, contact_jitter=0)
+        show = _show(contact_exchanges=2, contact_jitter=0, contact_min_lines=2, contact_max_lines=2)
         run = _in_contact(show=show)
         _next(run, show=show, played_s=210, transcript="I'm Alfredo.")
         plan = plan_round(run, STORY, show, 220, "Moira, we're coming.")
 
-        assert (plan.kind, plan.listener, _pins(plan)[0], plan.listens) == (
-            "breakdown", "Moira, we're coming.", "Moira", False)
+        assert (plan.kind, plan.listener, _pins(plan)[0], plan.listens, plan.max_lines) == (
+            "breakdown", "Moira, we're coming.", "Moira", False, 3)
         assert plan.overtone in ("level", "down")
-        assert plan.instruction.startswith('A voice on the frequency says: "Moira, we\'re coming." Earlier in this '
-                                           'contact the voice said: "I\'m Alfredo." First answer what the voice just '
-                                           "said, speaking to them directly. Then something happens that the "
-                                           "listeners cannot see: Smoke pours from the receiver. The one who notices "
-                                           "tells the listeners on air that the lab can no longer hear them")
+        assert plan.instruction.startswith(
+            'A voice on the frequency says: "Moira, we\'re coming." Earlier in this contact the voice said: "I\'m '
+            'Alfredo." The first line answers what the voice just said, speaking to them directly. Then something '
+            "happens that the listeners cannot see: Smoke pours from the receiver. The second line tells the "
+            "listeners on air, in detail, what is happening to the receiver: what they see and hear. The last line "
+            'tells them, in their own words: "We can\'t hear you anymore, but we\'re still on the air."')
         assert "asks the voice a question" not in plan.instruction
+
+    @pytest.mark.parametrize("lines, jobs", [
+        (2, "The first line answers what the voice just said, speaking to them directly. Then something happens "
+            "that the listeners cannot see: Smoke pours from the receiver. The last line tells the listeners on "
+            "air, in detail, what is happening to the receiver, and then, in their own words: \"We can't hear "
+            "you anymore"),
+        (1, "The line first answers what the voice just said, speaking to them directly. Then something happens "
+            "that the listeners cannot see: Smoke pours from the receiver. It goes on to tell the listeners on air "
+            "what is happening to the receiver, and then, in their own words: \"We can't hear you anymore"),
+    ])
+    def test_the_breakdowns_jobs_share_fewer_lines(self, lines, jobs):
+        show = _show(contact_exchanges=1, contact_jitter=0, breakdown_lines=lines)
+        plan = plan_round(_in_contact(show=show), STORY, show, 210, "Hello?")
+
+        assert (plan.kind, plan.max_lines) == ("breakdown", lines)
+        assert jobs in plan.instruction
 
     def test_each_round_after_a_window_reports_the_answers_so_far_and_the_number_that_ends_the_contact(self):
         show = _show(contact_exchanges=3, contact_jitter=0)
@@ -430,11 +466,26 @@ class TestSilence:
         assert (re_call.kind, _pins(re_call), re_call.max_lines) == ("re-call", ("Samantha", "first"), 1)
         assert re_call.instruction.startswith("Only static answers. Samantha calls out once more to anyone "
                                               "listening, asking them to answer now; the receiver is still on.")
-        assert (switch_off.kind, _pins(switch_off)[0], switch_off.listens) == ("switch-off", "Samantha", False)
-        assert switch_off.instruction.startswith("Nobody answered the call. Samantha tells the listeners the lab is "
-                                                 "switching the receiver off, to save power or to spare the fragile "
-                                                 "receiver")
-        assert "the broadcast goes on" in switch_off.instruction
+        assert (switch_off.kind, _pins(switch_off)[0], switch_off.listens, switch_off.max_lines) == (
+            "switch-off", "Samantha", False, 2)
+        assert switch_off.grammar.startswith("root    ::= pinned line{1,1}")
+        assert switch_off.instruction.startswith(
+            "Nobody answered the call. First, Samantha tells the listeners on air that the lab is switching the "
+            "receiver off now, and why: to save power, or to spare the fragile receiver for a time when someone is "
+            "more likely to be listening. The last line tells them, in their own words: \"We won't hear you until "
+            "we switch it back on, but we're still on the air.\"")
+
+    def test_a_one_line_switch_off_says_it_all(self):
+        show = _show(beat_max_lines=1)
+        run = _in_contact(show=show)
+        _next(run, show=show, played_s=210)
+        plan = plan_round(run, STORY, show, 215)
+
+        assert (plan.kind, plan.max_lines) == ("switch-off", 1)
+        assert plan.instruction.startswith(
+            "Nobody answered the call. Samantha tells the listeners on air that the lab is switching the receiver "
+            "off now, and why: to save power, or to spare the fragile receiver for a time when someone is more "
+            "likely to be listening; then tells them, in their own words: \"We won't hear you")
 
     def test_silence_inside_a_contact_calls_the_listener_back_with_the_question(self):
         run = _in_contact()
@@ -448,7 +499,8 @@ class TestSilence:
                 'Over." ' in re_call.instruction)
         assert 'Earlier in this contact the voice said: "I\'m Alfredo."' in re_call.instruction
         assert (switch_off.kind, _pins(switch_off)[0]) == ("switch-off", "Ralph")
-        assert switch_off.instruction.startswith("The voice is gone. Ralph tells the listeners the lab has lost them")
+        assert switch_off.instruction.startswith("The voice is gone. First, Ralph tells the listeners on air that the "
+                                                 "lab has lost them and is switching the receiver off now")
 
     def test_an_answer_resets_the_count(self):
         run = _in_contact()

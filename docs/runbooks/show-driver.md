@@ -80,9 +80,11 @@ All commands run from this repository's root,
   neighbor); `contact_exchanges` / `contact_jitter` (a contact lasts
   3 ± 1 of the listener's answers); `contact_min_lines` /
   `contact_max_lines` (an exchange's 2-3 lines);
-  `silences_to_switch_off` (2); `beat_max_lines` (the Switch-off's and
-  the orientation's 2 lines); `orientation_every` /
-  `orientation_jitter` (20 ± 5 free rounds; 0 keeps only the sign-on);
+  `silences_to_switch_off` (2); `beat_max_lines` (the Repair's and the
+  Switch-off's 2 lines, the orientation's up to 2); `breakdown_lines`
+  (the Breakdown's 3 lines: the answer, the failure, what it means);
+  `orientation_every` / `orientation_jitter` (20 ± 5 free rounds; 0
+  keeps only the sign-on);
   `recollection_every` / `recollection_jitter` (15 ± 5 free rounds; 0
   turns recollections off); `restatement_contacts` (the earlier
   contacts a contact instruction restates, 5). `interaction_min_s` /

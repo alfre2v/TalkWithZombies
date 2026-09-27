@@ -64,21 +64,25 @@ the defaults, all in `settings.yaml` under `show:`.
   now. An orientation repeats it for newcomers every 20 ± 5 free rounds
   (`orientation_every`), opened by whoever has been silent longest.
 - **The call.** 60 to 180 seconds of audio after the receiver went off
-  (`interaction_min_s`, `interaction_max_s`), someone announces it works
-  again and the operator calls out; the RECEIVER sign lights with the
-  call, and the radio listens.
+  (`interaction_min_s`, `interaction_max_s`), someone tells you what
+  just happened to the receiver, and the operator tells you the lab can
+  hear you now and calls out; the RECEIVER sign lights with the call,
+  and the radio listens.
 - **Contact — someone answered.** The character you named answers you
   first (else whoever asked you last), then the cast ask you something:
   who you are first, then what they need (the story's `agenda.yaml`) —
   and they remember what you said, earlier callers included. After each
   exchange the radio listens again. After 3 ± 1 of your answers
   (`contact_exchanges`), the Breakdown: they answer you, then the
-  receiver fails, and the RECEIVER sign goes dark.
+  receiver fails — they tell you what they see, and that they can no
+  longer hear you but go on broadcasting — and the RECEIVER sign goes
+  dark.
 - **Silence.** A silent window gets a re-call: before anyone answered,
   the operator calls once more; inside a contact, whoever was talking
   calls you back and repeats the question. Two silences in a row
   (`silences_to_switch_off`), and they switch the receiver off — to save
-  power, or to spare it for a better time — and the broadcast goes on.
+  power, or to spare it for a better time — and tell you they will not
+  hear you until it is back on; the broadcast goes on.
 - **After a contact** the next round talks about what you said (the
   aftermath); every 15 ± 5 free rounds (`recollection_every`) the cast
   recall a past caller and imagine how they could help if they call
