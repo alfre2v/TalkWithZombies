@@ -71,36 +71,49 @@ class TestListenerSays:
 
 class TestHeardLine:
     @pytest.mark.parametrize("summary, line", [
-        ({"kind": "answer", "heard": {"text": "Moira, is it airborne?", "silence": None}},
+        ({"kind": "exchange", "heard": {"text": "Moira, is it airborne?", "silence": None}},
          '  listener: "Moira, is it airborne?"'),
-        ({"kind": "static", "heard": {"text": "Thank you.", "silence": "a known Whisper hallucination"}},
+        ({"kind": "last-exchange", "heard": {"text": "We're coming.", "silence": None}},
+         '  listener: "We\'re coming."'),
+        ({"kind": "re-call", "heard": {"text": "Thank you.", "silence": "a known Whisper hallucination"}},
          '  heard: "Thank you." -> silence: a known Whisper hallucination'),
-        ({"kind": "static", "heard": None}, "  heard: nothing sent"),
+        ({"kind": "switch-off", "heard": None}, "  heard: nothing sent"),
         ({"kind": "free", "heard": None}, None),
     ])
     def test_the_window_as_printed(self, summary, line):
         assert drive_show.heard_line(summary) == line
 
 
+class TestContactLine:
+    @pytest.mark.parametrize("summary, line", [
+        ({"overtone": "positive", "agenda": "Find out who the voice is.", "answers": [1, 3]},
+         '  overtone positive · asks "Find out who the voice is." · answers 1 of 3'),
+        ({"overtone": "negative", "slot": "aftermath"}, "  overtone negative · aftermath"),
+        ({"overtone": None}, None),
+    ])
+    def test_the_contact_as_printed(self, summary, line):
+        assert drive_show.contact_line(summary) == line
+
+
 class TestDrive:
-    """--heard items are used one per invitation, in turn; once they run out, nothing is sent."""
+    """--heard items are used one per listening window, in turn; once they run out, nothing is sent."""
 
     @pytest.fixture
     def drive(self, monkeypatch, tmp_path):
         record = tmp_path / RUN["run_id"] / "script.json"
         record.parent.mkdir()
         record.write_text(json.dumps({"rounds": [{"timings": {"prompt_n": 1, "cache_n": 2, "predicted_n": 3}}]}))
-        kinds = ["free", "invitation", None, "invitation", None, "invitation", None, "free"]
+        kinds = ["free", "repair", None, "repair", None, "repair", None, "free"]
         sent = []
 
         def fake_play_round(base, run_id, played_s, heard=None):
-            """Like the app: after an invitation, words give the answer round, anything else the static one."""
+            """Like the app: after a call, words give an exchange, anything else a re-call; the call listens."""
             sent.append((played_s, heard))
             words = (heard or {}).get("transcript")
-            kind = kinds[len(sent) - 1] or ("answer" if words else "static")
+            kind = kinds[len(sent) - 1] or ("exchange" if words else "re-call")
             window = {"text": words, "silence": None if words else "nothing heard"} if heard else None
             summary = {"n": len(sent), "kind": kind, "speakers": ["Moira"], "trimmed": [], "dropped": [],
-                       "heard": window}
+                       "heard": window, "listens": kind == "repair"}
             return {"seconds": 1.0, "first": 0.5, "lines": 1, "summary": summary, "error": None}
 
         monkeypatch.setattr(drive_show, "start", lambda base, story: RUN)
@@ -112,7 +125,7 @@ class TestDrive:
 
         return run
 
-    def test_each_invitation_takes_the_next_item(self, drive, capsys):
+    def test_each_listening_window_takes_the_next_item(self, drive, capsys):
         code, sent = drive("--heard", "Moira, is it airborne?", "--heard", "-")
 
         assert code == 0
@@ -144,11 +157,11 @@ def _round(n, kind="free", speakers=("Moira", "Ralph"), lines=("Moira",), max_li
 
 def _good_rounds():
     rounds = [_round(n) for n in range(1, 13)]
-    rounds[7] = _round(8, "invitation", ("Samantha",), ("Samantha",), 1)
-    rounds[8] = _round(9, "answer", ("Moira",), ("Moira",), 1, listener="Moira, is it airborne?",
+    rounds[7] = _round(8, "repair", ("Moira", "Samantha"), ("Moira", "Samantha"), 2)
+    rounds[8] = _round(9, "exchange", ("Moira",), ("Moira",), 1, listener="Moira, is it airborne?",
                        heard={"text": "Moira, is it airborne?", "silence": None})
-    rounds[9] = _round(10, "invitation", ("Samantha",), ("Samantha",), 1)
-    rounds[10] = _round(11, "static", ("Samantha",), ("Samantha",), 1, heard={"text": "", "silence": "nothing heard"})
+    rounds[9] = _round(10, "repair", ("Moira", "Samantha"), ("Moira", "Samantha"), 2)
+    rounds[10] = _round(11, "re-call", ("Samantha",), ("Samantha",), 1, heard={"text": "", "silence": "nothing heard"})
     rounds[11] = _round(12, trims=(3, 4, 5))
     return rounds
 
@@ -176,7 +189,7 @@ class TestReport:
         out = capsys.readouterr().out
         assert out.count("  PASS  ") == 6
         assert 'round 9 heard "Moira, is it airborne?" -> Moira' in out
-        assert "round 11 (nothing heard)" in out
+        assert "round 11 re-call (nothing heard)" in out
         assert "before round 12 (rounds 3, 4, 5)" in out
         assert "debug files for 12 of 12 rounds; token check difference 0 in 12 of them" in out
         assert out.rstrip().endswith("6 of 6 criteria pass")
@@ -188,7 +201,7 @@ class TestReport:
         (lambda rs: [_round(1, lines=("Moira", "Ralph", "Moira"))] + rs[1:], 12, "round 1: 3 lines of 2"),
         (lambda rs: [_round(1, lines=())] + rs[1:], 12, "round 1: no line"),
         (lambda rs: rs[:8] + [_round(9)] + rs[9:], 12, "listener's words: none"),
-        (lambda rs: rs[:10] + [_round(11)] + rs[11:], 12, "static round: none"),
+        (lambda rs: rs[:10] + [_round(11)] + rs[11:], 12, "a re-call or the Switch-off: none"),
         (lambda rs: rs[:11] + [_round(12)], 12, "the trim fired: no"),
     ])
     def test_each_criterion_fails_on_its_own(self, tmp_path, capsys, change, asked, failing):

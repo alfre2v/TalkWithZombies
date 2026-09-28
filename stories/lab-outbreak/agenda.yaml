@@ -1,0 +1,24 @@
+# What the cast want from a listener who answers (step 3.4c): one item per exchange of a contact, after the cast
+# answer what the listener said. Each item has two branches: ask for something, or, when the voice already gave
+# it, use it. The first item opens every contact; the rest are drawn at random, never twice in one contact, and
+# across the run not again until the list is used up.
+agenda:
+  - Find out who the voice is. If the voice already said their name, greet them by it and ask how they found this
+    frequency.
+  - Find out where the voice is. If the voice already said where they are, ask how things are there and whether
+    the roads are open.
+  - Ask the voice to help find the lab. It is a secret lab, so the cast only know it stands near a wood and a
+    swamp, with smoke rising from the east wing. If the voice already said where they are, ask whether they know
+    such a place near there.
+  - Ask the voice to help get the cast out. The dead are at every door, and the lab needs someone with a vehicle
+    at the south fence. If the voice already offered help, ask what they could bring and how soon.
+  - Ask the voice for supplies. The lab is short of insulin, batteries, clean water and antibiotics. If the voice
+    already offered something, ask how they could get it to the lab.
+  - Ask the voice what the outbreak is like where they are. If the voice already told you, ask what they have seen
+    of the dead up close.
+  - Ask the voice to pass a message to the authorities. The lab holds samples that could help stop the outbreak.
+    If the voice already offered to help, tell them whom to call and what to say.
+  - Ask whether the voice is safe and has people with them. If the voice already said, ask them to keep listening
+    on this frequency.
+  - Ask the voice whether they have a radio that can transmit, to relay the lab's calls further. If the voice
+    already said what they have, ask them to repeat the lab's message on it.

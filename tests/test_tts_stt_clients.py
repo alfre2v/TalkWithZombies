@@ -1127,13 +1127,18 @@ class TestTranscribeForShow:
         def responder(method, url, **kw):
             seen.update(url=url, data=kw.get("data"), files=kw.get("files"))
             return json_response(200, {"text": " Moira, is it airborne? ", "segments": [
-                {"no_speech_prob": 0.02, "avg_logprob": -0.2}, {"no_speech_prob": 0.10, "avg_logprob": -0.4}]})
+                {"no_speech_prob": 0.02, "avg_logprob": -0.2,
+                 "words": [{"word": " Moira,", "probability": 0.8}, {"word": " is", "probability": 0.99}]},
+                {"no_speech_prob": 0.10, "avg_logprob": -0.4,
+                 "words": [{"word": " it", "probability": 0.97}, {"word": " airborne?", "probability": 0.45}]}]})
 
         _patch_http(monkeypatch, responder)
         result = _run(stt_client.transcribe_for_show(b"audio", "audio/webm", prompt="Daniel, Moira", language="en"))
 
         assert result == {"text": "Moira, is it airborne?", "no_speech_prob": 0.10,
-                          "avg_logprob": pytest.approx(-0.3)}
+                          "avg_logprob": pytest.approx(-0.3), "words": [
+                              {"word": "Moira,", "probability": 0.8}, {"word": "is", "probability": 0.99},
+                              {"word": "it", "probability": 0.97}, {"word": "airborne?", "probability": 0.45}]}
         assert seen["url"] == "http://stt.local:6600/v1/audio/transcriptions"
         assert seen["data"] == {"response_format": "json", "vad_filter": "true",
                                 "prompt": "Daniel, Moira", "language": "en"}
@@ -1144,7 +1149,7 @@ class TestTranscribeForShow:
         _patch_http(monkeypatch, lambda method, url, **kw: json_response(200, {"text": "", "segments": []}))
 
         assert _run(stt_client.transcribe_for_show(b"x")) == {"text": "", "no_speech_prob": None,
-                                                              "avg_logprob": None}
+                                                              "avg_logprob": None, "words": []}
 
     def test_without_hints_only_the_format_and_vad_are_sent(self, monkeypatch):
         _active_stt(monkeypatch)

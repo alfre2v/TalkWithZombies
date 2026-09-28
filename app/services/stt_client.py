@@ -110,10 +110,13 @@ async def transcribe_for_show(audio_bytes: bytes, mime_type: str = "audio/webm",
     ("Invailed response_format", checked 2026-09-24). Sends the show's hints:
     `prompt` (the cast's names), `language`, and vad_filter, which cuts
     silence before decoding. Returns {"text",
-    "no_speech_prob", "avg_logprob"}: the text empty when nothing was heard
-    (never a placeholder), no_speech_prob the highest across segments,
-    avg_logprob their average (both None without segments). Returns None on
-    any failure. Upstream's transcribe_audio stays as it is for the chat.
+    "no_speech_prob", "avg_logprob", "words"}: the text empty when nothing
+    was heard (never a placeholder), no_speech_prob the highest across
+    segments, avg_logprob their average (both None without segments), and
+    words each word Whisper heard with its probability, across the segments
+    (the json reply carries them in segments[].words; [] when it does not).
+    Returns None on any failure. Upstream's transcribe_audio stays as it is
+    for the chat.
     """
     settings = get_settings()
     if not settings.stt.is_active or not audio_bytes:
@@ -142,8 +145,11 @@ async def transcribe_for_show(audio_bytes: bytes, mime_type: str = "audio/webm",
     segments = body.get("segments") or []
     no_speech = [s["no_speech_prob"] for s in segments if isinstance(s.get("no_speech_prob"), (int, float))]
     logprobs = [s["avg_logprob"] for s in segments if isinstance(s.get("avg_logprob"), (int, float))]
+    words = [{"word": w["word"].strip(), "probability": w.get("probability")}
+             for s in segments for w in (s.get("words") or []) if (w.get("word") or "").strip()]
     return {
         "text": (body.get("text") or "").strip(),
         "no_speech_prob": max(no_speech) if no_speech else None,
         "avg_logprob": sum(logprobs) / len(logprobs) if logprobs else None,
+        "words": words,
     }

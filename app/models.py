@@ -330,13 +330,20 @@ class ShowStartRequest(BaseModel):
 
 
 class ShowStartResponse(BaseModel):
-    """The run just opened: its id, story, cast and seed."""
+    """The run just opened: its id, story, cast and seed, and the show settings the page needs.
+
+    listen_window_s and press_cap_s time the listener's turn; debug turns on
+    the page's debug line.
+    """
     run_id: str
     story: str
     title: str
     cast: List[str]
     operator: str
     seed: int
+    listen_window_s: float
+    press_cap_s: float
+    debug: bool
 
 
 class ShowRoundRequest(BaseModel):
@@ -360,8 +367,19 @@ class ShowListenRequest(BaseModel):
     audio_mime_type: Optional[str] = "audio/webm"
 
 
+class ShowHeardWord(BaseModel):
+    """One word Whisper heard, with how sure it was of it (0 to 1)."""
+    word: str
+    probability: Optional[float] = None
+
+
 class ShowListenResponse(BaseModel):
-    """What Whisper heard, to send with the next round request, which decides whether it counts."""
+    """What Whisper heard, to send with the next round request, which decides whether it counts.
+
+    words is for the page's caption only: each word with Whisper's
+    probability; the round request does not carry them.
+    """
     text: str
     no_speech_prob: Optional[float] = None
     avg_logprob: Optional[float] = None
+    words: List[ShowHeardWord] = Field(default_factory=list)
