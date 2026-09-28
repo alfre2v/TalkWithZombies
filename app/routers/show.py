@@ -1,7 +1,9 @@
 """Show router — open a run, then play its rounds.
 
 GET /show serves the show page (templates/show.html, with its own files
-in static/show/). POST /api/show/start opens a run of a story and gives the
+in static/show/); GET /show?design=<name> serves it in one of the designs of
+static/show/designs/ (templates/show_design.html), the plain page untouched.
+POST /api/show/start opens a run of a story and gives the
 page the settings it needs. POST /api/show/round plays
 the run's next round and streams the chat's SSE events (start / token /
 done) for each script line, then a "round" summary and "complete". The
@@ -38,7 +40,7 @@ import logging
 import random
 import re
 from pathlib import Path
-from typing import AsyncIterator, Tuple
+from typing import AsyncIterator, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
@@ -63,6 +65,8 @@ page_router = APIRouter(tags=["show"])
 _templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent.parent / "templates"))
 
 _RUN_ID = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(-\d+)?$")
+_DESIGNS = Path(__file__).resolve().parent.parent.parent / "static" / "show" / "designs"
+_DESIGN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
 def _sse(event: dict) -> str:
@@ -70,8 +74,17 @@ def _sse(event: dict) -> str:
 
 
 @page_router.get("/show", response_class=HTMLResponse)
-async def show_page(request: Request):
-    """Serve the show page, which opens a run and plays its rounds."""
+async def show_page(request: Request, design: Optional[str] = None, mock: bool = False):
+    """Serve the show page, which opens a run and plays its rounds.
+
+    With ?design=<name> naming a folder of static/show/designs/ that holds a design.css, the page is served in that
+    design (templates/show_design.html: the same elements, the design's files on top; with ?mock=1, a recorded stretch
+    of a show fills the page, for looking at a design without running one). Without it, or with an unknown name, the
+    plain page, unchanged.
+    """
+    if design and _DESIGN.match(design) and (_DESIGNS / design / "design.css").is_file():
+        return _templates.TemplateResponse(request, "show_design.html", {
+            "design": design, "design_js": (_DESIGNS / design / "design.js").is_file(), "mock": mock})
     return _templates.TemplateResponse(request, "show.html")
 
 

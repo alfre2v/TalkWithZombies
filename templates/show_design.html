@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The show — TalkWithZombies</title>
+    <link rel="stylesheet" href="/static/show/show.css">
+    <link rel="stylesheet" href="/static/show/designs/{{ design }}/design.css">
+    <link rel="icon" href="/static/favicon.ico">
+</head>
+<!-- The show page in a design (static/show/designs/{{ design }}/): the same elements, with the same ids, as
+     templates/show.html, which stays the plain, working page; the design only restyles and rearranges them. -->
+<body class="design design-{{ design }}">
+    <div id="show">
+        <!-- The title, the cast strip, the ON AIR and RECEIVER signs, and the captions toggle under them -->
+        <header id="show-header">
+            <div>
+                <h1 id="show-title">The show</h1>
+                <div id="cast"></div>
+            </div>
+            <div id="show-signs">
+                <div id="on-air">ON AIR</div>
+                <div id="receiver" title="Lit while the lab's receiver works: the radio may call on you">RECEIVER</div>
+                <button id="btn-captions" type="button" aria-pressed="true"
+                        title="Show or hide the lines and the stage directions">Captions: on</button>
+            </div>
+        </header>
+
+        <!-- The script as it is played: one block per round -->
+        <main id="script" aria-live="polite"></main>
+
+        <!-- The controls, the state, and the talk button -->
+        <footer id="show-controls">
+            <div class="control-buttons">
+                <button id="btn-start" type="button">Start</button>
+                <button id="btn-stop" type="button" hidden>Stop</button>
+                <button id="btn-resume" type="button" hidden>Resume</button>
+            </div>
+            <div id="show-state">Press Start to go on air.</div>
+            <button id="btn-talk" type="button" disabled title="Enabled while the radio listens">Hold to talk</button>
+        </footer>
+    </div>
+
+    <script src="/static/show/sse.js"></script>
+    <script src="/static/show/player.js"></script>
+    <script src="/static/show/mic.js"></script>
+    <script src="/static/show/show.js"></script>
+    {% if design_js %}<script src="/static/show/designs/{{ design }}/design.js"></script>{% endif %}
+    {% if mock %}<script src="/static/show/designs/mock.js"></script>{% endif %}
+</body>
+</html>

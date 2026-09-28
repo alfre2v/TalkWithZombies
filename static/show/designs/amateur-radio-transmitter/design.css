@@ -1,0 +1,360 @@
+/*
+ * amateur-radio-transmitter — a ham operator's rack transmitter: grey crinkle-paint panels with rack screws, an
+ * engraved plate for the station, two needle meters, the transcript on a green oscilloscope screen with its
+ * waveform trace above it (the gauge), jewel lamps, a desk microphone and a big red push-to-talk button.
+ *
+ * The page's elements keep their ids; the header's and the footer's wrappers become transparent
+ * (display: contents) so every piece takes its own place in the panel's grid.
+ */
+
+:root {
+    --panel-grey: #5d6166;
+    --panel-dark: #3c3f43;
+    --engrave: #e8e8e0;
+    --phosphor: #7dff9a;
+    --phosphor-dim: #3fae5c;
+    --scope-bg: #06140a;
+    --ptt-red: #d8261c;
+}
+
+body.design-amateur-radio-transmitter {
+    background: #1b1c1e;
+    color: var(--engrave);
+    font: 16px/1.5 "Helvetica Neue", Arial, sans-serif;
+}
+
+.design-amateur-radio-transmitter #show {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 250px;
+    grid-template-rows: auto auto auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+        "title    meters"
+        "trace    meters"
+        "scope    lamps"
+        "scope    mic"
+        "scope    ptt"
+        "cast     captions"
+        "knobs    state";
+    gap: 14px 26px;
+    max-width: 1160px;
+    height: calc(100% - 32px);
+    margin: 16px auto;
+    padding: 26px 58px;
+    border-radius: 6px;
+    background:
+        radial-gradient(circle at 24px 30px, #9a9ea3 0 5px, #2a2c2f 6px, transparent 7px),
+        radial-gradient(circle at calc(100% - 24px) 30px, #9a9ea3 0 5px, #2a2c2f 6px, transparent 7px),
+        radial-gradient(circle at 24px calc(100% - 30px), #9a9ea3 0 5px, #2a2c2f 6px, transparent 7px),
+        radial-gradient(circle at calc(100% - 24px) calc(100% - 30px), #9a9ea3 0 5px, #2a2c2f 6px, transparent 7px),
+        repeating-radial-gradient(circle at 30% 40%, rgba(255, 255, 255, 0.025) 0 1px, rgba(0, 0, 0, 0.03) 1px 3px),
+        linear-gradient(180deg, var(--panel-grey) 0%, var(--panel-dark) 100%);
+    box-shadow: inset 0 0 0 2px #74787d, inset 0 0 0 38px rgba(0, 0, 0, 0.12), 0 24px 50px rgba(0, 0, 0, 0.7);
+}
+
+.design-amateur-radio-transmitter #show-header,
+.design-amateur-radio-transmitter #show-header > div,
+.design-amateur-radio-transmitter #show-signs,
+.design-amateur-radio-transmitter #show-controls {
+    display: contents;
+}
+
+/* The station's engraved plate */
+
+.design-amateur-radio-transmitter #show-title {
+    grid-area: title;
+    justify-self: start;
+    margin: 0;
+    padding: 8px 20px;
+    border: 1px solid #000;
+    border-radius: 3px;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%);
+    color: var(--engrave);
+    font: 700 1.05rem/1.2 "Helvetica Neue", Arial, sans-serif;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 2px 3px rgba(0, 0, 0, 0.5);
+}
+
+/* The oscilloscope: its trace on top (the gauge), the transcript on the screen */
+
+.design-amateur-radio-transmitter .scope-trace {
+    grid-area: trace;
+    height: 70px;
+    border: 10px solid #1b1d1f;
+    border-bottom: 0;
+    border-radius: 22px 22px 0 0;
+    background:
+        linear-gradient(rgba(125, 255, 154, 0.12) 1px, transparent 1px) 0 0 / 100% 17.5px,
+        linear-gradient(90deg, rgba(125, 255, 154, 0.12) 1px, transparent 1px) 0 0 / 40px 100%,
+        var(--scope-bg);
+    margin-bottom: -14px;
+}
+
+.design-amateur-radio-transmitter .scope-trace svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 0 4px var(--phosphor));
+}
+
+.design-amateur-radio-transmitter #script {
+    grid-area: scope;
+    padding: 18px 26px;
+    border: 10px solid #1b1d1f;
+    border-top: 1px dashed rgba(125, 255, 154, 0.25);
+    border-radius: 0 0 22px 22px;
+    background:
+        linear-gradient(rgba(125, 255, 154, 0.07) 1px, transparent 1px) 0 0 / 100% 40px,
+        linear-gradient(90deg, rgba(125, 255, 154, 0.07) 1px, transparent 1px) 0 0 / 40px 100%,
+        radial-gradient(ellipse at 50% 50%, #0b2413 0%, var(--scope-bg) 85%);
+    box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.9), 0 0 0 2px #74787d;
+    color: var(--phosphor);
+    font: 1.08rem/1.55 Menlo, "SF Mono", Monaco, monospace;
+    text-shadow: 0 0 6px rgba(125, 255, 154, 0.55);
+    scrollbar-color: var(--phosphor-dim) transparent;
+}
+
+.design-amateur-radio-transmitter .speaker {
+    color: #c9ffd5;
+    text-transform: uppercase;
+}
+
+.design-amateur-radio-transmitter .mood,
+.design-amateur-radio-transmitter .direction,
+.design-amateur-radio-transmitter .verdict {
+    color: var(--phosphor-dim);
+}
+
+.design-amateur-radio-transmitter .listener {
+    color: #f2ffb0;
+    text-shadow: 0 0 6px rgba(242, 255, 176, 0.5);
+}
+
+.design-amateur-radio-transmitter .listener .speaker {
+    color: #f2ffb0;
+}
+
+/* The needle meters */
+
+.design-amateur-radio-transmitter .meters {
+    grid-area: meters;
+    display: flex;
+    gap: 14px;
+    justify-content: flex-end;
+}
+
+.design-amateur-radio-transmitter .meter {
+    position: relative;
+    width: 110px;
+    height: 84px;
+    border: 5px solid #111;
+    border-radius: 6px;
+    background: radial-gradient(ellipse at 50% 110%, #f7f1dc 0%, #e9dfbf 70%);
+    overflow: hidden;
+}
+
+.design-amateur-radio-transmitter .meter::before {
+    content: "";
+    position: absolute;
+    left: 10%;
+    right: 10%;
+    top: 24px;
+    height: 70px;
+    border-top: 2px solid #333;
+    border-radius: 50% 50% 0 0;
+    background: repeating-conic-gradient(from 300deg at 50% 100%, #333 0 1deg, transparent 1deg 10deg);
+    -webkit-mask: radial-gradient(circle at 50% 100%, transparent 0 58px, #000 59px);
+    mask: radial-gradient(circle at 50% 100%, transparent 0 58px, #000 59px);
+}
+
+.design-amateur-radio-transmitter .meter .needle {
+    position: absolute;
+    left: 50%;
+    bottom: -6px;
+    width: 2px;
+    height: 74px;
+    background: #b01010;
+    transform-origin: 50% 100%;
+    transform: rotate(var(--needle, 12deg));
+}
+
+.design-amateur-radio-transmitter .meter .caption {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 4px;
+    color: #333;
+    font: 700 0.6rem/1 "Helvetica Neue", Arial, sans-serif;
+    letter-spacing: 0.15em;
+    text-align: center;
+}
+
+/* The lamps */
+
+.design-amateur-radio-transmitter #on-air,
+.design-amateur-radio-transmitter #receiver {
+    grid-area: lamps;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--engrave);
+    font: 700 0.78rem/1 "Helvetica Neue", Arial, sans-serif;
+    letter-spacing: 0.18em;
+}
+
+.design-amateur-radio-transmitter #on-air {
+    align-self: start;
+}
+
+.design-amateur-radio-transmitter #receiver {
+    align-self: start;
+    margin-top: 36px;
+}
+
+.design-amateur-radio-transmitter #on-air::before,
+.design-amateur-radio-transmitter #receiver::before {
+    content: "";
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 4px solid #222;
+    background: radial-gradient(circle at 35% 35%, #666 0%, #202020 70%);
+}
+
+.design-amateur-radio-transmitter #on-air.lit,
+.design-amateur-radio-transmitter #receiver.lit {
+    background: none;
+}
+
+.design-amateur-radio-transmitter #on-air.lit::before {
+    background: radial-gradient(circle at 35% 35%, #fff 0%, #ff4030 45%, #7a0c05 100%);
+    box-shadow: 0 0 14px #ff4030;
+}
+
+.design-amateur-radio-transmitter #receiver.lit::before {
+    background: radial-gradient(circle at 35% 35%, #fff 0%, #6bff8a 45%, #0d5a22 100%);
+    box-shadow: 0 0 14px #6bff8a;
+}
+
+/* The desk microphone and the push-to-talk button */
+
+.design-amateur-radio-transmitter .desk-mic {
+    grid-area: mic;
+    justify-self: center;
+    align-self: end;
+    width: 120px;
+    filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.6));
+}
+
+.design-amateur-radio-transmitter #btn-talk {
+    grid-area: ptt;
+    justify-self: center;
+    align-self: start;
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    border: 10px solid #1d1d1d;
+    background: radial-gradient(circle at 38% 32%, #ff7466 0%, var(--ptt-red) 45%, #7a0d08 100%);
+    color: #fff;
+    font: 800 0.95rem/1.1 "Helvetica Neue", Arial, sans-serif;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    box-shadow: 0 8px 0 #0e0e0e, 0 12px 20px rgba(0, 0, 0, 0.6), inset 0 -6px 12px rgba(0, 0, 0, 0.35);
+}
+
+.design-amateur-radio-transmitter #btn-talk:disabled {
+    opacity: 0.55;
+}
+
+.design-amateur-radio-transmitter #btn-talk.window-open {
+    box-shadow: 0 8px 0 #0e0e0e, 0 0 30px #ff4030;
+}
+
+.design-amateur-radio-transmitter #btn-talk.recording {
+    transform: translateY(6px);
+    box-shadow: 0 2px 0 #0e0e0e, 0 0 36px #ff4030;
+}
+
+/* The cast as labelled indicator lamps, the knobs, the state */
+
+.design-amateur-radio-transmitter #cast {
+    grid-area: cast;
+    display: flex;
+    gap: 22px;
+}
+
+.design-amateur-radio-transmitter .cast-member {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    color: var(--engrave);
+    font: 700 0.75rem/1 "Helvetica Neue", Arial, sans-serif;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+.design-amateur-radio-transmitter .cast-member::before {
+    content: "";
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 3px solid #222;
+    background: #3a2a10;
+}
+
+.design-amateur-radio-transmitter .cast-member.speaking {
+    color: #ffd27a;
+}
+
+.design-amateur-radio-transmitter .cast-member.speaking::before {
+    background: radial-gradient(circle at 35% 35%, #fff 0%, #ffb52e 50%, #8a5200 100%);
+    box-shadow: 0 0 10px #ffb52e;
+}
+
+.design-amateur-radio-transmitter .control-buttons {
+    grid-area: knobs;
+    display: flex;
+    gap: 22px;
+}
+
+.design-amateur-radio-transmitter button {
+    font: 700 0.72rem/1 "Helvetica Neue", Arial, sans-serif;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.design-amateur-radio-transmitter .control-buttons button,
+.design-amateur-radio-transmitter #btn-captions {
+    width: 70px;
+    height: 70px;
+    padding: 0;
+    border-radius: 50%;
+    border: 6px solid #cfd2d6;
+    background: radial-gradient(circle at 40% 35%, #444 0%, #111 70%);
+    color: var(--engrave);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.6);
+}
+
+.design-amateur-radio-transmitter #btn-captions {
+    grid-area: captions;
+    justify-self: center;
+    font-size: 0.55rem;
+}
+
+.design-amateur-radio-transmitter #show-state {
+    grid-area: state;
+    align-self: center;
+    padding: 6px 12px;
+    border: 1px solid #000;
+    border-radius: 3px;
+    background: #0a0a0a;
+    color: var(--engrave);
+    font: 700 0.8rem/1.2 "Helvetica Neue", Arial, sans-serif;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
