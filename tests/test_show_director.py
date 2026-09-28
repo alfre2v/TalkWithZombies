@@ -207,6 +207,21 @@ class TestSignOnAndOrientation:
         _play(run, 60, show=_quiet(orientation_every=0))
         assert [r.n for r in run.rounds if r.kind == "orientation"] == [1]
 
+    def test_a_repeat_tells_the_receiver_as_dead_after_a_breakdown_and_switched_off_after_a_switch_off(self):
+        run = _run()
+        plans = _play(run, 300, show=_show(interaction_min_s=20, interaction_max_s=40, orientation_every=2,
+                                           orientation_jitter=0, contact_exchanges=1, contact_jitter=0))
+        seen = set()
+        for i, plan in enumerate(plans[1:], start=1):
+            if plan.kind != "orientation":
+                continue
+            before = next((p.kind for p in reversed(plans[:i]) if p.kind in ("breakdown", "switch-off")), None)
+            said = "switched off" if "receiver is switched off to save it" in plan.instruction else "dead"
+            assert said == ("switched off" if before == "switch-off" else "dead")
+            assert ("receiver is dead" in plan.instruction) == (said == "dead")
+            seen.add(before)
+        assert {"breakdown", "switch-off"} <= seen
+
 
 class TestFree:
     def test_speakers_and_budget_stay_in_bounds(self):

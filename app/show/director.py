@@ -193,15 +193,21 @@ def _orientation(run: Run, story: Story, show: ShowConfig, rng: random.Random, s
     """Tell the listeners who the cast are, where they are and the receiver's state, in the speaker's own words.
 
     The sign-on is the operator's; a repeat is opened by whoever has been silent longest. Up to beat_max_lines
-    lines, the first speaker pinned.
+    lines, the first speaker pinned. The receiver is told as dead at the sign-on and after a Breakdown, and as
+    switched off after a Switch-off.
     """
     first = story.operator if sign_on else _silent_longest(run, story, rng)
     overtone = _kind_overtone(story, "orientation", rng)
     tone = _tone(run, story, show, overtone, rng)
     moods = _moods(run, story, overtone)
     facts = story.orientation or "who the cast are and where they are."
-    receiver = "that the lab's receiver is dead — they can only transmit, and will call out for listeners when it " \
-               "works — and"
+    off = _last_index(run, _OFF)
+    if off is not None and run.rounds[off].kind == "switch-off":
+        receiver = "that the lab's receiver is switched off to save it — they can only transmit, and will call out " \
+                   "for listeners when it is back on — and"
+    else:
+        receiver = "that the lab's receiver is dead — they can only transmit, and will call out for listeners when " \
+                   "it works — and"
     if sign_on:
         lead = f"The broadcast begins. {first} opens it and tells anyone listening, in their own words, {receiver} " \
                f"who they are and where: {facts}"

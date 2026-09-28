@@ -6,8 +6,9 @@ cast.py CAST_SHEET, and docs/experiments/2026-09-22-emotion-grammar-cost/
 cast.py CAST_SHEET_TAUGHT), byte for byte — plus, since step 3.4c
 (2026-09-26), the premise sentence about the failing receiver and, with
 moods on, the story's fourteen moods in the order of its overtones; and,
-since the prompt sweep (2026-09-28), the premise sentences about the
-listener who answers and what the scientists tell the listeners.
+since the prompt sweep (2026-09-28), the premise sentences about where
+the lab is, the listener who answers and what the scientists tell the
+listeners.
 """
 
 from pathlib import Path
@@ -26,6 +27,7 @@ CAST = ["Daniel", "Moira", "Ralph", "Samantha"]
 _WORLD_AND_CAST = (
     "/no_think\n"
     "You write a live radio play. Four scientists are trapped in a besieged research lab during a zombie outbreak, speaking over the lab's shortwave radio. "
+    "The lab is secret: the scientists do not know its name or address, only that it stands near a wood and a swamp. "
     "The radio's receiver keeps failing: while it is down they can only transmit, and when they get it working they "
     "call out for anyone listening to answer. A listener who answers is heard as a voice on the frequency, and the "
     "cast talk to them directly. The scientists try to explain to the listener over the radio the strange events "
@@ -114,7 +116,7 @@ class TestShippedStory:
         assert ("Something is scratching at the loading dock door, slow and rhythmic."
                 in story.event_pools["negative"]["The ADR-0003 gate's ten (2026-09-22)"])
         assert story.agenda[0].startswith("Find out who the voice is.")
-        assert "receiver is dead" in story.orientation
+        assert story.orientation.startswith("Four scientists") and "receiver" not in story.orientation
         assert set(story.directions) == {"repair", "breakdown", "switch-off"}
         beats = story.beats
         assert [len(beats.repair_after_breakdown), len(beats.repair_after_switch_off), len(beats.breakdown),
