@@ -73,7 +73,8 @@ class TestHeardLine:
     @pytest.mark.parametrize("summary, line", [
         ({"kind": "exchange", "heard": {"text": "Moira, is it airborne?", "silence": None}},
          '  listener: "Moira, is it airborne?"'),
-        ({"kind": "breakdown", "heard": {"text": "We're coming.", "silence": None}}, '  listener: "We\'re coming."'),
+        ({"kind": "last-exchange", "heard": {"text": "We're coming.", "silence": None}},
+         '  listener: "We\'re coming."'),
         ({"kind": "re-call", "heard": {"text": "Thank you.", "silence": "a known Whisper hallucination"}},
          '  heard: "Thank you." -> silence: a known Whisper hallucination'),
         ({"kind": "switch-off", "heard": None}, "  heard: nothing sent"),

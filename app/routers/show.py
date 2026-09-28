@@ -18,7 +18,9 @@ it on the "round" summary (`heard`: the text, Whisper's numbers, and why it
 counted as silence, if it did). The summary also carries the round's
 overtone, the agenda item it asked, what filled its event slot, the
 listener's answers so far in a contact and the number that ends it, and
-the stage direction of a receiver beat (the story's).
+the stage direction of a receiver beat (the story's), and whether the
+receiver is still on (`receiver`: through the rounds that listen and
+the last exchange, which asks nothing before the Breakdown).
 A round's fixed lines (the director's, said word for word: an event read
 aloud, a receiver beat's key line) are streamed in their place with the
 same events, marked `fixed`, and recorded with the model's; a round made
@@ -200,10 +202,6 @@ async def _round_stream(run: Run, story: Story, req: ShowRoundRequest) -> AsyncI
                 pieces.append(item["token"])
                 for event in feed(item["token"]):
                     yield event
-            parser.finish()  # A line the model left unfinished is dropped before a fixed line follows
-        for line in plan.after:
-            for event in feed(said(line), fixed=True):
-                yield event
     except (asyncio.CancelledError, GeneratorExit):
         logger.info("Show run %s, round %s abandoned by the client; nothing recorded", run.run_id, n)
         raise
@@ -236,6 +234,7 @@ async def _round_stream(run: Run, story: Story, req: ShowRoundRequest) -> AsyncI
     yield _sse({"type": "round", "n": n, "kind": plan.kind, "speakers": list(plan.speakers), "event": plan.event,
                 "tone": plan.tone, "heard": heard.model_dump() if heard else None, "trimmed": trimmed,
                 "dropped": parser.dropped, "finish_reason": round_.finish_reason, "listens": plan.listens,
+                "receiver": plan.receiver_on,
                 "overtone": plan.overtone, "agenda": plan.agenda, "slot": plan.slot,
                 "answers": list(plan.answers) if plan.answers else None,
                 "direction": story.directions.get(plan.kind)})

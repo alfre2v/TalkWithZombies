@@ -23,9 +23,10 @@
  *
  * The RECEIVER sign tells the room when the radio may call on them: it
  * lights when the last line of a round that listens starts (the operator's
- * call), and goes dark when the last line of one that does not starts (the
- * Breakdown, the Switch-off). A receiver beat's stage direction goes above
- * its lines, like an event's.
+ * call), stays lit through the last exchange (which answers without
+ * listening), and goes dark when the last line of the Breakdown or the
+ * Switch-off starts. A receiver beat's stage direction goes above its lines,
+ * like an event's.
  *
  * A classic script sharing globals, like upstream's; sse.js, player.js and
  * mic.js load first. At load time it only defines functions and wires the page on
@@ -283,7 +284,7 @@ async function playRound(signal, heard) {
     settleHeard(round.summary);
     addDirection(round.element, round.summary.event || round.summary.direction);
     if (show.voice) receiverCue(round);
-    else setReceiver(Boolean(round.summary.listens));
+    else setReceiver(receiverOn(round.summary));
     if (show.run.debug) {
         const written = { firstLineS: round.firstLineS, seconds: round.seconds }; // The voice's timings come once said
         round.debugElement = addDebugLine(round.element, debugLine(round.summary, written, show.run.run_id));
@@ -303,12 +304,17 @@ function lineStarts(round, line, persona, index) {
 }
 
 /**
- * The RECEIVER sign follows a round when its last line starts: lit if the
- * round listens, dark if not. Nothing until the summary says how many lines
- * the round has and whether it listens.
+ * The RECEIVER sign follows a round when its last line starts: lit while the
+ * receiver is on, dark once it is off. Nothing until the summary says how many
+ * lines the round has and whether the receiver is on.
  */
 function receiverCue(round) {
-    if (round.summary && round.lastStarted === round.lines.length - 1) setReceiver(Boolean(round.summary.listens));
+    if (round.summary && round.lastStarted === round.lines.length - 1) setReceiver(receiverOn(round.summary));
+}
+
+/** Whether the receiver is on after a round: the summary's receiver, or whether it listens (older servers). */
+function receiverOn(summary) {
+    return summary.receiver === undefined ? Boolean(summary.listens) : Boolean(summary.receiver);
 }
 
 /** A chunk could not be said: it is skipped, and with debug on the round says so. */
@@ -321,7 +327,7 @@ async function playOut(round, signal) {
     await drained();
     if (signal.aborted) throw new Error("stopped");
     lightSpeaker(null);
-    setReceiver(Boolean(round.summary.listens)); // In case the last line's voice never started
+    setReceiver(receiverOn(round.summary)); // In case the last line's voice never started
     if (round.debugElement) round.debugElement.textContent = debugLine(round.summary, round, show.run.run_id);
 }
 

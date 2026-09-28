@@ -674,6 +674,27 @@ test("the RECEIVER sign lights when the call's last line starts and goes dark wi
     assert.equal(lit(), false, "dark when the receiver fails");
 });
 
+test("the RECEIVER sign stays lit through the last exchange and goes dark with the Breakdown", () => {
+    const { sandbox } = turnHarness();
+    const lit = () => vm.runInContext('document.getElementById("receiver").classList.contains("lit")', sandbox);
+    const round = () => vm.runInContext(`({ summary: null, lines: [{}, {}], lastStarted: null, firstSoundS: null,
+        started: 0 })`, sandbox);
+    const line = () => vm.runInContext("document.createElement('p')", sandbox);
+    const play = (summary, first, second) => {
+        const r = round();
+        r.summary = summary;
+        sandbox.lineStarts(r, line(), first, 0);
+        sandbox.lineStarts(r, line(), second, 1);
+    };
+
+    play({ kind: "repair", listens: true, receiver: true }, "Daniel", "Samantha");
+    assert.equal(lit(), true, "lit with the call");
+    play({ kind: "last-exchange", listens: false, receiver: true }, "Moira", "Ralph");
+    assert.equal(lit(), true, "still lit: the receiver works while the last answer is given");
+    play({ kind: "breakdown", listens: false, receiver: false }, "Samantha", "Daniel");
+    assert.equal(lit(), false, "dark when the receiver fails");
+});
+
 test("the RECEIVER sign: a last line that starts before its summary arrives is followed once the summary comes", () => {
     const { sandbox } = turnHarness();
     const lit = () => vm.runInContext('document.getElementById("receiver").classList.contains("lit")', sandbox);

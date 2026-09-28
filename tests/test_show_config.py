@@ -38,7 +38,7 @@ class TestShowConfig:
         assert (show.contact_exchanges, show.contact_jitter) == (5, 1)
         assert show.fixed_lines is True
         assert (show.contact_min_lines, show.contact_max_lines) == (2, 3)
-        assert (show.silences_to_switch_off, show.beat_max_lines, show.breakdown_lines) == (2, 2, 3)
+        assert (show.silences_to_switch_off, show.beat_max_lines) == (2, 2)
         assert (show.orientation_every, show.orientation_jitter) == (20, 5)
         assert (show.recollection_every, show.recollection_jitter) == (15, 5)
         assert show.restatement_contacts == 5
@@ -47,8 +47,7 @@ class TestShowConfig:
         raw = {"show": {
             "free_lines": [2, 3], "free_line_weights": [1, 1], "overtone_hold": 6, "overtone_jitter": 0,
             "contact_exchanges": 4, "contact_jitter": 0, "contact_min_lines": 3, "contact_max_lines": 3,
-            "silences_to_switch_off": 1, "beat_max_lines": 1, "breakdown_lines": 2, "orientation_every": 0,
-            "orientation_jitter": 0,
+            "silences_to_switch_off": 1, "beat_max_lines": 1, "orientation_every": 0, "orientation_jitter": 0,
             "recollection_every": 10, "recollection_jitter": 2, "restatement_contacts": 2,
         }}
         show = app_config.load_settings(_write_settings(tmp_path, raw)).show
@@ -57,7 +56,7 @@ class TestShowConfig:
         assert (show.overtone_hold, show.overtone_jitter) == (6, 0)
         assert (show.contact_exchanges, show.contact_jitter, show.contact_min_lines, show.contact_max_lines) == (
             4, 0, 3, 3)
-        assert (show.silences_to_switch_off, show.beat_max_lines, show.breakdown_lines) == (1, 1, 2)
+        assert (show.silences_to_switch_off, show.beat_max_lines) == (1, 1)
         assert (show.orientation_every, show.recollection_every, show.recollection_jitter) == (0, 10, 2)
         assert show.restatement_contacts == 2
 
@@ -113,7 +112,6 @@ class TestShowConfig:
         ("contact_min_lines", 0),
         ("silences_to_switch_off", 0),
         ("beat_max_lines", 0),
-        ("breakdown_lines", 0),
         ("orientation_every", -1),
         ("recollection_every", -1),
         ("restatement_contacts", 0),

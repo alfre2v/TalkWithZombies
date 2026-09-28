@@ -15,10 +15,11 @@ When the cadence says so, a Repair brings the receiver back: someone announces i
 the page listens.
 
 Contact: a listener answered. Each exchange answers them first — the character they named, else whoever asked
-them last — then asks the next agenda item, and the page listens again. After N of the listener's answers, a
-Breakdown answers the last words and the receiver fails. Silence in any listening window counts: a re-call asks
-again, and after enough silences in a row a Switch-off turns the receiver off by choice. Both return the show
-to Broadcast, and the cadence counts from the moment the receiver went off.
+them last — then asks the next agenda item, and the page listens again. The listener's N-th answer gets the
+last exchange, which answers without asking, and the page does not listen: the Breakdown follows at once, and
+the receiver fails. Silence in any listening window counts: a re-call asks again, and after enough silences in a
+row a Switch-off turns the receiver off by choice. Both return the show to Broadcast, and the cadence counts from
+the moment the receiver went off.
 
 Each round has an overtone (the story's overtones.yaml). The beats use the overtones the story allows their
 kind; free rounds hold one for a stretch, then drift to a neighbor. The grammar's moods, the tone word and the
@@ -39,8 +40,10 @@ from app.show.story import Story, all_moods
 _NUMBERS = {2: "two", 3: "three", 4: "four"}
 
 # The page listens after these rounds ("invitation" comes from records made before step 3.4c); the receiver
-# goes off with these; free rounds drift on from the overtone of these.
+# is on through these and the last exchange, and goes off with these; free rounds drift on from the overtone of
+# these.
 LISTENS = frozenset({"repair", "exchange", "re-call", "invitation"})
+_ON = LISTENS | {"last-exchange"}
 _OPENS = frozenset({"repair", "invitation"})
 _OFF = frozenset({"breakdown", "switch-off"})
 _DRIFTS = frozenset({"free", "breakdown", "switch-off"})
@@ -61,8 +64,8 @@ class RoundPlan:
     overtone is the round's overtone; agenda the item an exchange asks; slot what fills a free round's event
     slot besides an event ("aftermath" or "recollection"); recollects the Repair that opened the contact an
     aftermath or a recollection talks about; answers, after a listening window, the listener's answers in this
-    contact so far and the number that ends it. before and after are the fixed lines said before and after the
-    model's; max_lines counts the model's lines only, and with 0 the model is not asked (grammar is empty).
+    contact so far and the number that ends it. before holds the fixed lines, said before the model's; max_lines
+    counts the model's lines only, and with 0 the model is not asked (grammar is empty).
     """
     kind: str
     speakers: Tuple[str, ...]
@@ -78,12 +81,16 @@ class RoundPlan:
     recollects: Optional[int] = None
     answers: Optional[Tuple[int, int]] = None
     before: Tuple[FixedLine, ...] = ()
-    after: Tuple[FixedLine, ...] = ()
 
     @property
     def listens(self) -> bool:
         """Whether the page listens after this round."""
         return self.kind in LISTENS
+
+    @property
+    def receiver_on(self) -> bool:
+        """Whether the receiver still works when this round ends: the rounds that listen, and the last exchange."""
+        return self.kind in _ON
 
 
 def plan_round(run: Run, story: Story, show: ShowConfig, played_s: float = 0.0,
@@ -91,8 +98,9 @@ def plan_round(run: Run, story: Story, show: ShowConfig, played_s: float = 0.0,
     """Plan the run's next round.
 
     The sign-on opens the run. After a round the page listened to, the listener's words or silence decide: an
-    exchange or a Breakdown, a re-call or a Switch-off. Otherwise the show is in Broadcast: a Repair when the
-    cadence calls, else the aftermath of a contact, an orientation when one is due, or a free round.
+    exchange or the last exchange, a re-call or a Switch-off; after the last exchange, the Breakdown. Otherwise the
+    show is in Broadcast: a Repair when the cadence calls, else the aftermath of a contact, an orientation when one
+    is due, or a free round.
     """
     n = len(run.rounds) + 1
     rng = random.Random(f"{run.seed}:{n}")
@@ -100,6 +108,8 @@ def plan_round(run: Run, story: Story, show: ShowConfig, played_s: float = 0.0,
         return _orientation(run, story, show, rng, sign_on=True)
     if run.rounds[-1].kind in LISTENS:
         return _after_listening(run, story, show, (transcript or "").strip(), rng)
+    if run.rounds[-1].kind == "last-exchange":
+        return _breakdown(run, story, show, rng)
     if _time_to_listen(run, show, played_s, rng):
         return _repair(run, story, show, rng)
     ended = _aftermath(run)
@@ -145,7 +155,8 @@ def _free(run: Run, story: Story, show: ShowConfig, rng: random.Random, *, slot:
     line budget drawn from the settings, the overtone of the drift, and in the event slot an event when its gap
     has passed — unless the slot holds an aftermath or a recollection, the listener's words. With fixed_lines,
     the first name reads the event word for word as the round's first line, and the model writes the rest of the
-    budget, opened by the second name.
+    budget, opened by the second name — always at least one line, so a budget of one becomes two: the reading
+    and a reaction.
     """
     silent = _silent_longest(run, story, rng)
     named = sorted(_named_last_round(run, story) - {silent}, key=story.cast.index)
@@ -162,11 +173,11 @@ def _free(run: Run, story: Story, show: ShowConfig, rng: random.Random, *, slot:
     if event and show.fixed_lines:
         reader = chosen[0]
         told = f'Something happens that the listeners cannot see, and {reader} has just told them on air: "{event}"'
-        rest = max_lines - 1
+        rest = max(max_lines - 1, 1)
         opener = chosen[1] if len(chosen) > 1 else reader
-        text = f"{told} Carry on from there. " + _turns(speakers, rest, moods, tone, first=opener) if rest else told
-        return _plan("free", speakers, rest, moods, instruction=text, first=opener if rest else None, event=event,
-                     tone=tone, overtone=overtone, before=(_fixed(reader, moods, event, rng),))
+        text = f"{told} Carry on from there. " + _turns(speakers, rest, moods, tone, first=opener)
+        return _plan("free", speakers, rest, moods, instruction=text, first=opener, event=event, tone=tone,
+                     overtone=overtone, before=(_fixed(reader, moods, event, rng),))
     text = instruction_for(speakers, max_lines, event, moods, tone, show.event_report)
     if slot == "aftermath":
         text = f"{_ended('The voice on the frequency told you: ' + _quoted(words))} Talk among yourselves about " \
@@ -218,7 +229,8 @@ def _repair(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> Rou
     beat_max_lines lines, the operator's pinned last; with one line, or a cast of one, the operator says it all.
     The wording follows how the receiver went off. With fixed_lines and the story's beats, both lines are fixed —
     the announcement by whoever of the rest has been silent longest, then the operator's call — and the model is
-    not asked.
+    not asked; the instruction, read back in the next request, tells them as already said, in the words an
+    event's reading uses, and ends on "Then", running into what comes next: the voice's answer, or the silence.
     """
     op = story.operator
     others = [name for name in story.cast if name != op]
@@ -237,8 +249,9 @@ def _repair(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> Rou
         announcer = _silent_longest(run, story, rng, among=others)
         said = (_fixed(announcer, moods, announcement, rng), _fixed(op, moods, call, rng))
         return _plan("repair", (announcer, op), 0, moods, tone=tone, overtone=overtone, before=said,
-                     instruction=f"{seen}{announcer} tells the listeners on air, then {op} calls out to anyone "
-                                 f"listening.")
+                     instruction=f'Something happens that the listeners cannot see, and {announcer} has just told '
+                                 f'them on air: "{announcement}" {op} has just called out to anyone listening: '
+                                 f'"{call}" Then')
     call = 'in their own words: "We can hear you now. Answer us."'
     lines = show.beat_max_lines
     if not others or lines == 1:
@@ -257,8 +270,9 @@ def _repair(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> Rou
 def _after_listening(run: Run, story: Story, show: ShowConfig, heard: str, rng: random.Random) -> RoundPlan:
     """The round after a listening window.
 
-    Words: an exchange, or the Breakdown once the listener has answered N times in this contact (N drawn when
-    the receiver came back). Silence: a re-call, or the Switch-off after silences_to_switch_off in a row.
+    Words: an exchange, or the last exchange once the listener has answered N times in this contact (N drawn
+    when the receiver came back); the Breakdown follows it. Silence: a re-call, or the Switch-off after
+    silences_to_switch_off in a row.
     """
     period = _receiver_period(run)
     target = _drawn(run.seed, "contact", period[0].n, show.contact_exchanges, show.contact_jitter)
@@ -266,7 +280,7 @@ def _after_listening(run: Run, story: Story, show: ShowConfig, heard: str, rng: 
     if heard:
         progress = (answered + 1, target)
         if answered + 1 >= target:
-            return _breakdown(run, story, show, heard, rng, progress)
+            return _last_exchange(run, story, show, heard, rng, progress)
         return _exchange(run, story, show, heard, rng, progress)
     if _silences(period) + 1 >= show.silences_to_switch_off:
         return _switch_off(run, story, show, rng, (answered, target))
@@ -293,57 +307,55 @@ def _exchange(run: Run, story: Story, show: ShowConfig, heard: str, rng: random.
                  listener=heard, overtone=overtone, agenda=item, answers=answers)
 
 
-def _breakdown(run: Run, story: Story, show: ShowConfig, heard: str, rng: random.Random,
-               answers: Optional[Tuple[int, int]] = None) -> RoundPlan:
-    """Answer the listener's last words, then the receiver fails: built like an exchange, without the question.
+def _last_exchange(run: Run, story: Story, show: ShowConfig, heard: str, rng: random.Random,
+                   answers: Optional[Tuple[int, int]] = None) -> RoundPlan:
+    """The listener's last answer in a contact: answered like any exchange — the character they named first, else
+    whoever asked them last — but asking nothing, since the page does not listen after it; the Breakdown follows.
 
-    breakdown_lines lines. Each job has its line when the count allows: the first answers the voice, the second
-    tells the listeners what is happening to the receiver, the last what it means for them, in the cast's own
-    words; with two lines the last does both. With fixed_lines and the story's beats, the last line is the
-    operator's fixed one and the model writes the lines before it: the answer, then the others react; the
-    operator speaks among them only when the voice addressed them.
+    contact_min_lines to contact_max_lines lines, drawn, with the exchange's overtones.
     """
     first = _addressed(run, story, heard)
-    lines = show.breakdown_lines
+    lines = rng.randint(show.contact_min_lines, show.contact_max_lines)
+    overtone = _kind_overtone(story, "exchange", rng)
+    tone = _tone(run, story, show, overtone, rng)
+    moods = _moods(run, story, overtone)
+    text = f'A voice on the frequency says: "{heard}" {_restatement(run, show)}Speak to the voice directly. ' \
+           f"Answer what the voice said. " + _turns(story.cast, lines, moods, tone, first=first)
+    return _plan("last-exchange", story.cast, lines, moods, instruction=text, min_lines=lines, first=first,
+                 tone=tone, listener=heard, overtone=overtone, answers=answers)
+
+
+def _breakdown(run: Run, story: Story, show: ShowConfig, rng: random.Random) -> RoundPlan:
+    """The receiver fails, right after the last exchange: a receiver beat, like the Switch-off.
+
+    beat_max_lines lines. With fixed_lines and the story's beats, the operator's fixed line opens it, told as an
+    event's reading is, and the rest of the cast react; without them, the model writes it all: what happens to the
+    receiver, then what it means for the listeners, in the cast's own words.
+    """
     overtone = _kind_overtone(story, "breakdown", rng)
     tone = _tone(run, story, show, overtone, rng)
     moods = _moods(run, story, overtone)
-    direction = story.directions.get("breakdown") or "The receiver fails."
-    fails = f"Then something happens that the listeners cannot see: {direction}"
-    means = 'in their own words: "We can\'t hear you anymore, but we\'re still on the air."'
-    answer = "answers what the voice just said, speaking to them directly."
+    lines = show.beat_max_lines
     if show.fixed_lines and story.beats:
         op = story.operator
-        closing = _fixed(op, moods, _version(run, story.beats.breakdown, rng), rng)
-        rest = lines - 1
-        speakers = tuple(name for name in story.cast if name != op or name == first)
-        closes = f"{op} closes the round, telling the listeners the lab can no longer hear them: do not say that " \
-                 f"for {op}."
-        if rest >= 2:
-            react = "second line reacts" if rest == 2 else "other lines react"
-            jobs = f"The first line {answer} {fails} The {react} to it. {closes}"
-        elif rest == 1:
-            jobs = f"The line {answer} {fails} {closes}"
-        else:
-            jobs = fails
-        text = f'A voice on the frequency says: "{heard}" {_restatement(run, show)}{jobs}' \
-               + (" " + _turns(speakers, rest, moods, tone, first=first) if rest else "")
-        return _plan("breakdown", speakers if rest else (op,), rest, moods, instruction=text, min_lines=rest or 1,
-                     first=first if rest else None, tone=tone, listener=heard, overtone=overtone, answers=answers,
-                     after=(closing,))
-    if lines >= 3:
-        jobs = f"The first line {answer} {fails} The second line tells the listeners on air, in detail, what is " \
-               f"happening to the receiver: what they see and hear. The last line tells them, {means}"
-    elif lines == 2:
-        jobs = f"The first line {answer} {fails} The last line tells the listeners on air, in detail, what is " \
-               f"happening to the receiver, and then, {means}"
+        version = _version(run, story.beats.breakdown, rng)
+        told = f'Something happens that the listeners cannot see, and {op} has just told them on air: "{version}"'
+        others = tuple(name for name in story.cast if name != op)
+        rest = lines - 1 if others else 0
+        text = f"{told} Carry on from there. " + _turns(others, rest, moods, tone) if rest else told
+        return _plan("breakdown", others if rest else (op,), rest, moods, instruction=text, min_lines=rest or 1,
+                     tone=tone, overtone=overtone, before=(_fixed(op, moods, version, rng),))
+    direction = story.directions.get("breakdown") or "The receiver fails."
+    means = 'in their own words: "We can\'t hear you anymore, but we\'re still on the air."'
+    if lines >= 2:
+        jobs = "The first line tells the listeners on air, in detail, what is happening to the receiver: what they " \
+               f"see and hear. The last line tells them, {means}"
     else:
-        jobs = f"The line first {answer} {fails} It goes on to tell the listeners on air what is happening to the " \
-               f"receiver, and then, {means}"
-    text = f'A voice on the frequency says: "{heard}" {_restatement(run, show)}{jobs} ' \
-           + _turns(story.cast, lines, moods, tone, first=first)
-    return _plan("breakdown", story.cast, lines, moods, instruction=text, min_lines=lines, first=first, tone=tone,
-                 listener=heard, overtone=overtone, answers=answers)
+        jobs = f"The line tells the listeners on air what is happening to the receiver, and then, {means}"
+    text = f"Something happens that the listeners cannot see: {direction} {jobs} " \
+           + _turns(story.cast, lines, moods, tone)
+    return _plan("breakdown", story.cast, lines, moods, instruction=text, min_lines=lines, tone=tone,
+                 overtone=overtone)
 
 
 def _re_call(run: Run, story: Story, show: ShowConfig, rng: random.Random,
@@ -649,8 +661,7 @@ def _plan(kind: str, speakers: Sequence[str], max_lines: int, moods: Optional[Se
           min_lines: int = 1, first: Optional[str] = None, last: Optional[str] = None, event: Optional[str] = None,
           tone: Optional[str] = None, listener: Optional[str] = None, overtone: Optional[str] = None,
           agenda: Optional[str] = None, slot: Optional[str] = None, recollects: Optional[int] = None,
-          answers: Optional[Tuple[int, int]] = None, before: Sequence[FixedLine] = (),
-          after: Sequence[FixedLine] = ()) -> RoundPlan:
+          answers: Optional[Tuple[int, int]] = None, before: Sequence[FixedLine] = ()) -> RoundPlan:
     """Assemble a plan, building its grammar from the same speakers, budget, pins and moods as its words; no
     grammar when the model writes no line."""
     grammar = build_grammar(speakers, max_lines, moods, min_lines=min_lines, first=first, last=last) \
@@ -658,7 +669,7 @@ def _plan(kind: str, speakers: Sequence[str], max_lines: int, moods: Optional[Se
     return RoundPlan(kind=kind, speakers=tuple(speakers), max_lines=max_lines, event=event, tone=tone,
                      listener=listener, instruction=instruction, grammar=grammar,
                      overtone=overtone, agenda=agenda, slot=slot, recollects=recollects, answers=answers,
-                     before=tuple(before), after=tuple(after))
+                     before=tuple(before))
 
 
 def _fixed(speaker: str, moods: Optional[Sequence[str]], text: str, rng: random.Random) -> FixedLine:

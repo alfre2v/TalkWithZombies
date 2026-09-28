@@ -75,14 +75,15 @@ All commands run from this repository's root,
   **Step 3.4c's settings** (the show's modes; the page's runbook,
   `docs/runbooks/show-page.md`, "How the show runs", says what each
   does): `free_lines` / `free_line_weights` (a free round's line budget,
-  1-4 weighted 1:3:3:1); `overtone_hold` / `overtone_jitter` (a free
+  1-4 weighted 1:3:3:1; with fixed lines an event round gets at least 2,
+  the reading and a reaction); `overtone_hold` / `overtone_jitter` (a free
   round's overtone held 4 ± 1 free rounds, then drifting to a
   neighbor); `contact_exchanges` / `contact_jitter` (a contact lasts
   5 ± 1 of the listener's answers); `contact_min_lines` /
   `contact_max_lines` (an exchange's 2-3 lines);
-  `silences_to_switch_off` (2); `beat_max_lines` (the Repair's and the
-  Switch-off's 2 lines, the orientation's up to 2); `breakdown_lines`
-  (the Breakdown's 3 lines: the answer, the failure, what it means);
+  `silences_to_switch_off` (2); `beat_max_lines` (the receiver beats'
+  2 lines — the Breakdown's and the Switch-off's: the operator's, then a
+  reaction; the orientation's up to 2);
   `orientation_every` / `orientation_jitter` (20 ± 5 free rounds; 0
   keeps only the sign-on);
   `recollection_every` / `recollection_jitter` (15 ± 5 free rounds; 0
@@ -94,7 +95,7 @@ All commands run from this repository's root,
   — is the story's `overtones.yaml`; the events are filed by overtone in
   `events.yaml`; the agenda is `agenda.yaml`. `fixed_lines` (on) has
   the cast say the key lines word for word — an event read out, the
-  call, the Breakdown's closing line, the Switch-off's opening line —
+  call, the Breakdown's and the Switch-off's opening lines —
   from the event's text and the story's `beats.yaml`; the driver marks
   them `[fixed]`.
 

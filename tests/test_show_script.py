@@ -28,6 +28,8 @@ REAL_LINES = [
          raw="Moira (afraid): It’s adapting. Or maybe it’s learning. Over.",
          spoken="It's adapting. Or maybe it's learning. Over."),
 ]
+READ = Line(speaker="Daniel", mood="afraid", raw="Daniel (afraid): A rack falls. Over.", spoken="A rack falls. Over.",
+            fixed=True)
 STORY = Story(name="lab-outbreak", title="T", cast=("Daniel", "Moira", "Ralph", "Samantha"),
               operator="Samantha", template="", events=("Something happens.",))
 NOW = datetime(2026, 9, 24, 1, 23, 45)
@@ -132,6 +134,45 @@ class TestAssembler:
         contents = [m["content"] for m in assemble_messages(run, "Next.")]
 
         assert contents == ["SYSTEM FOR EPISODE 1", "Instruction 2.", REAL_REPLY, "Next."]
+
+    def test_a_fixed_line_is_never_in_the_models_reply(self):
+        run = new_run(STORY, ShowConfig(), "SYSTEM", seed=42, now=NOW)
+        append_round(run, _round(1, lines=[READ, *REAL_LINES]))
+
+        messages = assemble_messages(run, "Next.")
+
+        assert [m["content"] for m in messages] == ["SYSTEM", "Instruction 1.", REAL_REPLY, "Next."]
+        assert reply_text(run.rounds[0]) == REAL_REPLY
+
+    def test_a_round_of_fixed_lines_only_joins_the_next_user_turn(self):
+        run = new_run(STORY, ShowConfig(), "SYSTEM", seed=42, now=NOW)
+        append_round(run, _round(1))
+        append_round(run, _round(2, lines=[READ]))
+        append_round(run, _round(3))
+
+        messages = assemble_messages(run, "Next.")
+
+        assert [m["role"] for m in messages] == ["system", "user", "assistant", "user", "assistant", "user"]
+        assert messages[3]["content"] == "Instruction 2. Instruction 3."
+        assert "A rack falls" not in "".join(m["content"] for m in messages)
+
+    def test_a_text_ending_on_then_runs_into_the_next(self):
+        run = new_run(STORY, ShowConfig(), "SYSTEM", seed=42, now=NOW)
+        append_round(run, _round(1))
+        called = Round(n=2, instruction='Samantha has just called out: "Answer us." Then', speakers=["Samantha"],
+                       max_lines=0, lines=[READ])
+        append_round(run, called)
+        assert assemble_messages(run, "A voice says: \"Hello?\"")[-1]["content"] == (
+            'Samantha has just called out: "Answer us." Then a voice says: "Hello?"')
+        append_round(run, _round(3))
+        assert assemble_messages(run, "Next.")[3]["content"] == (
+            'Samantha has just called out: "Answer us." Then instruction 3.')
+
+    def test_the_new_instruction_carries_a_last_round_of_fixed_lines_only(self):
+        run = new_run(STORY, ShowConfig(), "SYSTEM", seed=42, now=NOW)
+        append_round(run, _round(1))
+        append_round(run, _round(2, lines=[READ]))
+        assert assemble_messages(run, "Next.")[-1]["content"] == "Instruction 2. Next."
 
     def test_no_bracketed_speaker_labels_anywhere(self):
         run = new_run(STORY, ShowConfig(), "SYSTEM", seed=42, now=NOW)

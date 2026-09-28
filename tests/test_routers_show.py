@@ -244,34 +244,25 @@ class TestFixedLines:
         assert [line.spoken for line in repair.lines] == [e["text"] for e in done]
         assert repair.timings is None
 
-    def test_the_breakdowns_fixed_line_closes_the_round_after_the_models(self, client, show_env, fake_model):
+    def test_the_last_answer_then_the_breakdown_opening_with_the_operators_fixed_line(self, client, show_env,
+                                                                                     fake_model):
         app_config._settings_cache.show = ShowConfig(seed=42, contact_exchanges=1, contact_jitter=0)
         run_id, _ = _to_the_call(client)
-        events = _round(client, run_id, played_s=190, transcript="Moira, is it airborne?")
+        last = _summary(_round(client, run_id, played_s=190, transcript="Moira, is it airborne?"))
+        assert (last["kind"], last["listens"], last["receiver"]) == ("last-exchange", False, True)
 
+        events = _round(client, run_id, played_s=200)
+
+        summary = _summary(events)
+        assert (summary["kind"], summary["listens"], summary["receiver"], summary["direction"]) == (
+            "breakdown", False, False, "Smoke pours from the receiver, and it goes dead.")
         done = sse_events_by_type(events, "done")
-        assert [e.get("fixed", False) for e in done] == [False, False, True]
-        assert done[-1]["persona"] == "Samantha"
+        assert (done[0]["persona"], done[0].get("fixed")) == ("Samantha", True)
+        assert not any(e.get("fixed") for e in done[1:])
         breakdown = load_run(run_id).rounds[-1]
-        assert breakdown.kind == "breakdown"
-        assert [line.fixed for line in breakdown.lines] == [False, False, True]
-        assert "Samantha closes the round" in fake_model[-1]["messages"][-1]["content"]
-
-    def test_a_line_the_model_left_unfinished_is_dropped_before_the_fixed_line(self, client, show_env, monkeypatch):
-        app_config._settings_cache.show = ShowConfig(seed=42, contact_exchanges=1, contact_jitter=0)
-
-        async def cut_short(messages, *, grammar, max_tokens, seed):
-            for token in ["Moira (afraid): It's adapting. Over.\n", "Ralph (sad): We're los"]:
-                yield {"token": token}
-            yield {"timings": FINAL["timings"], "finish_reason": "length"}
-
-        monkeypatch.setattr(show_router, "stream_round", cut_short)
-        run_id, _ = _to_the_call(client)
-        _round(client, run_id, played_s=190, transcript="Moira, is it airborne?")
-
-        breakdown = load_run(run_id).rounds[-1]
-        assert [(line.speaker, line.fixed) for line in breakdown.lines] == [("Moira", False), ("Samantha", True)]
-        assert breakdown.dropped == ["Ralph (sad): We're los"]
+        assert breakdown.kind == "breakdown" and breakdown.lines[0].fixed
+        assert fake_model[-1]["messages"][-1]["content"].startswith(
+            'Something happens that the listeners cannot see, and Samantha has just told them on air: "')
 
 
 class TestListenerTurn:
@@ -289,9 +280,11 @@ class TestListenerTurn:
         assert answered.agenda == exchange["agenda"]
         assert len(fake_model) == 2  # The sign-on and the exchange: the call is said in fixed lines
         assert fake_model[1]["grammar"].splitlines()[1].startswith('pinned  ::= "Moira"')
-        assert fake_model[1]["messages"][-1]["content"].startswith(
-            'A voice on the frequency says: "Moira, is it airborne?" Speak to the voice directly. Answer what the '
-            'voice said, then: Find out who the voice is.')
+        messages = fake_model[1]["messages"]
+        assert [m["role"] for m in messages] == ["system", "user", "assistant", "user"]  # The call joins the turn
+        assert messages[-1]["content"].startswith("Something happens that the listeners cannot see, and ")
+        assert ('" Then a voice on the frequency says: "Moira, is it airborne?" Speak to the voice directly. '
+                'Answer what the voice said, then: Find out who the voice is.' in messages[-1]["content"])
 
     def test_a_silent_window_gives_the_re_call(self, client, show_env, fake_model):
         run_id, _ = _to_the_call(client)

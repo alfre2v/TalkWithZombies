@@ -112,7 +112,7 @@ def listener_says(base, run, item, speak):
             "avg_logprob": heard["avg_logprob"]}
 
 
-_WORDS = ("exchange", "breakdown", "answer")      # the rounds that answer the listener's words
+_WORDS = ("exchange", "last-exchange", "answer")  # the rounds that answer the listener's words
 _SILENCE = ("re-call", "switch-off", "static")  # the rounds that answer a silent window
 
 

@@ -86,8 +86,7 @@ def _record(run, plan, played_s=0.0, lines=None):
                             event=plan.event, tone=plan.tone, overtone=plan.overtone, agenda=plan.agenda,
                             slot=plan.slot, recollects=plan.recollects,
                             lines=[_fixed_line(f) for f in plan.before]
-                            + [Line(speaker=s, raw=f"{s} (calm): {t}", spoken=t) for s, t in lines]
-                            + [_fixed_line(f) for f in plan.after]))
+                            + [Line(speaker=s, raw=f"{s} (calm): {t}", spoken=t) for s, t in lines]))
     return plan
 
 
@@ -129,12 +128,12 @@ def _emotions(plan):
 
 def _budget(plan):
     """A round's lines: the model's and the fixed ones."""
-    return plan.max_lines + len(plan.before) + len(plan.after)
+    return plan.max_lines + len(plan.before)
 
 
 def _says_what_the_grammar_enforces(plan):
     if not plan.max_lines:
-        assert not plan.grammar and (plan.before or plan.after)
+        assert not plan.grammar and plan.before
         return
     rules = plan.grammar.splitlines()
     count = "the next line" if plan.max_lines == 1 else f"the next {NUMBERS[plan.max_lines]} lines"
@@ -157,8 +156,8 @@ class TestEveryKind:
     def test_every_kind_comes_up_and_its_words_state_its_grammar(self):
         plans = _play(_run(), 200, show=_show(interaction_min_s=20, interaction_max_s=40, orientation_every=15))
 
-        assert {p.kind for p in plans} == {"orientation", "free", "repair", "exchange", "re-call", "breakdown",
-                                          "switch-off"}
+        assert {p.kind for p in plans} == {"orientation", "free", "repair", "exchange", "last-exchange", "re-call",
+                                          "breakdown", "switch-off"}
         assert {p.slot for p in plans} >= {None, "aftermath"}
         for plan in plans:
             _says_what_the_grammar_enforces(plan)
@@ -298,7 +297,7 @@ class TestOvertone:
             overtone = by_name[plan.overtone]
             if plan.max_lines:
                 assert tuple(_emotions(plan)) == overtone.moods
-            assert {f.mood for f in plan.before + plan.after} <= set(overtone.moods)
+            assert {f.mood for f in plan.before} <= set(overtone.moods)
             assert plan.tone in [w for words in overtone.tones.values() for w in words]
 
     def test_free_rounds_move_only_to_a_neighbor(self):
@@ -406,47 +405,55 @@ class TestContact:
         assert _pins(plan_round(run, STORY, SHOW, 220, "It's me."))[0] == "Moira"
 
     @pytest.mark.parametrize("exchanges, jitter", [(3, 0), (2, 0), (3, 1)])
-    def test_the_breakdown_comes_with_the_nth_answer(self, exchanges, jitter):
+    def test_the_last_exchange_comes_with_the_nth_answer_and_the_breakdown_right_after(self, exchanges, jitter):
         show = _show(contact_exchanges=exchanges, contact_jitter=jitter)
         for seed in range(20):
             run = _in_contact(seed, show)
+            opened = len(run.rounds)
             kinds = [_next(run, show=show, played_s=210, transcript="Hello?").kind for _ in range(exchanges + jitter)]
-            answers = kinds.index("breakdown") + 1
+            answers = kinds.index("last-exchange") + 1
             assert exchanges - jitter <= answers <= exchanges + jitter
             assert set(kinds[:answers - 1]) <= {"exchange"}
+            del run.rounds[opened + answers:]
+            assert _next(run, show=show, played_s=220).kind == "breakdown"
 
-    def test_the_breakdown_answers_the_last_words_then_the_receiver_fails(self):
+    def test_the_last_exchange_answers_without_asking_and_the_page_does_not_listen(self):
         show = _show(contact_exchanges=2, contact_jitter=0, contact_min_lines=2, contact_max_lines=2)
         run = _in_contact(show=show)
         _next(run, show=show, played_s=210, transcript="I'm Alfredo.")
         plan = plan_round(run, STORY, show, 220, "Moira, we're coming.")
 
-        assert (plan.kind, plan.listener, _pins(plan)[0], plan.listens, plan.max_lines) == (
-            "breakdown", "Moira, we're coming.", "Moira", False, 3)
-        assert plan.overtone in ("level", "down")
+        assert (plan.kind, plan.listener, _pins(plan)[0], plan.listens, plan.receiver_on, plan.max_lines) == (
+            "last-exchange", "Moira, we're coming.", "Moira", False, True, 2)
+        assert plan.overtone in ("up", "level") and plan.agenda is None
         assert plan.instruction.startswith(
             'A voice on the frequency says: "Moira, we\'re coming." Earlier in this contact the voice said: "I\'m '
-            'Alfredo." The first line answers what the voice just said, speaking to them directly. Then something '
-            "happens that the listeners cannot see: Smoke pours from the receiver. The second line tells the "
+            'Alfredo." Speak to the voice directly. Answer what the voice said. Moira speaks first, then ')
+        assert "question" not in plan.instruction
+
+    def test_the_breakdown_follows_the_last_exchange_and_the_receiver_fails(self):
+        show = _show(contact_exchanges=1, contact_jitter=0)
+        run = _in_contact(show=show)
+        _next(run, show=show, played_s=210, transcript="Hello?")
+        plan = plan_round(run, STORY, show, 220)
+
+        assert (plan.kind, plan.listener, plan.listens, plan.receiver_on, plan.max_lines, plan.answers) == (
+            "breakdown", None, False, False, 2, None)
+        assert plan.overtone in ("level", "down")
+        assert plan.instruction.startswith(
+            "Something happens that the listeners cannot see: Smoke pours from the receiver. The first line tells the "
             "listeners on air, in detail, what is happening to the receiver: what they see and hear. The last line "
             'tells them, in their own words: "We can\'t hear you anymore, but we\'re still on the air."')
-        assert "asks the voice a question" not in plan.instruction
 
-    @pytest.mark.parametrize("lines, jobs", [
-        (2, "The first line answers what the voice just said, speaking to them directly. Then something happens "
-            "that the listeners cannot see: Smoke pours from the receiver. The last line tells the listeners on "
-            "air, in detail, what is happening to the receiver, and then, in their own words: \"We can't hear "
-            "you anymore"),
-        (1, "The line first answers what the voice just said, speaking to them directly. Then something happens "
-            "that the listeners cannot see: Smoke pours from the receiver. It goes on to tell the listeners on air "
-            "what is happening to the receiver, and then, in their own words: \"We can't hear you anymore"),
-    ])
-    def test_the_breakdowns_jobs_share_fewer_lines(self, lines, jobs):
-        show = _show(contact_exchanges=1, contact_jitter=0, breakdown_lines=lines)
-        plan = plan_round(_in_contact(show=show), STORY, show, 210, "Hello?")
+    def test_a_one_line_breakdown_says_it_all(self):
+        show = _show(contact_exchanges=1, contact_jitter=0, beat_max_lines=1)
+        run = _in_contact(show=show)
+        _next(run, show=show, played_s=210, transcript="Hello?")
+        plan = plan_round(run, STORY, show, 220)
 
-        assert (plan.kind, plan.max_lines) == ("breakdown", lines)
-        assert jobs in plan.instruction
+        assert (plan.kind, plan.max_lines) == ("breakdown", 1)
+        assert ('The line tells the listeners on air what is happening to the receiver, and then, in their own words: '
+                '"We can\'t hear you anymore' in plan.instruction)
 
     def test_each_round_after_a_window_reports_the_answers_so_far_and_the_number_that_ends_the_contact(self):
         show = _show(contact_exchanges=3, contact_jitter=0)
@@ -455,8 +462,9 @@ class TestContact:
 
         assert [(p.kind, p.answers) for p in plans] == [
             ("re-call", (0, 3)), ("exchange", (1, 3)), ("re-call", (1, 3)), ("exchange", (2, 3)),
-            ("breakdown", (3, 3))]
-        assert plan_round(run, STORY, show, 220).answers is None
+            ("last-exchange", (3, 3))]
+        breakdown = plan_round(run, STORY, show, 220)
+        assert (breakdown.kind, breakdown.answers) == ("breakdown", None)
 
     def test_agenda_items_never_repeat_within_a_contact(self):
         show = _show(contact_exchanges=5, contact_jitter=0, interaction_min_s=20, interaction_max_s=40)
@@ -477,7 +485,7 @@ class TestContact:
                      restatement_contacts=1)
         run = _run()
         _play(run, 40, heard=("First voice.", "Second voice.", "Third voice."), show=show)
-        last = [r for r in run.rounds if r.kind == "breakdown"][-1].instruction
+        last = [r for r in run.rounds if r.kind == "last-exchange"][-1].instruction
         listed = last.split("oldest first — ")[1].split(" If this voice")[0]
         assert listed.startswith("1: ") and "2: " not in listed
         assert "Only a voice that says the name of one of them is someone you spoke with before" in last
@@ -554,6 +562,7 @@ class TestAfterAContact:
         run = _in_contact(show=show)
         _next(run, show=show, played_s=210, transcript="I'm Alfredo.")
         _next(run, show=show, played_s=220, transcript="I have a truck.")
+        assert _next(run, show=show, played_s=225).kind == "breakdown"
         plan = plan_round(run, STORY, show, 230)
 
         assert (plan.kind, plan.slot, plan.event, plan.recollects) == ("free", "aftermath", None, 2)
@@ -572,6 +581,7 @@ class TestAfterAContact:
         show = _show(contact_exchanges=1, contact_jitter=0, orientation_every=1, orientation_jitter=0)
         run = _in_contact(show=show)
         _next(run, show=show, played_s=210, transcript="I'm Alfredo.")
+        assert _next(run, show=show, played_s=215).kind == "breakdown"
         assert (_next(run, show=show, played_s=220).slot, run.rounds[-1].kind) == ("aftermath", "free")
         assert plan_round(run, STORY, show, 230).kind == "orientation"
 
@@ -580,9 +590,11 @@ class TestAfterAContact:
                      recollection_jitter=0)
         run = _in_contact(show=show)
         _next(run, show=show, played_s=210, transcript="First voice.")
+        assert _next(run, show=show, played_s=215).kind == "breakdown"
         first = [_next(run, show=show, played_s=t).slot for t in (220, 225, 230)]
         assert _next(run, show=show, played_s=500).kind == "repair"
         _next(run, show=show, played_s=510, transcript="Second voice.")
+        assert _next(run, show=show, played_s=515).kind == "breakdown"
         second = [_next(run, show=show, played_s=t) for t in (520, 525, 530)]
 
         assert first == ["aftermath", None, None]
@@ -597,6 +609,7 @@ class TestAfterAContact:
                      recollection_jitter=0)
         run = _in_contact(show=show)
         _next(run, show=show, played_s=210, transcript="First voice.")
+        assert _next(run, show=show, played_s=215).kind == "breakdown"
         _next(run, show=show, played_s=220)
         assert _next(run, show=show, played_s=500).kind == "repair"
         _next(run, show=show, played_s=510, transcript="Second voice.")
@@ -701,10 +714,13 @@ class TestFixedLines:
                 assert where == "first" and pinned != said.speaker
                 assert "Carry on from there." in plan.instruction
 
-    def test_an_event_round_of_one_line_does_not_ask_the_model(self):
+    def test_an_event_round_always_leaves_the_model_a_line(self):
         plans = [p for p in _play(_run(), 40, show=_quiet(free_lines=[1], free_line_weights=[1])) if p.event]
         assert plans
-        assert all((p.max_lines, p.grammar, len(p.before)) == (0, "", 1) for p in plans)
+        for plan in plans:
+            assert (plan.max_lines, len(plan.before)) == (1, 1)
+            assert plan.grammar and _pins(plan)[1] == "first"
+            assert "Carry on from there." in plan.instruction
 
     def test_the_call_is_two_fixed_lines_the_operators_last(self):
         run = _run()
@@ -716,6 +732,9 @@ class TestFixedLines:
         assert announcer.speaker != "Samantha" and call.speaker == "Samantha"
         assert (announcer.text, call.text) in {(f"{a} Over.", f"{c} Over.") for a, c in BEATS.repair_after_breakdown}
         assert {announcer.mood, call.mood} <= {"happy", "hopeful"}
+        assert plan.instruction == (f"Something happens that the listeners cannot see, and {announcer.speaker} has "
+                                    f'just told them on air: "{announcer.text[:-len(" Over.")]}" Samantha has just '
+                                    f'called out to anyone listening: "{call.text[:-len(" Over.")]}" Then')
 
     def test_after_a_switch_off_the_call_comes_from_its_own_versions(self):
         run = _run()
@@ -737,27 +756,34 @@ class TestFixedLines:
         for start in range(0, len(calls) - 2, 3):
             assert len(set(calls[start:start + 3])) == 3
 
-    def test_the_breakdown_is_closed_by_the_operators_fixed_line(self):
+    def test_the_breakdown_opens_with_the_operators_fixed_line_told_like_an_event(self):
         show = _show(contact_exchanges=1, contact_jitter=0)
         run = _run()
         _next(run, FIXED, show)
         _next(run, FIXED, show, played_s=200)
-        plan = plan_round(run, FIXED, show, 210, "Moira, we're coming.")
+        assert _next(run, FIXED, show, played_s=210, transcript="Moira, we're coming.").kind == "last-exchange"
+        plan = plan_round(run, FIXED, show, 220)
 
-        assert (plan.kind, plan.max_lines, _pins(plan)) == ("breakdown", 2, ("Moira", "first"))
+        assert (plan.kind, plan.max_lines, plan.listens, plan.receiver_on) == ("breakdown", 1, False, False)
+        (said,) = plan.before
+        assert said.speaker == "Samantha" and said.text in {f"{t} Over." for t in BEATS.breakdown}
         assert "Samantha" not in plan.speakers
-        (closing,) = plan.after
-        assert closing.speaker == "Samantha" and closing.text in {f"{t} Over." for t in BEATS.breakdown}
-        assert ("The second line reacts to it. Samantha closes the round, telling the listeners the lab can no "
-                "longer hear them: do not say that for Samantha." in plan.instruction)
+        assert plan.instruction.startswith(
+            'Something happens that the listeners cannot see, and Samantha has just told them on air: '
+            f'"{said.text[:-len(" Over.")]}" Carry on from there. ')
 
-    def test_the_operator_answers_first_in_the_breakdown_when_addressed(self):
+    def test_the_operator_answers_first_in_the_last_exchange_when_addressed(self):
         show = _show(contact_exchanges=1, contact_jitter=0)
         run = _run()
         _next(run, FIXED, show)
         _next(run, FIXED, show, played_s=200)
         plan = plan_round(run, FIXED, show, 210, "Samantha, are you there?")
-        assert _pins(plan) == ("Samantha", "first") and plan.after[0].speaker == "Samantha"
+        assert (plan.kind, _pins(plan)) == ("last-exchange", ("Samantha", "first"))
+
+    def test_no_instruction_speaks_of_rounds(self):
+        show = _show(interaction_min_s=20, interaction_max_s=40, contact_exchanges=2, contact_jitter=0)
+        for plan in _play(_run(), 200, story=FIXED, show=show):
+            assert not re.search(r"\bround\b", plan.instruction), plan.instruction
 
     def test_the_switch_off_opens_with_the_operators_fixed_line(self):
         run = _run()
@@ -785,4 +811,4 @@ class TestFixedLines:
     def test_fixed_lines_off_lets_the_model_write_every_line(self):
         show = _show(interaction_min_s=20, interaction_max_s=40, fixed_lines=False)
         for plan in _play(_run(), 120, story=FIXED, show=show):
-            assert (plan.before, plan.after) == ((), ()) and plan.max_lines >= 1
+            assert plan.before == () and plan.max_lines >= 1
