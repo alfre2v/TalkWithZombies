@@ -5,7 +5,9 @@ The two expected prompts are the system messages proven on the box on
 cast.py CAST_SHEET, and docs/experiments/2026-09-22-emotion-grammar-cost/
 cast.py CAST_SHEET_TAUGHT), byte for byte — plus, since step 3.4c
 (2026-09-26), the premise sentence about the failing receiver and, with
-moods on, the story's fourteen moods in the order of its overtones.
+moods on, the story's fourteen moods in the order of its overtones; and,
+since the prompt sweep (2026-09-28), the premise sentences about the
+listener who answers and what the scientists tell the listeners.
 """
 
 from pathlib import Path
@@ -25,7 +27,11 @@ _WORLD_AND_CAST = (
     "/no_think\n"
     "You write a live radio play. Four scientists are trapped in a besieged research lab during a zombie outbreak, speaking over the lab's shortwave radio. "
     "The radio's receiver keeps failing: while it is down they can only transmit, and when they get it working they "
-    "call out for anyone listening to answer.\n"
+    "call out for anyone listening to answer. A listener who answers is heard as a voice on the frequency, and the "
+    "cast talk to them directly. The scientists try to explain to the listener over the radio the strange events "
+    "that led to the lab's accident that produced the zombie infestation, hoping that someone can find a cure for "
+    "the virus, they also ask the listeners for help (supplies, food, medicine, ammo) to try to resist the zombie "
+    "attack waves.\n"
     "\n"
     "The cast:\n"
     "- Daniel: Dr. Daniel Hayworth, systems engineer. Dry British understatement; competent, tired, quietly heroic.\n"
