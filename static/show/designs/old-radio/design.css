@@ -1,58 +1,73 @@
 /*
- * old-radio — a 1936 tabletop radio set: a walnut cabinet with an arched top, the story's title on a lit amber
- * dial, the transcript in the speaker grille, a magic eye tuning tube as the gauge, jewel lamps for ON AIR and
- * RECEIVER, the cast on brass plates, bakelite knobs and a big ivory key to talk.
+ * old-radio — the show played on a real radio: a photograph of a Philips Sirius BD 400 A (1950), in a museum
+ * (radio.jpg; the photographer and licence in CREDITS.md). The page's elements are laid over the photo where
+ * they belong on the set: the transcript on the speaker cloth, behind the set's own magic eye; ON AIR lights the
+ * dial; RECEIVER lights the magic eye green (the gauge, in stage two); the cast are the four knobs, each glowing
+ * while its character speaks; the story's title is engraved on the brass strip over the dial; the controls are
+ * ivory piano keys on the shelf below the set.
  *
- * The page's elements keep their ids; the header's wrappers become transparent (display: contents) so every
- * piece takes its own place in the cabinet's grid.
+ * The stage (#show) shows the photo cropped to the set: x 110-1905 and y 100-1250 of the photo at 2000 x 1350,
+ * so a point (x, y) of the photo sits at ((x - 110) / 1795, (y - 100) / 1150) of the stage. design.js lays the
+ * photo in twice: under everything, and again over the transcript cut to the magic eye. Text sizes follow the
+ * stage (container query units).
  */
 
 :root {
-    --walnut-dark: #2a160b;
-    --walnut: #5b3219;
-    --walnut-light: #8a522b;
-    --brass: #c9a24a;
-    --brass-dark: #7d5f22;
-    --cloth: #3b2a1a;
-    --cream: #f4e7c8;
-    --amber: #f2b45a;
-    --lamp-red: #ff4b2b;
-    --lamp-green: #6bff8a;
+    --ink: #22170d;
+    --ink-soft: #6b5840;
+    --ivory: #fbf6e9;
 }
 
 body.design-old-radio {
-    background: radial-gradient(ellipse at 50% 20%, #3b3026 0%, #16110d 70%);
-    color: var(--cream);
-    font: 17px/1.5 Georgia, "Hoefler Text", "Times New Roman", serif;
+    background: linear-gradient(180deg, #c9cdd1 0%, #d7dadd 55%, #e9e9e8 78%, #f1f1ef 100%);
+    color: var(--ink);
+    font: 16px/1.5 Georgia, "Hoefler Text", "Times New Roman", serif;
 }
 
-/* The cabinet */
+/* The stage, as large as the window allows above the keys */
 
 .design-old-radio #show {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 230px;
-    grid-template-rows: auto auto auto auto auto minmax(0, 1fr) auto;
-    grid-template-areas:
-        "dial     dial"
-        "grille   eye"
-        "grille   onair"
-        "grille   receiver"
-        "grille   cast"
-        "grille   captions"
-        "controls controls";
-    gap: 18px 22px;
-    max-width: 1120px;
-    height: calc(100% - 32px);
-    margin: 16px auto;
-    padding: 34px 34px 22px;
-    border-radius: 220px 220px 26px 26px / 120px 120px 26px 26px;
-    background:
-        repeating-linear-gradient(92deg, rgba(0, 0, 0, 0.10) 0 3px, rgba(255, 255, 255, 0.03) 3px 7px),
-        linear-gradient(180deg, var(--walnut-light) 0%, var(--walnut) 45%, var(--walnut-dark) 100%);
-    box-shadow:
-        inset 0 0 0 6px rgba(0, 0, 0, 0.35),
-        inset 0 0 0 9px var(--brass-dark),
-        0 30px 60px rgba(0, 0, 0, 0.65);
+    position: relative;
+    display: block;
+    width: min(calc(100vw - 24px), calc((100vh - 96px) * 1795 / 1150));
+    height: auto;
+    aspect-ratio: 1795 / 1150;
+    max-width: none;
+    margin: 6px auto 0;
+    container-type: size;
+}
+
+/* The photo: cropped to the set by its frame, its edges fading into the room */
+
+.design-old-radio .photo-frame,
+.design-old-radio .eye-frame {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.design-old-radio .photo-frame {
+    -webkit-mask: linear-gradient(90deg, transparent 0, #000 3%, #000 97%, transparent 100%),
+        linear-gradient(180deg, transparent 0, #000 3%, #000 97%, transparent 100%);
+    -webkit-mask-composite: source-in;
+    mask: linear-gradient(90deg, transparent 0, #000 3%, #000 97%, transparent 100%),
+        linear-gradient(180deg, transparent 0, #000 3%, #000 97%, transparent 100%);
+    mask-composite: intersect;
+}
+
+.design-old-radio .photo {
+    position: absolute;
+    left: -6.128%;
+    top: -8.696%;
+    width: 111.421%;
+    height: 117.391%;
+    background: url("radio.jpg") 0 0 / 100% 100% no-repeat;
+}
+
+/* The magic eye, laid again over the transcript: lines scroll behind the set's eye */
+.design-old-radio .eye-frame .photo {
+    clip-path: ellipse(4% 5.93% at 29% 40.37%);
 }
 
 .design-old-radio #show-header,
@@ -61,243 +76,256 @@ body.design-old-radio {
     display: contents;
 }
 
-/* The dial: the story's title as the station, a tuning scale and its needle */
+/* The title, engraved on the brass strip over the dial */
 
 .design-old-radio #show-title {
-    grid-area: dial;
-    position: relative;
-    margin: 0 auto;
-    width: min(760px, 100%);
-    padding: 14px 24px 34px;
-    border-radius: 60px 60px 10px 10px;
-    border: 4px solid var(--brass);
-    background:
-        repeating-linear-gradient(90deg, rgba(60, 30, 5, 0.55) 0 2px, transparent 2px 38px)
-            bottom 8px left 24px / calc(100% - 48px) 14px no-repeat,
-        radial-gradient(ellipse at 50% 40%, #ffe3a6 0%, var(--amber) 55%, #b86d1c 100%);
-    color: #3a1f06;
-    font: 700 1.55rem/1.2 "Bodoni 72", Didot, Georgia, serif;
-    letter-spacing: 0.06em;
-    text-align: center;
-    text-transform: uppercase;
-    box-shadow: 0 0 36px rgba(242, 180, 90, 0.55), inset 0 0 18px rgba(120, 60, 0, 0.45);
-}
-
-.design-old-radio #show-title::after {
-    content: "";
     position: absolute;
-    left: 62%;
-    bottom: 6px;
-    width: 3px;
-    height: 26px;
-    background: #b3160c;
-    box-shadow: 0 0 6px rgba(179, 22, 12, 0.8);
+    left: 17.6%;
+    top: 4.35%;
+    width: 64.8%;
+    height: 2.5%;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(36, 22, 4, 0.95);
+    font: 700 2.3cqh/1 "Bodoni 72 Smallcaps", Didot, Georgia, serif;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    text-shadow: 0 1px 0 rgba(255, 240, 200, 0.7), 0 -1px 0 rgba(0, 0, 0, 0.2);
+    white-space: nowrap;
 }
 
-/* The speaker grille, where the transcript plays */
-
-.design-old-radio #script {
-    grid-area: grille;
-    padding: 22px 28px;
-    border-radius: 18px;
-    border: 6px solid var(--brass-dark);
-    background:
-        repeating-linear-gradient(45deg, rgba(255, 220, 160, 0.05) 0 2px, transparent 2px 5px),
-        repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.18) 0 2px, transparent 2px 5px),
-        radial-gradient(ellipse at 50% 50%, #4a3521 0%, var(--cloth) 80%);
-    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.75);
-    scrollbar-color: var(--brass-dark) transparent;
-}
-
-.design-old-radio .line {
-    margin: 6px 0;
-    color: var(--cream);
-    font-size: 1.12rem;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-}
-
-.design-old-radio .speaker {
-    color: #ffd98a;
-    font-variant: small-caps;
-    letter-spacing: 0.04em;
-}
-
-.design-old-radio .mood,
-.design-old-radio .direction {
-    color: #cdb48a;
-}
-
-.design-old-radio .listener .speaker {
-    color: #9fe3a9;
-}
-
-.design-old-radio .round {
-    padding-bottom: 10px;
-    border-bottom: 1px dashed rgba(201, 162, 74, 0.25);
-}
-
-/* The magic eye: a green fan that closes as the sound grows (--eye-open, in degrees) */
-
-.design-old-radio .magic-eye {
-    grid-area: eye;
-    justify-self: center;
-    width: 132px;
-    height: 132px;
-    border-radius: 50%;
-    border: 8px solid var(--brass);
-    background:
-        radial-gradient(circle, #111 0 22%, transparent 23%),
-        conic-gradient(from 0deg,
-            #0b1a0e 0deg var(--eye-open, 60deg),
-            #3dff6e calc(var(--eye-open, 60deg) + 2deg) calc(360deg - var(--eye-open, 60deg) - 2deg),
-            #0b1a0e calc(360deg - var(--eye-open, 60deg)) 360deg);
-    box-shadow: 0 0 28px rgba(61, 255, 110, 0.45), inset 0 0 18px rgba(0, 0, 0, 0.8);
-}
-
-.design-old-radio .magic-eye-label {
-    grid-area: eye;
-    align-self: end;
-    justify-self: center;
-    transform: translateY(18px);
-    color: var(--brass);
-    font: 0.7rem/1 Copperplate, "Copperplate Gothic Light", serif;
-    letter-spacing: 0.2em;
-}
-
-/* The jewel lamps */
+/* ON AIR: the dial lights up. RECEIVER: the magic eye glows green. (Their words stay for screen readers.) */
 
 .design-old-radio #on-air,
 .design-old-radio #receiver {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    position: absolute;
     padding: 0;
     border: 0;
-    color: var(--brass);
-    background: none;
-    font: 0.85rem/1 Copperplate, "Copperplate Gothic Light", serif;
-    letter-spacing: 0.18em;
+    color: transparent;
+    font-size: 0;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+    z-index: 3;
 }
 
 .design-old-radio #on-air {
-    grid-area: onair;
-    margin-top: 22px;
+    left: 19.5%;
+    top: 7.4%;
+    width: 60.2%;
+    height: 19.2%;
+    border-radius: 1.5%;
+    background: radial-gradient(ellipse 65% 70% at 50% 55%, rgba(255, 196, 96, 0.55) 0%,
+        rgba(255, 160, 60, 0.18) 60%, transparent 100%);
 }
 
 .design-old-radio #receiver {
-    grid-area: receiver;
-}
-
-.design-old-radio #on-air::before,
-.design-old-radio #receiver::before {
-    content: "";
-    width: 22px;
-    height: 22px;
+    left: 22.0%;
+    top: 31.9%;
+    width: 8.4%;
+    height: 13.2%;
     border-radius: 50%;
-    border: 3px solid var(--brass-dark);
-    background: radial-gradient(circle at 35% 35%, #555 0%, #1b1b1b 70%);
+    background: conic-gradient(from 0deg, transparent 0 32deg, rgba(92, 255, 128, 0.9) 40deg 320deg,
+        transparent 328deg);
+    -webkit-mask: radial-gradient(circle, transparent 0 20%, #000 23% 52%, transparent 60%);
+    mask: radial-gradient(circle, transparent 0 20%, #000 23% 52%, transparent 60%);
+    filter: blur(0.6px) drop-shadow(0 0 6px rgba(92, 255, 128, 0.9));
 }
 
 .design-old-radio #on-air.lit,
 .design-old-radio #receiver.lit {
-    background: none;
-    color: var(--cream);
+    opacity: 1;
+    border-color: transparent;
+    color: transparent;
 }
 
-.design-old-radio #on-air.lit::before {
-    background: radial-gradient(circle at 35% 35%, #fff 0%, var(--lamp-red) 45%, #7a1106 100%);
-    box-shadow: 0 0 16px var(--lamp-red);
+/* The transcript on the speaker cloth */
+
+.design-old-radio #script {
+    position: absolute;
+    left: 24.6%;
+    top: 34.0%;
+    width: 49.6%;
+    height: 45.4%;
+    padding: 0.8cqw 1.4cqw;
+    background: radial-gradient(ellipse at 50% 50%, rgba(250, 240, 216, 0.24) 0%, rgba(250, 240, 216, 0.10) 100%);
+    font-size: 1.5cqw;
+    line-height: 1.45;
+    scrollbar-width: none;
+    -webkit-mask: linear-gradient(180deg, transparent 0, #000 12%, #000 100%);
+    mask: linear-gradient(180deg, transparent 0, #000 12%, #000 100%);
 }
 
-.design-old-radio #receiver.lit::before {
-    background: radial-gradient(circle at 35% 35%, #fff 0%, var(--lamp-green) 45%, #0d5a22 100%);
-    box-shadow: 0 0 16px var(--lamp-green);
+.design-old-radio #script::-webkit-scrollbar {
+    display: none;
 }
 
-/* The cast on brass plates */
+.design-old-radio .round {
+    margin-bottom: 0.55em;
+}
+
+.design-old-radio .line,
+.design-old-radio .direction {
+    margin: 0.18em 0;
+    color: var(--ink);
+    text-shadow: 0 0 3px rgba(248, 238, 214, 0.95), 0 0 1px rgba(248, 238, 214, 1);
+}
+
+.design-old-radio .speaker {
+    color: #5a1d0e;
+    font-variant: small-caps;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.design-old-radio .mood,
+.design-old-radio .direction,
+.design-old-radio .verdict {
+    color: var(--ink-soft);
+}
+
+.design-old-radio .listener,
+.design-old-radio .listener .speaker {
+    color: #173f2a;
+}
+
+/* The cast: the four knobs, a name under each, a warm glow while its character speaks */
 
 .design-old-radio #cast {
-    grid-area: cast;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
 }
 
 .design-old-radio .cast-member {
-    padding: 5px 4px;
-    border: 1px solid var(--brass-dark);
-    border-radius: 3px;
-    background: linear-gradient(180deg, #e9cf84 0%, var(--brass) 50%, #9a7a2e 100%);
-    color: #3a2608;
-    font: 700 0.72rem/1.2 Copperplate, "Copperplate Gothic Light", serif;
-    letter-spacing: 0.12em;
-    text-align: center;
-    text-transform: uppercase;
+    position: absolute;
+    width: 9%;
+    height: 14%;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    color: transparent;
+    font-size: 0;
 }
+
+.design-old-radio .cast-member::after {
+    content: attr(data-name);
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    transform: translateX(-50%);
+    color: rgba(245, 236, 212, 0.9);
+    font: 700 1.6cqh/1 "Bodoni 72 Smallcaps", Didot, Georgia, serif;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+    white-space: nowrap;
+}
+
+.design-old-radio .cast-member:nth-child(1) { left: 17.27%; top: 90.0%; }
+.design-old-radio .cast-member:nth-child(2) { left: 31.31%; top: 87.8%; width: 6.4%; height: 10%; }
+.design-old-radio .cast-member:nth-child(3) { left: 66.96%; top: 87.8%; width: 6.4%; height: 10%; }
+.design-old-radio .cast-member:nth-child(4) { left: 81.17%; top: 90.0%; }
 
 .design-old-radio .cast-member.speaking {
-    border-color: #fff3c4;
-    color: #1d1203;
-    box-shadow: 0 0 14px rgba(255, 220, 120, 0.9);
+    border-color: transparent;
+    color: transparent;
+    box-shadow: 0 0 1.4cqw 0.5cqw rgba(255, 196, 110, 0.75), inset 0 0 1cqw rgba(255, 210, 140, 0.6);
 }
 
-.design-old-radio #btn-captions {
-    grid-area: captions;
-    align-self: end;
-    justify-self: center;
+.design-old-radio .cast-member.speaking::after {
+    color: #ffe2a6;
 }
 
-/* The controls: bakelite knobs, the state on a brass plate, the key to talk */
+/* The shelf below the set: ivory piano keys and the state */
 
 .design-old-radio #show-controls {
-    grid-area: controls;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 12px);
+    justify-content: center;
+    gap: 16px;
     padding: 0;
     border: 0;
     background: none;
 }
 
-.design-old-radio button {
-    border: 2px solid #120904;
-    background: radial-gradient(circle at 40% 35%, #6b4027 0%, #2b150a 70%);
-    color: var(--cream);
-    font: 700 0.8rem/1 Copperplate, "Copperplate Gothic Light", serif;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    box-shadow: 0 4px 0 #0c0602, 0 6px 12px rgba(0, 0, 0, 0.6);
+.design-old-radio .control-buttons {
+    display: flex;
+    gap: 10px;
 }
 
-.design-old-radio .control-buttons button {
-    width: 84px;
-    height: 84px;
-    border-radius: 50%;
+.design-old-radio button {
+    padding: 12px 20px;
+    border: 1px solid #b7ab8f;
+    border-radius: 3px 3px 9px 9px;
+    background: linear-gradient(180deg, var(--ivory) 0%, #ece3cd 70%, #d8ceb4 100%);
+    color: #3a3226;
+    font: 600 0.78rem/1 Futura, "Avenir Next", "Helvetica Neue", sans-serif;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    box-shadow: 0 5px 0 #a89c80, 0 8px 12px rgba(0, 0, 0, 0.25), inset 0 1px 0 #fff;
+}
+
+.design-old-radio button:active:not(:disabled) {
+    transform: translateY(3px);
+    box-shadow: 0 2px 0 #a89c80, 0 4px 6px rgba(0, 0, 0, 0.25), inset 0 1px 0 #fff;
+}
+
+.design-old-radio #btn-captions {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 12px);
 }
 
 .design-old-radio #show-state {
-    padding: 6px 18px;
-    border: 1px solid var(--brass-dark);
-    border-radius: 4px;
-    background: linear-gradient(180deg, #e9cf84 0%, var(--brass) 100%);
-    color: #3a2608;
-    font: 700 0.9rem/1.2 Copperplate, "Copperplate Gothic Light", serif;
-    letter-spacing: 0.12em;
     flex: 0 1 auto;
+    min-width: 170px;
+    color: #4d4538;
+    font: 600 0.8rem/1 Futura, "Avenir Next", "Helvetica Neue", sans-serif;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
 }
 
 .design-old-radio #btn-talk {
-    min-width: 220px;
-    padding: 18px 26px;
-    border-radius: 14px;
-    background: linear-gradient(180deg, #fffaf0 0%, #e8dcc0 100%);
-    color: #3a2608;
-    font-size: 1rem;
+    min-width: 230px;
+    padding: 14px 26px;
+    font-size: 0.9rem;
+}
+
+.design-old-radio #btn-talk:disabled {
+    opacity: 1;
+    color: #9a907c;
 }
 
 .design-old-radio #btn-talk.window-open {
-    border-color: var(--lamp-green);
-    box-shadow: 0 4px 0 #0c0602, 0 0 22px var(--lamp-green);
+    color: #1f4d2c;
+    border-color: #6fcf8a;
+    box-shadow: 0 5px 0 #a89c80, 0 0 18px rgba(80, 220, 120, 0.6), inset 0 1px 0 #fff;
 }
 
 .design-old-radio #btn-talk.recording {
-    background: linear-gradient(180deg, #ff7a5c 0%, #c0260f 100%);
-    color: #fff;
+    transform: translateY(3px);
+    background: linear-gradient(180deg, #f3c9bd 0%, #e39a86 100%);
+    color: #5a130a;
+    box-shadow: 0 2px 0 #a8806f, 0 0 18px rgba(220, 80, 60, 0.5);
+}
+
+/* The photograph's credit */
+
+.design-old-radio .credit {
+    position: fixed;
+    right: 10px;
+    bottom: 6px;
+    color: #7c7f82;
+    font: 11px/1.3 "Helvetica Neue", Arial, sans-serif;
+}
+
+.design-old-radio .credit a {
+    color: inherit;
 }
