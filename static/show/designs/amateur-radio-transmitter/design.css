@@ -25,7 +25,7 @@ body.design-amateur-radio-transmitter {
 
 .design-amateur-radio-transmitter #show {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 250px;
+    grid-template-columns: minmax(0, 1fr) clamp(250px, 21vw, 360px);
     grid-template-rows: auto auto auto auto minmax(0, 1fr) auto auto;
     grid-template-areas:
         "title    meters"
@@ -36,7 +36,8 @@ body.design-amateur-radio-transmitter {
         "cast     captions"
         "knobs    state";
     gap: 14px 26px;
-    max-width: 1160px;
+    max-width: none;
+    width: calc(100% - 32px);
     height: calc(100% - 32px);
     margin: 16px auto;
     padding: 26px 58px;
@@ -97,6 +98,10 @@ body.design-amateur-radio-transmitter {
     filter: drop-shadow(0 0 4px var(--phosphor));
 }
 
+.design-amateur-radio-transmitter .scope-trace .glow {
+    stroke-width: 2;
+}
+
 .design-amateur-radio-transmitter #script {
     grid-area: scope;
     padding: 18px 26px;
@@ -109,7 +114,7 @@ body.design-amateur-radio-transmitter {
         radial-gradient(ellipse at 50% 50%, #0b2413 0%, var(--scope-bg) 85%);
     box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.9), 0 0 0 2px #74787d;
     color: var(--phosphor);
-    font: 1.08rem/1.55 Menlo, "SF Mono", Monaco, monospace;
+    font: clamp(1.05rem, 1.2vw, 1.6rem)/1.55 Menlo, "SF Mono", Monaco, monospace;
     text-shadow: 0 0 6px rgba(125, 255, 154, 0.55);
     scrollbar-color: var(--phosphor-dim) transparent;
 }
@@ -175,8 +180,11 @@ body.design-amateur-radio-transmitter {
     height: 74px;
     background: #b01010;
     transform-origin: 50% 100%;
-    transform: rotate(var(--needle, 12deg));
+    transform: rotate(calc(-40deg + var(--meter, 0) * 80deg));
 }
+
+.design-amateur-radio-transmitter .meter.plate { --meter: var(--level-voice, 0); }
+.design-amateur-radio-transmitter .meter.signal { --meter: var(--level-mic, 0); }
 
 .design-amateur-radio-transmitter .meter .caption {
     position: absolute;
@@ -253,8 +261,8 @@ body.design-amateur-radio-transmitter {
     grid-area: ptt;
     justify-self: center;
     align-self: start;
-    width: 150px;
-    height: 150px;
+    width: clamp(150px, 12vw, 210px);
+    height: clamp(150px, 12vw, 210px);
     border-radius: 50%;
     border: 10px solid #1d1d1d;
     background: radial-gradient(circle at 38% 32%, #ff7466 0%, var(--ptt-red) 45%, #7a0d08 100%);

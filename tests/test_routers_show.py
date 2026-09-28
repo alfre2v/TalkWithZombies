@@ -1,6 +1,8 @@
 """API tests for app/routers/show.py — POST /api/show/start and /api/show/round.
 
-The shipped lab-outbreak story is copied into the test's project root.
+GET /show is tested for the plain page and for its designs (?design=<name>): the plain page must come back
+unchanged without a design or with an unknown one. The shipped lab-outbreak story is copied into the test's
+project root.
 The model is faked at the router's import site (app.routers.show.
 stream_round) with the real reply recorded on the box on 2026-09-23
 (tests/test_show_parser.py), token by token.
@@ -11,6 +13,7 @@ import base64
 import dataclasses
 import json
 import logging
+import re
 import shutil
 from pathlib import Path
 
@@ -122,6 +125,59 @@ class TestPage:
     def test_the_page_files_are_served(self, client):
         for asset in ("/static/show/show.css", "/static/show/sse.js", "/static/show/show.js"):
             assert client.get(asset).status_code == 200
+
+
+REPO = Path(__file__).resolve().parent.parent
+DESIGNS = sorted(p.name for p in (REPO / "static" / "show" / "designs").iterdir() if (p / "design.css").is_file())
+
+
+def _plain_page():
+    """templates/show.html as served: Jinja drops the file's final newline."""
+    return (REPO / "templates" / "show.html").read_text(encoding="utf-8").rstrip("\n")
+
+
+class TestDesigns:
+    def test_there_are_designs_to_test(self):
+        assert DESIGNS == ["amateur-radio-transmitter", "old-radio"]
+
+    def test_without_a_design_the_plain_page_is_served_unchanged(self, client):
+        assert client.get("/show").text.rstrip("\n") == _plain_page()
+
+    @pytest.mark.parametrize("name", ["nope", "../templates", "..%2Ftemplates", "Old-Radio", "old_radio", "-", ""])
+    def test_an_unknown_or_unsafe_design_serves_the_plain_page(self, client, name):
+        resp = client.get(f"/show?design={name}")
+
+        assert resp.status_code == 200
+        assert resp.text.rstrip("\n") == _plain_page()
+
+    @pytest.mark.parametrize("name", DESIGNS)
+    def test_a_design_is_served_with_its_files_over_the_page(self, client, name):
+        resp = client.get(f"/show?design={name}")
+
+        assert resp.status_code == 200
+        for asset in ("/static/show/show.css", "/static/show/show.js", "/static/show/gauge.js",
+                      f"/static/show/designs/{name}/design.css", f"/static/show/designs/{name}/design.js"):
+            assert asset in resp.text
+            assert client.get(asset).status_code == 200
+        assert f'class="design design-{name}"' in resp.text
+        assert "/static/show/designs/mock.js" not in resp.text
+
+    def test_mock_fills_a_design_with_a_recorded_stretch(self, client):
+        resp = client.get("/show?design=old-radio&mock=1")
+
+        assert "/static/show/designs/mock.js" in resp.text
+        assert client.get("/static/show/designs/mock.js").status_code == 200
+
+    def test_the_design_template_keeps_every_element_of_the_plain_page(self):
+        def ids(name):
+            return re.findall(r'\bid="([^"]+)"', (REPO / "templates" / name).read_text(encoding="utf-8"))
+
+        assert ids("show_design.html") == ids("show.html")
+
+    def test_old_radio_serves_its_photograph_and_credits_it(self, client):
+        assert client.get("/static/show/designs/old-radio/radio.jpg").status_code == 200
+        credits = (REPO / "static" / "show" / "designs" / "old-radio" / "CREDITS.md").read_text(encoding="utf-8")
+        assert "Bin im Garten" in credits and "CC BY-SA 3.0" in credits
 
 
 class TestRound:

@@ -1,16 +1,21 @@
 /**
- * amateur-radio-transmitter — adds the oscilloscope's trace (the gauge: a still wave for now; the sound level will
- * drive its height in stage two), two needle meters and the desk microphone to the panel.
+ * amateur-radio-transmitter — adds the oscilloscope's trace, two needle meters and the desk microphone to the
+ * panel. The trace is the gauge: each frame (gauge.js) it is redrawn as a wave whose height follows the level,
+ * with the previous frames fading behind it like a phosphor's afterglow. The PLATE meter follows the voices
+ * (--level-voice), the SIGNAL meter the listener's microphone (--level-mic), both in CSS.
  */
 
 const SCOPE_POINTS = 160;
+const SCOPE_IDLE = 0.04;       // a faint ripple when all is quiet: the scope is on
+const SCOPE_SPEED = 0.18;      // how far the wave moves along each frame
+const SCOPE_GLOWS = 3;         // the traces fading behind the current one
 
-/** The trace's path across the scope: a wave whose height follows the level (0-1). */
-function scopePath(level) {
+/** The trace's path across the scope: a wave of the given height (0-1), shifted along by the phase. */
+function scopePath(height, phase) {
     const points = [];
     for (let i = 0; i <= SCOPE_POINTS; i++) {
         const x = (i / SCOPE_POINTS) * 1000;
-        const y = 35 - level * 28 * Math.sin(i * 0.45) * Math.sin(i * 0.07 + 0.6);
+        const y = 35 - height * 28 * Math.sin(i * 0.45 + phase) * Math.sin(i * 0.07 + phase * 0.3 + 0.6);
         points.push(`${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`);
     }
     return points.join(" ");
@@ -21,14 +26,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const trace = document.createElement("div");
     trace.className = "scope-trace";
-    trace.innerHTML = `<svg viewBox="0 0 1000 70" preserveAspectRatio="none">
-        <path d="${scopePath(0.8)}" fill="none" stroke="#7dff9a" stroke-width="3"/></svg>`;
+    const glows = Array.from({ length: SCOPE_GLOWS }, (_, i) =>
+        `<path class="glow" d="${scopePath(0, 0)}" opacity="${(0.12 * (SCOPE_GLOWS - i)).toFixed(2)}"/>`);
+    trace.innerHTML = `<svg viewBox="0 0 1000 70" preserveAspectRatio="none" fill="none" stroke="#7dff9a">
+        ${glows.join("")}<path class="beam" d="${scopePath(SCOPE_IDLE, 0)}" stroke-width="3"/></svg>`;
 
     const meters = document.createElement("div");
     meters.className = "meters";
     meters.innerHTML = `
-        <div class="meter" style="--needle: 18deg"><div class="needle"></div><div class="caption">PLATE mA</div></div>
-        <div class="meter" style="--needle: -22deg"><div class="needle"></div><div class="caption">SIGNAL</div></div>`;
+        <div class="meter plate"><div class="needle"></div><div class="caption">PLATE mA</div></div>
+        <div class="meter signal"><div class="needle"></div><div class="caption">SIGNAL</div></div>`;
 
     const mic = document.createElement("div");
     mic.className = "desk-mic";
@@ -42,4 +49,17 @@ document.addEventListener("DOMContentLoaded", () => {
             `<line x1="36" y1="${y}" x2="84" y2="${y}"/>`).join("")}</g></svg>`;
 
     show.append(trace, meters, mic);
+
+    const beam = trace.querySelector(".beam");
+    const afterglow = Array.from(trace.querySelectorAll(".glow"));
+    const recent = [];
+    let phase = 0;
+    onGaugeLevel(({ level }) => {
+        phase += SCOPE_SPEED;
+        const path = scopePath(Math.max(SCOPE_IDLE, level), phase);
+        recent.unshift(path);
+        recent.length = Math.min(recent.length, SCOPE_GLOWS + 1);
+        beam.setAttribute("d", path);
+        afterglow.forEach((glow, i) => { if (recent[i + 1]) glow.setAttribute("d", recent[i + 1]); });
+    });
 });

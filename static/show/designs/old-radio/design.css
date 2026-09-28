@@ -112,6 +112,13 @@ body.design-old-radio {
     z-index: 3;
 }
 
+/* The magic eye is the gauge (gauge.js sets --level, 0-1): its dark wedge narrows as the sound grows. It glows
+   faintly while the receiver is off (a warm tube) and fully while it is on. */
+.design-old-radio #receiver {
+    --wedge: calc(40deg - var(--level, 0) * 34deg);
+    opacity: 0.35;
+}
+
 .design-old-radio #on-air {
     left: 19.5%;
     top: 7.4%;
@@ -128,8 +135,9 @@ body.design-old-radio {
     width: 8.4%;
     height: 13.2%;
     border-radius: 50%;
-    background: conic-gradient(from 0deg, transparent 0 32deg, rgba(92, 255, 128, 0.9) 40deg 320deg,
-        transparent 328deg);
+    background: conic-gradient(from 0deg, transparent 0 var(--wedge),
+        rgba(92, 255, 128, 0.9) calc(var(--wedge) + 6deg) calc(360deg - var(--wedge) - 6deg),
+        transparent calc(360deg - var(--wedge)));
     -webkit-mask: radial-gradient(circle, transparent 0 20%, #000 23% 52%, transparent 60%);
     mask: radial-gradient(circle, transparent 0 20%, #000 23% 52%, transparent 60%);
     filter: blur(0.6px) drop-shadow(0 0 6px rgba(92, 255, 128, 0.9));
