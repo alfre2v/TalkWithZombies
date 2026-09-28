@@ -4,7 +4,8 @@
  * they belong on the set: the transcript on the speaker cloth, behind the set's own magic eye; ON AIR lights the
  * dial; RECEIVER lights the magic eye green (the gauge, in stage two); the cast are the four knobs, each glowing
  * while its character speaks; the story's title is engraved on the brass strip over the dial; the controls are
- * ivory piano keys on the shelf below the set.
+ * ivory piano keys on the set's walnut side panels (captions on the left, the rest on the right), the state
+ * under the set.
  *
  * The stage (#show) shows the photo cropped to the set: x 110-1905 and y 100-1250 of the photo at 2000 x 1350,
  * so a point (x, y) of the photo sits at ((x - 110) / 1795, (y - 100) / 1150) of the stage. design.js lays the
@@ -249,35 +250,36 @@ body.design-old-radio {
     color: #ffe2a6;
 }
 
-/* The shelf below the set: ivory piano keys and the state */
+/* The controls: ivory keys low on the walnut side panels, leaving the dial and the upper wood clear — Start, Stop,
+   Resume and the key to talk on the right over Samantha's knob (design.js puts the key to talk in their column, so
+   the keys stack and never overlap), the captions key on the left over Daniel's; both end at the same height
+   (bottom: 24.4%), equally far from their knobs. The state under the set. The footer's wrapper becomes transparent,
+   so each takes its own place. */
 
 .design-old-radio #show-controls {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: calc(100% + 12px);
-    justify-content: center;
-    gap: 16px;
-    padding: 0;
-    border: 0;
-    background: none;
+    display: contents;
 }
 
 .design-old-radio .control-buttons {
+    position: absolute;
+    left: 79.2%;       /* the captions key's mirror: it spans 9.2-20.8% on the left, these 79.2-90.8% */
+    bottom: 24.4%;
+    width: 11.6%;
     display: flex;
-    gap: 10px;
+    flex-direction: column;
+    gap: 1.3cqh;
 }
 
 .design-old-radio button {
-    padding: 12px 20px;
+    padding: 1.28cqh 0.64cqw;
     border: 1px solid #b7ab8f;
     border-radius: 3px 3px 9px 9px;
     background: linear-gradient(180deg, var(--ivory) 0%, #ece3cd 70%, #d8ceb4 100%);
     color: #3a3226;
-    font: 600 0.78rem/1 Futura, "Avenir Next", "Helvetica Neue", sans-serif;
+    font: 600 max(0.6rem, 0.76cqw)/1.15 Futura, "Avenir Next", "Helvetica Neue", sans-serif;
     letter-spacing: 0.16em;
     text-transform: uppercase;
-    box-shadow: 0 5px 0 #a89c80, 0 8px 12px rgba(0, 0, 0, 0.25), inset 0 1px 0 #fff;
+    box-shadow: 0 5px 0 #a89c80, 0 8px 12px rgba(0, 0, 0, 0.45), inset 0 1px 0 #fff;
 }
 
 .design-old-radio button:active:not(:disabled) {
@@ -287,13 +289,20 @@ body.design-old-radio {
 
 .design-old-radio #btn-captions {
     position: absolute;
-    left: 0;
-    top: calc(100% + 12px);
+    left: 9.2%;
+    bottom: 24.4%;
+    width: 11.6%;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
 }
 
 .design-old-radio #show-state {
-    flex: 0 1 auto;
-    min-width: 170px;
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 26px);
+    transform: translateX(-50%);
+    white-space: nowrap;
+    pointer-events: none;
     color: #4d4538;
     font: 600 0.8rem/1 Futura, "Avenir Next", "Helvetica Neue", sans-serif;
     letter-spacing: 0.16em;
@@ -301,9 +310,9 @@ body.design-old-radio {
 }
 
 .design-old-radio #btn-talk {
-    min-width: 230px;
-    padding: 14px 26px;
-    font-size: 0.9rem;
+    margin-top: 0.8cqh;
+    padding: 3.2cqh 0.64cqw;
+    font-size: max(0.65rem, 0.88cqw);
 }
 
 .design-old-radio #btn-talk:disabled {
