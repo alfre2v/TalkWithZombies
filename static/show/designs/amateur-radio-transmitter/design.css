@@ -40,7 +40,7 @@ body.design-amateur-radio-transmitter {
     width: calc(100% - 32px);
     height: calc(100% - 32px);
     margin: 16px auto;
-    padding: 26px 58px;
+    padding: 50px 58px;           /* clears the 38px bevelled band all round */
     border-radius: 6px;
     background:
         radial-gradient(circle at 24px 30px, #9a9ea3 0 5px, #2a2c2f 6px, transparent 7px),
@@ -253,7 +253,7 @@ body.design-amateur-radio-transmitter {
     grid-area: mic;
     justify-self: center;
     align-self: end;
-    width: 120px;
+    width: clamp(80px, 7vw, 130px);
     filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.6));
 }
 
