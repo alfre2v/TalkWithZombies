@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -150,9 +150,16 @@ app.include_router(show.page_router)
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", include_in_schema=False)
+async def root():
+    """Send visitors to the show: its chooser (GET /show). TalkWithMe's chat UI, which this project is built upon, is
+    at /talkwithme, linked from the chooser."""
+    return RedirectResponse(url="/show")
+
+
+@app.get("/talkwithme", response_class=HTMLResponse)
 async def index(request: Request):
-    """Serve the main chat UI."""
+    """Serve the main chat UI (TalkWithMe's, at the root until the show took it)."""
     # New-style signature (request first): the legacy TemplateResponse(name,
     # {"request": ...}) form was removed from Starlette, and the new form
     # injects `request` into the template context for us.

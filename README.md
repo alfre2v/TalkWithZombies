@@ -112,7 +112,8 @@ pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Open `http://localhost:8000` in your browser.
+Open `http://localhost:8000` in your browser: it opens the show's chooser (`/show`); TalkWithMe's chat UI, which
+this project is built upon, is at `http://localhost:8000/talkwithme`.
 
 ## Configuration
 

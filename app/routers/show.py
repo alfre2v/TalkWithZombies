@@ -1,7 +1,11 @@
 """Show router — open a run, then play its rounds.
 
-GET /show serves the show page (templates/show.html, with its own files
-in static/show/). POST /api/show/start opens a run of a story and gives the
+GET /show serves the chooser (templates/show_choose.html): a card per design
+of static/show/designs/, and one for the plain page. GET /show?design=<name>
+serves the show page in that design (templates/show_design.html);
+GET /show?design=plain the plain page (templates/show.html, with its own files
+in static/show/), untouched.
+POST /api/show/start opens a run of a story and gives the
 page the settings it needs. POST /api/show/round plays
 the run's next round and streams the chat's SSE events (start / token /
 done) for each script line, then a "round" summary and "complete". The
@@ -38,8 +42,9 @@ import logging
 import random
 import re
 from pathlib import Path
-from typing import AsyncIterator, Tuple
+from typing import AsyncIterator, List, Optional, Tuple
 
+import yaml
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -63,15 +68,56 @@ page_router = APIRouter(tags=["show"])
 _templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent.parent / "templates"))
 
 _RUN_ID = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(-\d+)?$")
+_DESIGNS = Path(__file__).resolve().parent.parent.parent / "static" / "show" / "designs"
+_DESIGN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
 def _sse(event: dict) -> str:
     return f"data: {json.dumps(event)}\n\n"
 
 
+def _designs() -> List[dict]:
+    """The designs of static/show/designs/, in the chooser's order: each folder with a design.css, its design.yaml
+    giving the title, a line about it and its place (the folder's name, no line and last without one)."""
+    designs = []
+    for folder in sorted(_DESIGNS.iterdir()):
+        if not (_DESIGN.match(folder.name) and (folder / "design.css").is_file()):
+            continue
+        about = folder / "design.yaml"
+        meta = (yaml.safe_load(about.read_text(encoding="utf-8")) or {}) if about.is_file() else {}
+        designs.append({"name": folder.name, "title": str(meta.get("title", folder.name)),
+                        "about": str(meta.get("about", "")), "order": int(meta.get("order", 1000))})
+    return sorted(designs, key=lambda d: (d["order"], d["name"]))
+
+
+def _story_title() -> str:
+    """The configured story's title, for the chooser's heading; a plain one when the story does not load."""
+    try:
+        return load_story(app_config.get_settings().show.story).title
+    except StoryError:
+        return "The show"
+
+
 @page_router.get("/show", response_class=HTMLResponse)
-async def show_page(request: Request):
-    """Serve the show page, which opens a run and plays its rounds."""
+async def show_page(request: Request, design: Optional[str] = None, mock: bool = False):
+    """Serve the show page, which opens a run and plays its rounds.
+
+    Without ?design, the chooser (templates/show_choose.html): a card per design, with a live miniature of it, and one
+    for the plain page. With ?design=<name> naming a folder of static/show/designs/ that holds a design.css, the page
+    in that design (templates/show_design.html: the same elements, the design's files on top; with ?mock=1, a
+    recorded stretch of a show fills the page, for looking at a design without running one). With ?design=plain, or
+    any other name, the plain page, unchanged; with ?mock=1 as well, the plain look filled with that recorded stretch
+    (the chooser's preview of the plain page), served from the design template with no design on top.
+    """
+    if design is None:
+        return _templates.TemplateResponse(request, "show_choose.html", {
+            "designs": _designs(), "title": _story_title()})
+    if _DESIGN.match(design) and (_DESIGNS / design / "design.css").is_file():
+        return _templates.TemplateResponse(request, "show_design.html", {
+            "design": design, "design_js": (_DESIGNS / design / "design.js").is_file(), "mock": mock})
+    if mock:
+        return _templates.TemplateResponse(request, "show_design.html",
+                                           {"design": None, "design_js": False, "mock": True})
     return _templates.TemplateResponse(request, "show.html")
 
 

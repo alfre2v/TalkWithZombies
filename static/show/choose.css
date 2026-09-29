@@ -1,0 +1,121 @@
+/*
+ * choose.css — The chooser (GET /show): a quiet dark page with the story's title and a card per look of the
+ * show. Each card holds a live miniature: the look's page, 1280 x 800, scaled down into the card and not
+ * clickable itself, so the click opens the card's link.
+ */
+
+:root {
+    --bg: #15171c;
+    --card: #1d2027;
+    --text: #e6e6e6;
+    --muted: #8b919c;
+    --accent: #e0a526;
+    --card-w: 384px;          /* 12px of padding each side: the preview is 360px wide */
+    --preview-scale: 0.28125; /* 360 / 1280 */
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(ellipse at 50% 0%, #22262e 0%, var(--bg) 60%);
+    color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+#choose {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 48px 24px;
+    text-align: center;
+}
+
+h1 {
+    margin: 0;
+    font: 500 2rem/1.2 Georgia, "Times New Roman", serif;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.lead {
+    margin: 8px 0 36px;
+    color: var(--muted);
+}
+
+.cards {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 28px;
+}
+
+.card {
+    width: var(--card-w);
+    padding: 12px 12px 16px;
+    border: 1px solid #2c313b;
+    border-radius: 10px;
+    background: var(--card);
+    color: inherit;
+    text-align: left;
+    text-decoration: none;
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card:hover,
+.card:focus-visible {
+    transform: translateY(-3px);
+    border-color: var(--accent);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+    outline: none;
+}
+
+.preview {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1280 / 800;
+    overflow: hidden;
+    border-radius: 6px;
+    background: #000;
+}
+
+/* The page at full size, scaled into the card */
+.preview iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1280px;
+    height: 800px;
+    border: 0;
+    transform: scale(var(--preview-scale));
+    transform-origin: 0 0;
+    pointer-events: none;
+}
+
+.card h2 {
+    margin: 14px 4px 4px;
+    font-size: 1.1rem;
+}
+
+.card p {
+    margin: 0 4px;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+/* The way back to TalkWithMe's chat UI, which the show is built upon */
+.origin {
+    margin: 44px 0 0;
+    font-size: 0.9rem;
+}
+
+.origin a {
+    color: var(--muted);
+}
+
+.origin a:hover,
+.origin a:focus-visible {
+    color: var(--accent);
+}

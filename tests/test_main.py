@@ -195,8 +195,13 @@ class TestLifespanLlmApiKey:
 
 
 class TestIndex:
-    def test_serves_chat_ui(self, client):
-        resp = client.get("/")
+    def test_the_root_sends_visitors_to_the_show(self, client):
+        resp = client.get("/", follow_redirects=False)
+        assert resp.status_code in (302, 303, 307)
+        assert resp.headers["location"] == "/show"
+
+    def test_serves_chat_ui_at_talkwithme(self, client):
+        resp = client.get("/talkwithme")
         assert resp.status_code == 200
         assert "text/html" in resp.headers["content-type"]
         assert "TalkWithMe v7.1" in resp.text

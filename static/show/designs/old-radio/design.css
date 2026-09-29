@@ -1,0 +1,348 @@
+/*
+ * old-radio — the show played on a real radio: a photograph of a Philips Sirius BD 400 A (1950), in a museum
+ * (radio.jpg; the photographer and licence in CREDITS.md). The page's elements are laid over the photo where
+ * they belong on the set: the transcript on the speaker cloth, behind the set's own magic eye; ON AIR lights the
+ * dial; RECEIVER lights the magic eye green (the gauge, in stage two); the cast are the four knobs, each glowing
+ * while its character speaks; the story's title is engraved on the brass strip over the dial; the controls are
+ * ivory piano keys on the set's walnut side panels (captions on the left, the rest on the right), the state
+ * under the set.
+ *
+ * The stage (#show) shows the photo cropped to the set: x 110-1905 and y 100-1250 of the photo at 2000 x 1350,
+ * so a point (x, y) of the photo sits at ((x - 110) / 1795, (y - 100) / 1150) of the stage. design.js lays the
+ * photo in twice: under everything, and again over the transcript cut to the magic eye. Text sizes follow the
+ * stage (container query units).
+ */
+
+:root {
+    --ink: #22170d;
+    --ink-soft: #6b5840;
+    --ivory: #fbf6e9;
+}
+
+body.design-old-radio {
+    background: linear-gradient(180deg, #c9cdd1 0%, #d7dadd 55%, #e9e9e8 78%, #f1f1ef 100%);
+    color: var(--ink);
+    font: 16px/1.5 Georgia, "Hoefler Text", "Times New Roman", serif;
+}
+
+/* The stage, as large as the window allows above the keys */
+
+.design-old-radio #show {
+    position: relative;
+    display: block;
+    width: min(calc(100vw - 24px), calc((100vh - 96px) * 1795 / 1150));
+    height: auto;
+    aspect-ratio: 1795 / 1150;
+    max-width: none;
+    margin: 6px auto 0;
+    container-type: size;
+}
+
+/* The photo: cropped to the set by its frame, its edges fading into the room */
+
+.design-old-radio .photo-frame,
+.design-old-radio .eye-frame {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.design-old-radio .photo-frame {
+    -webkit-mask: linear-gradient(90deg, transparent 0, #000 3%, #000 97%, transparent 100%),
+        linear-gradient(180deg, transparent 0, #000 3%, #000 97%, transparent 100%);
+    -webkit-mask-composite: source-in;
+    mask: linear-gradient(90deg, transparent 0, #000 3%, #000 97%, transparent 100%),
+        linear-gradient(180deg, transparent 0, #000 3%, #000 97%, transparent 100%);
+    mask-composite: intersect;
+}
+
+.design-old-radio .photo {
+    position: absolute;
+    left: -6.128%;
+    top: -8.696%;
+    width: 111.421%;
+    height: 117.391%;
+    background: url("radio.jpg") 0 0 / 100% 100% no-repeat;
+}
+
+/* The magic eye, laid again over the transcript: lines scroll behind the set's eye */
+.design-old-radio .eye-frame .photo {
+    clip-path: ellipse(4% 5.93% at 29% 40.37%);
+}
+
+.design-old-radio #show-header,
+.design-old-radio #show-header > div,
+.design-old-radio #show-signs {
+    display: contents;
+}
+
+/* The title, engraved on the brass strip over the dial */
+
+.design-old-radio #show-title {
+    position: absolute;
+    left: 17.6%;
+    top: 4.35%;
+    width: 64.8%;
+    height: 2.5%;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(36, 22, 4, 0.95);
+    font: 700 2.3cqh/1 "Bodoni 72 Smallcaps", Didot, Georgia, serif;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    text-shadow: 0 1px 0 rgba(255, 240, 200, 0.7), 0 -1px 0 rgba(0, 0, 0, 0.2);
+    white-space: nowrap;
+}
+
+/* ON AIR: the dial lights up. RECEIVER: the magic eye glows green. (Their words stay for screen readers.) */
+
+.design-old-radio #on-air,
+.design-old-radio #receiver {
+    position: absolute;
+    padding: 0;
+    border: 0;
+    color: transparent;
+    font-size: 0;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+    z-index: 3;
+}
+
+/* The magic eye is the gauge (gauge.js sets --level, 0-1): its dark wedge narrows as the sound grows. It glows
+   faintly while the receiver is off (a warm tube) and fully while it is on. */
+.design-old-radio #receiver {
+    --wedge: calc(40deg - var(--level, 0) * 34deg);
+    opacity: 0.35;
+}
+
+.design-old-radio #on-air {
+    left: 19.5%;
+    top: 7.4%;
+    width: 60.2%;
+    height: 19.2%;
+    border-radius: 1.5%;
+    background: radial-gradient(ellipse 65% 70% at 50% 55%, rgba(255, 196, 96, 0.55) 0%,
+        rgba(255, 160, 60, 0.18) 60%, transparent 100%);
+}
+
+.design-old-radio #receiver {
+    left: 22.0%;
+    top: 31.9%;
+    width: 8.4%;
+    height: 13.2%;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, transparent 0 var(--wedge),
+        rgba(92, 255, 128, 0.9) calc(var(--wedge) + 6deg) calc(360deg - var(--wedge) - 6deg),
+        transparent calc(360deg - var(--wedge)));
+    -webkit-mask: radial-gradient(circle, transparent 0 20%, #000 23% 52%, transparent 60%);
+    mask: radial-gradient(circle, transparent 0 20%, #000 23% 52%, transparent 60%);
+    filter: blur(0.6px) drop-shadow(0 0 6px rgba(92, 255, 128, 0.9));
+}
+
+.design-old-radio #on-air.lit,
+.design-old-radio #receiver.lit {
+    opacity: 1;
+    border-color: transparent;
+    color: transparent;
+}
+
+/* The transcript on the speaker cloth */
+
+.design-old-radio #script {
+    position: absolute;
+    left: 24.6%;
+    top: 34.0%;
+    width: 49.6%;
+    height: 45.4%;
+    padding: 0.8cqw 1.4cqw;
+    background: radial-gradient(ellipse at 50% 50%, rgba(250, 240, 216, 0.24) 0%, rgba(250, 240, 216, 0.10) 100%);
+    font-size: 1.5cqw;
+    line-height: 1.45;
+    scrollbar-width: none;
+    -webkit-mask: linear-gradient(180deg, transparent 0, #000 12%, #000 100%);
+    mask: linear-gradient(180deg, transparent 0, #000 12%, #000 100%);
+}
+
+.design-old-radio #script::-webkit-scrollbar {
+    display: none;
+}
+
+.design-old-radio .round {
+    margin-bottom: 0.55em;
+}
+
+.design-old-radio .line,
+.design-old-radio .direction {
+    margin: 0.18em 0;
+    color: var(--ink);
+    text-shadow: 0 0 3px rgba(248, 238, 214, 0.95), 0 0 1px rgba(248, 238, 214, 1);
+}
+
+.design-old-radio .speaker {
+    color: #5a1d0e;
+    font-variant: small-caps;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.design-old-radio .mood,
+.design-old-radio .direction,
+.design-old-radio .verdict {
+    color: var(--ink-soft);
+}
+
+.design-old-radio .listener,
+.design-old-radio .listener .speaker {
+    color: #173f2a;
+}
+
+/* The cast: the four knobs, a name under each, a warm glow while its character speaks */
+
+.design-old-radio #cast {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.design-old-radio .cast-member {
+    position: absolute;
+    width: 9%;
+    height: 14%;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    color: transparent;
+    font-size: 0;
+}
+
+.design-old-radio .cast-member::after {
+    content: attr(data-name);
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    transform: translateX(-50%);
+    color: rgba(245, 236, 212, 0.9);
+    font: 700 1.6cqh/1 "Bodoni 72 Smallcaps", Didot, Georgia, serif;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+    white-space: nowrap;
+}
+
+.design-old-radio .cast-member:nth-child(1) { left: 17.27%; top: 90.0%; }
+.design-old-radio .cast-member:nth-child(2) { left: 31.31%; top: 87.8%; width: 6.4%; height: 10%; }
+.design-old-radio .cast-member:nth-child(3) { left: 66.96%; top: 87.8%; width: 6.4%; height: 10%; }
+.design-old-radio .cast-member:nth-child(4) { left: 81.17%; top: 90.0%; }
+
+.design-old-radio .cast-member.speaking {
+    border-color: transparent;
+    color: transparent;
+    box-shadow: 0 0 1.4cqw 0.5cqw rgba(255, 196, 110, 0.75), inset 0 0 1cqw rgba(255, 210, 140, 0.6);
+}
+
+.design-old-radio .cast-member.speaking::after {
+    color: #ffe2a6;
+}
+
+/* The controls: ivory keys low on the walnut side panels, leaving the dial and the upper wood clear — Start, Stop,
+   Resume and the key to talk on the right over Samantha's knob (design.js puts the key to talk in their column, so
+   the keys stack and never overlap), the captions key on the left over Daniel's; both end at the same height
+   (bottom: 24.4%), equally far from their knobs. The state under the set. The footer's wrapper becomes transparent,
+   so each takes its own place. */
+
+.design-old-radio #show-controls {
+    display: contents;
+}
+
+.design-old-radio .control-buttons {
+    position: absolute;
+    left: 79.2%;       /* the captions key's mirror: it spans 9.2-20.8% on the left, these 79.2-90.8% */
+    bottom: 24.4%;
+    width: 11.6%;
+    display: flex;
+    flex-direction: column;
+    gap: 1.3cqh;
+}
+
+.design-old-radio button {
+    padding: 1.28cqh 0.64cqw;
+    border: 1px solid #b7ab8f;
+    border-radius: 3px 3px 9px 9px;
+    background: linear-gradient(180deg, var(--ivory) 0%, #ece3cd 70%, #d8ceb4 100%);
+    color: #3a3226;
+    font: 600 max(0.6rem, 0.76cqw)/1.15 Futura, "Avenir Next", "Helvetica Neue", sans-serif;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    box-shadow: 0 5px 0 #a89c80, 0 8px 12px rgba(0, 0, 0, 0.45), inset 0 1px 0 #fff;
+}
+
+.design-old-radio button:active:not(:disabled) {
+    transform: translateY(3px);
+    box-shadow: 0 2px 0 #a89c80, 0 4px 6px rgba(0, 0, 0, 0.25), inset 0 1px 0 #fff;
+}
+
+.design-old-radio #btn-captions {
+    position: absolute;
+    left: 9.2%;
+    bottom: 24.4%;
+    width: 11.6%;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+}
+
+.design-old-radio #show-state {
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 26px);
+    transform: translateX(-50%);
+    white-space: nowrap;
+    pointer-events: none;
+    color: #4d4538;
+    font: 600 0.8rem/1 Futura, "Avenir Next", "Helvetica Neue", sans-serif;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+.design-old-radio #btn-talk {
+    margin-top: 0.8cqh;
+    padding: 3.2cqh 0.64cqw;
+    font-size: max(0.65rem, 0.88cqw);
+}
+
+.design-old-radio #btn-talk:disabled {
+    opacity: 1;
+    color: #9a907c;
+}
+
+.design-old-radio #btn-talk.window-open {
+    color: #1f4d2c;
+    border-color: #6fcf8a;
+    box-shadow: 0 5px 0 #a89c80, 0 0 18px rgba(80, 220, 120, 0.6), inset 0 1px 0 #fff;
+}
+
+.design-old-radio #btn-talk.recording {
+    transform: translateY(3px);
+    background: linear-gradient(180deg, #f3c9bd 0%, #e39a86 100%);
+    color: #5a130a;
+    box-shadow: 0 2px 0 #a8806f, 0 0 18px rgba(220, 80, 60, 0.5);
+}
+
+/* The photograph's credit */
+
+.design-old-radio .credit {
+    position: fixed;
+    right: 10px;
+    bottom: 6px;
+    color: #7c7f82;
+    font: 11px/1.3 "Helvetica Neue", Arial, sans-serif;
+}
+
+.design-old-radio .credit a {
+    color: inherit;
+}
