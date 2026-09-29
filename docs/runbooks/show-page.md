@@ -2,8 +2,11 @@
 
 *Living, undated. Written 2026-09-25 with step 3.1 of the show engine's
 slice 3 (the page with text only), grown with 3.2 (the voice) and 3.3
-(the listener's turn). The page is `GET /show`
-(`templates/show.html`, with its own files in `static/show/`). The
+(the listener's turn), and with the page's looks. `GET /show` is the
+chooser (`templates/show_choose.html`): a card per look, each with a live
+miniature. The plain page is `GET /show?design=plain`
+(`templates/show.html`, with its own files in `static/show/`); a design is
+`GET /show?design=<name>` (see "Choosing a look" below). The
 plan it follows lives in the companion repository,
 [alfre2v/zombie-radio](https://github.com/alfre2v/zombie-radio)
 (`docs/discussions/2026-09-25-show-slice-3-browser-plan.md`); to play
@@ -28,9 +31,39 @@ Start the app (it serves the page too):
 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8010
 ```
 
-Then open <http://127.0.0.1:8010/show> and press **Start**. The page
-opens a run, puts the story's title and cast at the top, and plays
-rounds one after another until you press **Stop**.
+Then open <http://127.0.0.1:8010/show> (the root, <http://127.0.0.1:8010/>,
+sends you there too), choose a look, and press **Start**. The page opens a run, puts the story's title and cast in
+place, and plays rounds one after another until you press **Stop**.
+
+## Choosing a look
+
+`/show` offers every design of `static/show/designs/`, in the order their
+`design.yaml` gives, then the plain page. The same show runs in each; only
+the look changes:
+
+- **Old radio** — <http://127.0.0.1:8010/show?design=old-radio>: a photo
+  of a 1950 Philips Sirius (credits in the design's `CREDITS.md` and on the
+  page). The transcript runs on the speaker cloth; the magic eye glows
+  while the receiver is on and closes with the sound; the dial lights on
+  air; the knob of the character speaking glows; the keys sit on the
+  walnut side panels.
+- **Amateur radio transmitter** —
+  <http://127.0.0.1:8010/show?design=amateur-radio-transmitter>: the
+  transcript on an oscilloscope whose trace swings with the sound; the
+  PLATE meter follows the voices, the SIGNAL meter your microphone.
+- **Plain** — <http://127.0.0.1:8010/show?design=plain>: the working page
+  with no visuals. Any other name also gives the plain page.
+
+Under the cards, a link leads to TalkWithMe's chat UI, the interface this
+project is built upon: <http://127.0.0.1:8010/talkwithme> (it used to be the
+root page).
+
+A design's gauge is `static/show/gauge.js`: loaded only by designed pages,
+it reads the sound's level from the voice and, while you hold the button,
+from your microphone. Add `&mock=1` to a design's address to see it
+filled with a recorded stretch of a show, without running one (the
+chooser's miniatures do this). If a design looks out of date after a
+change, the browser is holding its old files: reload with Cmd+Shift+R.
 
 ## What you see
 
@@ -122,7 +155,8 @@ the defaults, all in `settings.yaml` under `show:`.
 - **A chunk the voice cannot say** is skipped (the browser console
   says why; with debug on, the round notes it); its line still appears
   at its turn, and the show goes on.
-- **Text only:** open <http://127.0.0.1:8010/show?voice=off> to play
+- **Text only:** add `&voice=off` to a look's address (for example
+  <http://127.0.0.1:8010/show?design=plain&voice=off>) to play
   without voices, on the simulated clock of step 3.1: after each round
   the page waits as long as its lines would take to say, about 15
   characters a second, and reports that as played seconds. Useful to

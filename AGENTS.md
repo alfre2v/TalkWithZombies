@@ -51,7 +51,7 @@ deactivate
 ```
 
 Requires a locally running **llama.cpp** server with an OpenAI-compatible API (or any OpenAI-compatible LLM, local or remote). TTS and STT servers are optional.
-Open `http://localhost:8000` in a browser.
+Open `http://localhost:8000` in a browser: the root redirects to the show's chooser (`GET /show`); the chat UI is at `/talkwithme`.
 
 A remote LLM that needs an API key is supported: set the `TALKWITHME_LLM_API_KEY` env var or create an `llm_api_key` file in the project root (copy `llm_api_key.example`) — see the README "LLM API key (remote LLMs)" section. The key is never in `settings.yaml`, never in the UI, and never logged.
 
@@ -148,7 +148,7 @@ Startup decision matrix in `app/config.py::load_personas()` (lazy-imports `perso
 | `theme.js` | Theme toggle |
 | `utils.js` | Shared helpers (incl. `comparePersonasByName()`, the shared case-insensitive persona-name comparator) |
 
-**The show page** (`GET /show`, `templates/show.html`) keeps its own files in `static/show/`, apart from the chat's: upstream's JavaScript, HTML and CSS stay untouched, and code copied from them lives on here, free to change for the show. Classic scripts sharing globals, loaded in order by the template:
+**The show page** (`GET /show?design=plain`, `templates/show.html`) keeps its own files in `static/show/`, apart from the chat's: upstream's JavaScript, HTML and CSS stay untouched, and code copied from them lives on here, free to change for the show. Classic scripts sharing globals, loaded in order by the template:
 
 | File | Responsibility |
 |------|---------------|
@@ -157,6 +157,9 @@ Startup decision matrix in `app/config.py::load_personas()` (lazy-imports `perso
 | `mic.js` | The listener's microphone (recording copied from `stt.js`, without the chat's message box): `primeMic()` asks once at Start, `openMic()` / `closeMic()` keep it open only during a listening window, hold to talk (`talkPress()` / `talkRelease()`), `hear()` posts the recording to `/api/show/listen` |
 | `show.js` | The show's states and loop: start a run, play its rounds (each line given to the voice and shown when it starts; the next round when the voice has drained, with the seconds played; `?voice=off` plays text only on a simulated clock), the listener's turn after any round whose summary says it `listens` — the call, an exchange, a re-call (the window, hold to talk up to the press cap, what Whisper heard in the next round request, and shown at once as a "You: …" caption under that round with each word marked by Whisper's confidence, plus the filter's verdict when it counted as silence), the RECEIVER sign (lit when the last line of a round that listens starts, dark when that of one that does not starts), the receiver beats' stage directions, Stop / Resume, captions, the debug line (with the overtone, the event slot's filling, the agenda item and a contact's answers) |
 | `show.css` | The page's layout and look |
+| `choose.css` | The chooser's look (`GET /show`, `templates/show_choose.html`: a card per look, a live miniature in each) |
+| `gauge.js` | The designs' gauge, loaded only by designed pages: wraps `unlockAudio`, `openMic` and `closeMic` from outside, so the voice and the open microphone feed two analysers; publishes the level (0-1) as CSS variables and to listeners each frame |
+| `designs/<name>/` | A look of the page (`GET /show?design=<name>`, `templates/show_design.html`: the plain page's elements, the design's files on top): `design.css`, optional `design.js` and `design.yaml` (its title, line and place in the chooser); `designs/mock.js` fills a design with a recorded stretch of a show (`&mock=1`) |
 
 **Persona list ordering**: Anywhere a list of personas is shown to the user (the sidebar, the persona editor modal, the persona picker modal, and anything added in the future), it must be sorted alphabetically and case-insensitively using `comparePersonasByName()` from `utils.js`. The shared `personas` global is pre-sorted in `loadPersonas()` (`app.js`), but each render function sorts its own input list rather than trusting the caller's order. **Do not** rely on `GET /api/personas` returning any particular order — the backend intentionally returns personas in raw directory/creation order; sorting is a display concern and belongs in the frontend only.
 

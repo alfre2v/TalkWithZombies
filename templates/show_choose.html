@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The show — TalkWithZombies</title>
+    <link rel="stylesheet" href="/static/show/choose.css">
+    <link rel="icon" href="/static/favicon.ico">
+</head>
+<!-- The chooser: a card per design of static/show/designs/ (a live miniature of its mock-up), then the plain page.
+     A click opens the show in that look. -->
+<body>
+    <main id="choose">
+        <h1>{{ title }}</h1>
+        <p class="lead">Choose how the show looks.</p>
+        <div class="cards">
+            {% for d in designs %}
+            <a class="card" href="/show?design={{ d.name }}">
+                <div class="preview">
+                    <iframe src="/show?design={{ d.name }}&amp;mock=1" title="{{ d.title }}, a preview"
+                            tabindex="-1" aria-hidden="true" loading="lazy"></iframe>
+                </div>
+                <h2>{{ d.title }}</h2>
+                <p>{{ d.about }}</p>
+            </a>
+            {% endfor %}
+            <a class="card" href="/show?design=plain">
+                <div class="preview">
+                    <iframe src="/show?design=plain&amp;mock=1" title="Plain, a preview"
+                            tabindex="-1" aria-hidden="true" loading="lazy"></iframe>
+                </div>
+                <h2>Plain</h2>
+                <p>No visuals: the working page, the script as text, every control at hand.</p>
+            </a>
+        </div>
+        <p class="origin"><a href="/talkwithme">Or visit the old TalkWithMe interface that this project is built
+            upon</a></p>
+    </main>
+</body>
+</html>

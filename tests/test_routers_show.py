@@ -1,7 +1,7 @@
 """API tests for app/routers/show.py — POST /api/show/start and /api/show/round.
 
-GET /show is tested for the plain page and for its designs (?design=<name>): the plain page must come back
-unchanged without a design or with an unknown one. The shipped lab-outbreak story is copied into the test's
+GET /show is tested for the chooser (no design), the plain page and the designs (?design=<name>): the plain page
+must come back unchanged with ?design=plain or an unknown name. The shipped lab-outbreak story is copied into the test's
 project root.
 The model is faked at the router's import site (app.routers.show.
 stream_round) with the real reply recorded on the box on 2026-09-23
@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from markupsafe import escape
 
 import app.config as app_config
 import app.routers.show as show_router
@@ -114,7 +115,7 @@ class TestStart:
 
 class TestPage:
     def test_serves_the_show_page_with_its_own_files(self, client):
-        resp = client.get("/show")
+        resp = client.get("/show?design=plain")
 
         assert resp.status_code == 200
         assert resp.headers["content-type"].startswith("text/html")
@@ -140,8 +141,8 @@ class TestDesigns:
     def test_there_are_designs_to_test(self):
         assert DESIGNS == ["amateur-radio-transmitter", "old-radio"]
 
-    def test_without_a_design_the_plain_page_is_served_unchanged(self, client):
-        assert client.get("/show").text.rstrip("\n") == _plain_page()
+    def test_plain_serves_the_plain_page_unchanged(self, client):
+        assert client.get("/show?design=plain").text.rstrip("\n") == _plain_page()
 
     @pytest.mark.parametrize("name", ["nope", "../templates", "..%2Ftemplates", "Old-Radio", "old_radio", "-", ""])
     def test_an_unknown_or_unsafe_design_serves_the_plain_page(self, client, name):
@@ -167,6 +168,39 @@ class TestDesigns:
 
         assert "/static/show/designs/mock.js" in resp.text
         assert client.get("/static/show/designs/mock.js").status_code == 200
+
+    def test_without_a_design_the_chooser_offers_every_design_then_the_plain_page(self, client, show_env):
+        resp = client.get("/show")
+
+        assert resp.status_code == 200
+        assert "/static/show/choose.css" in resp.text
+        assert "The Lab at the End of the Frequency" in resp.text
+        links = re.findall(r'<a class="card" href="/show\?design=([^"]+)"', resp.text)
+        assert links == ["old-radio", "amateur-radio-transmitter", "plain"]
+        for name in [*DESIGNS, "plain"]:
+            assert f'src="/show?design={name}&amp;mock=1"' in resp.text
+        assert client.get("/static/show/choose.css").status_code == 200
+
+    def test_the_chooser_links_to_the_talkwithme_interface(self, client):
+        text = client.get("/show").text
+        assert '<a href="/talkwithme">Or visit the old TalkWithMe interface that this project is built' in text
+
+    def test_the_plain_mock_is_the_plain_look_filled_with_a_recorded_stretch(self, client):
+        resp = client.get("/show?design=plain&mock=1")
+
+        assert resp.status_code == 200
+        for asset in ("/static/show/show.css", "/static/show/show.js", "/static/show/designs/mock.js"):
+            assert asset in resp.text
+        assert "/designs/plain/" not in resp.text
+        assert "design.css" not in resp.text
+        assert "/static/show/gauge.js" not in resp.text
+
+    def test_the_chooser_takes_each_designs_title_and_line_from_its_folder(self, client):
+        text = client.get("/show").text
+        for name in DESIGNS:
+            about = yaml.safe_load((REPO / "static" / "show" / "designs" / name / "design.yaml").read_text())
+            assert str(escape(about["title"])) in text
+            assert str(escape(about["about"])) in text
 
     def test_the_design_template_keeps_every_element_of_the_plain_page(self):
         def ids(name):

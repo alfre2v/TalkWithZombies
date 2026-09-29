@@ -5,12 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The show — TalkWithZombies</title>
     <link rel="stylesheet" href="/static/show/show.css">
-    <link rel="stylesheet" href="/static/show/designs/{{ design }}/design.css">
+    {% if design %}<link rel="stylesheet" href="/static/show/designs/{{ design }}/design.css">{% endif %}
     <link rel="icon" href="/static/favicon.ico">
 </head>
-<!-- The show page in a design (static/show/designs/{{ design }}/): the same elements, with the same ids, as
-     templates/show.html, which stays the plain, working page; the design only restyles and rearranges them. -->
-<body class="design design-{{ design }}">
+<!-- The show page in a design (static/show/designs/<name>/): the same elements, with the same ids, as
+     templates/show.html, which stays the plain, working page; the design only restyles and rearranges them.
+     Without a design (the chooser's preview of the plain page, with mock), the plain look filled by mock.js. -->
+<body class="design{% if design %} design-{{ design }}{% endif %}">
     <div id="show">
         <!-- The title, the cast strip, the ON AIR and RECEIVER signs, and the captions toggle under them -->
         <header id="show-header">
@@ -45,7 +46,7 @@
     <script src="/static/show/player.js"></script>
     <script src="/static/show/mic.js"></script>
     <script src="/static/show/show.js"></script>
-    <script src="/static/show/gauge.js"></script>
+    {% if design %}<script src="/static/show/gauge.js"></script>{% endif %}
     {% if design_js %}<script src="/static/show/designs/{{ design }}/design.js"></script>{% endif %}
     {% if mock %}<script src="/static/show/designs/mock.js"></script>{% endif %}
 </body>
