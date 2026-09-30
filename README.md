@@ -11,6 +11,25 @@ story coherence and improvisation, and emotional voices in support of
 the narration — is listed in
 [zombie-radio's README, "What the demo shows"](https://github.com/alfre2v/zombie-radio#what-the-demo-shows).
 
+The show page opens on a chooser — pick how the show looks:
+
+![The show's chooser: the old radio, the amateur radio transmitter, or the plain page](screenshots/show_choose.jpg)
+
+The same show in two of its looks — the transcript on a 1950 radio's
+speaker cloth, and on a ham operator's oscilloscope:
+
+<p>
+  <img src="screenshots/show_old_radio.jpg" alt="The show in the old-radio look" width="49%">
+  <img src="screenshots/show_amateur_radio_transmitter.jpg" alt="The show in the amateur-radio-transmitter look" width="49%">
+</p>
+
+The old radio is a photograph of a Philips Sirius BD 400 A (1950) by
+Bin im Garten,
+[CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/), via
+Wikimedia Commons (details in
+[`static/show/designs/old-radio/CREDITS.md`](static/show/designs/old-radio/CREDITS.md));
+the screenshots that show it are shared under the same licence.
+
 ## Forked from TalkWithMe
 
 This repository is a fork of
