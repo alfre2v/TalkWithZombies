@@ -12,7 +12,7 @@
 overtones:
   positive:
     moods: [happy, hopeful, excited, relieved]
-    voices: {happy: ref-amusement.wav, hopeful: ref-interest.wav, excited: ref-extasy.wav,
+    voices: {happy: ref-amusement.wav, hopeful: ref-amazement.wav, excited: ref-extasy.wav,
              relieved: ref-relief.wav}
     tones:
       Hope and warmth:
@@ -119,7 +119,7 @@ overtones:
         - childlike
   neutral:
     moods: [calm, doubtful, urgent, curious, determined]
-    voices: {calm: ref.wav, doubtful: ref-confusion.wav, urgent: ref.wav, curious: ref-interest.wav,
+    voices: {calm: ref.wav, doubtful: ref-confusion.wav, urgent: ref-anger.wav, curious: ref-realization.wav,
              determined: ref-pride.wav}
     tones:
       Manner of speech:
