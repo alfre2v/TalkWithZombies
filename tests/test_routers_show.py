@@ -99,6 +99,21 @@ class TestStart:
         body = _start(client)
         assert (body["listen_window_s"], body["press_cap_s"], body["debug"]) == (7.0, 20.0, True)
 
+    def test_gives_the_page_the_voice_of_each_mood_unless_the_switch_is_off(self, client, show_env, monkeypatch):
+        # The run's copy of the story gets a made-up mapping, so the test does not depend on the shipped one.
+        path = show_env / "stories" / "lab-outbreak" / "overtones.yaml"
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        moods = [m for spec in data["overtones"].values() for m in spec["moods"]]
+        mapping = {m: ("ref-mocked.wav" if i % 2 else "ref.wav") for i, m in enumerate(moods)}
+        for spec in data["overtones"].values():
+            spec["voices"] = {m: mapping[m] for m in spec["moods"]}
+        path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+        assert _start(client)["voices"] == mapping
+
+        monkeypatch.setattr(app_config.get_settings(), "show", ShowConfig(seed=42, mood_voices=False))
+        assert _start(client)["voices"] == {}
+
     def test_unknown_story_is_refused(self, client, show_env):
         resp = client.post("/api/show/start", json={"story": "nope"})
         assert resp.status_code == 422

@@ -8,7 +8,9 @@
  * accumulator ruled on 2026-09-22, as a plain function over a whole line:
  * up to 100 characters of whole sentences; a short sentence may ride along
  * up to 120; a longer sentence goes whole and alone; a chunk never crosses
- * a line, since the next line is another voice.
+ * a line, since the next line is another voice. A line may name the
+ * reference clip it is spoken with (its mood's, e.g. ref-fear.wav); every
+ * chunk of the line carries it.
  *
  * A classic script sharing globals, like upstream's; show.js drives it
  * through speakLine, drained, stopVoice and unlockAudio.
@@ -24,7 +26,7 @@ const VOICE = {
 
 const voice = {
     ctx: null,          // the AudioContext, created on a click
-    pending: [],        // chunks waiting to be synthesized: {persona, text, hooks, first, last}
+    pending: [],        // chunks waiting to be synthesized: {persona, text, hooks, first, last, reference}
     ready: [],          // chunks synthesized, waiting to play: the same, plus buffer (null when it failed)
     fetching: false,
     playing: false,
@@ -102,20 +104,23 @@ function unlockAudio() {
 }
 
 /**
- * Queue a line to be said in a persona's voice.
+ * Queue a line to be said in a persona's voice — with the reference clip
+ * named, if any (e.g. ref-fear.wav), else the persona's ref.wav.
  *
  * hooks.onStart() runs when the line's first chunk starts playing (or at its
  * turn, if no chunk could be synthesized); hooks.onFail(err) runs for each
- * chunk whose synthesis fails — that chunk is skipped.
+ * chunk whose synthesis fails — that chunk is skipped; hooks.onVoice(clip),
+ * if given, runs once the line's first chunk is synthesized, with the clip
+ * the app says it used.
  */
-function speakLine(persona, text, hooks) {
+function speakLine(persona, text, hooks, reference) {
     const parts = chunks(text);
     if (!parts.length) {
         hooks.onStart();
         return;
     }
     parts.forEach((part, i) => {
-        voice.pending.push({ persona, text: part, hooks, first: i === 0, last: i === parts.length - 1 });
+        voice.pending.push({ persona, text: part, hooks, first: i === 0, last: i === parts.length - 1, reference });
     });
     synthesizeNext();
 }
@@ -168,7 +173,9 @@ async function synthesizeNext() {
     voice.controller = controller;
     let buffer = null;
     try {
-        buffer = await synthesize(item.persona, item.text, controller.signal);
+        const said = await synthesize(item.persona, item.text, controller.signal, item.reference);
+        buffer = said.buffer;
+        if (item.first && item.hooks.onVoice) item.hooks.onVoice(said.reference);
     } catch (err) {
         if (!controller.signal.aborted) {
             console.warn("Show voice: a chunk could not be said:", item.persona, item.text, err);
@@ -182,12 +189,17 @@ async function synthesizeNext() {
     synthesizeNext();
 }
 
-/** Ask the app's TTS for a chunk in a persona's voice and decode the WAV it returns. */
-async function synthesize(persona, text, signal) {
+/**
+ * Ask the app's TTS for a chunk in a persona's voice, with the reference clip
+ * named if any; decode the WAV it returns. Resolves to {buffer, reference}:
+ * the audio, and the clip the app says it used.
+ */
+async function synthesize(persona, text, signal, reference) {
+    const request = reference ? { text, persona_name: persona, reference } : { text, persona_name: persona };
     const resp = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, persona_name: persona }),
+        body: JSON.stringify(request),
         signal,
     });
     if (!resp.ok) throw new Error(`the voice request failed (HTTP ${resp.status})`);
@@ -196,7 +208,7 @@ async function synthesize(persona, text, signal) {
     const binary = atob(data.audio_base64);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return await voice.ctx.decodeAudioData(bytes.buffer);
+    return { buffer: await voice.ctx.decodeAudioData(bytes.buffer), reference: data.reference };
 }
 
 /** Play the synthesized chunks in order, with a short pause after each; wake drained() at the end. */

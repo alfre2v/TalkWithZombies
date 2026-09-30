@@ -8,6 +8,7 @@ exercised for real against tmp_path files.
 import base64
 
 import httpx
+import pytest
 
 import app.config as app_config
 import app.routers.stt as stt_router
@@ -132,11 +133,57 @@ class TestTTSProxy:
         resp = client.post("/api/tts", json={"text": "hello", "persona_name": "Luna"})
 
         assert resp.status_code == 200
-        assert resp.json() == {"audio_base64": "QUJD", "sample_rate": 24000}
+        assert resp.json() == {"audio_base64": "QUJD", "sample_rate": 24000, "reference": "ref.wav"}
         assert seen["text"] == "hello"
         assert seen["reference_text"] == "a reference transcript"
         assert seen["audio_base64"] == base64.b64encode(b"RIFF-ref").decode()
         assert seen["language"] == "en"
+
+    def _fake_synthesize(self, monkeypatch):
+        """Replace the TTS call; returns what it was sent."""
+        seen = {}
+
+        async def fake_synthesize(text, reference_text, audio_base64, language):
+            seen.update(reference_text=reference_text, audio=base64.b64decode(audio_base64))
+            return {"audio_base64": "QUJD", "sample_rate": 24000}
+
+        monkeypatch.setattr(tts_router, "synthesize", fake_synthesize)
+        return seen
+
+    def test_a_named_clip_the_persona_has_is_spoken_with(self, client, monkeypatch, tmp_path):
+        _persona_cache(monkeypatch, PersonasConfig(personas=[self._tts_capable_persona(tmp_path)]))
+        (tmp_path / "ref-fear.wav").write_bytes(b"RIFF-fear")
+        (tmp_path / "ref-fear.txt").write_text("a fearful transcript", encoding="utf-8")
+        seen = self._fake_synthesize(monkeypatch)
+
+        resp = client.post("/api/tts", json={"text": "hello", "persona_name": "Luna", "reference": "ref-fear.wav"})
+
+        assert resp.status_code == 200
+        assert resp.json()["reference"] == "ref-fear.wav"
+        assert seen == {"reference_text": "a fearful transcript", "audio": b"RIFF-fear"}
+
+    @pytest.mark.parametrize("name", ["ref-fear.wav", "ref-anger.wav"])
+    def test_a_clip_the_persona_lacks_falls_back_to_ref_wav(self, client, monkeypatch, tmp_path, name):
+        _persona_cache(monkeypatch, PersonasConfig(personas=[self._tts_capable_persona(tmp_path)]))
+        (tmp_path / "ref-fear.wav").write_bytes(b"RIFF-fear")  # No ref-fear.txt: not a usable clip
+        seen = self._fake_synthesize(monkeypatch)
+
+        resp = client.post("/api/tts", json={"text": "hello", "persona_name": "Luna", "reference": name})
+
+        assert resp.json()["reference"] == "ref.wav"
+        assert seen == {"reference_text": "a reference transcript", "audio": b"RIFF-ref"}
+
+    @pytest.mark.parametrize("name", ["../luna.wav", "ref-fear.txt", "REF-FEAR.wav", "ref-fear", "ref-a/b.wav",
+                                      "/tmp/ref-fear.wav", "ref-fear2.wav", ""])
+    def test_a_name_that_is_not_a_clip_s_falls_back_to_ref_wav(self, client, monkeypatch, tmp_path, name):
+        _persona_cache(monkeypatch, PersonasConfig(personas=[self._tts_capable_persona(tmp_path)]))
+        seen = self._fake_synthesize(monkeypatch)
+
+        resp = client.post("/api/tts", json={"text": "hello", "persona_name": "Luna", "reference": name})
+
+        assert resp.status_code == 200
+        assert resp.json()["reference"] == "ref.wav"
+        assert seen["audio"] == b"RIFF-ref"
 
     def test_non_cloning_engine_503_without_calling_synthesize(self, client, monkeypatch, tmp_path):
         # The cached doc (for the current base_url) says reference_audio:

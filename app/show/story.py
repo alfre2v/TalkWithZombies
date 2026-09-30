@@ -5,8 +5,8 @@ A story is a folder ``stories/<name>/`` holding:
 - ``cast_sheet.md`` — YAML front matter for the code (the title, the cast, the operator, the facts an orientation
   round tells newcomers, a stage direction for each receiver beat) and a Jinja body for the model;
 - ``overtones.yaml`` — the emotional palette: the overtones in order, neighbors next to each other, each with the
-  moods a line may carry and its tone words by theme; the overtones each kind of round may use; the weights of the
-  free rounds' drift from one overtone to a neighbor;
+  moods a line may carry, the voice each mood is spoken with (optional) and its tone words by theme; the overtones
+  each kind of round may use; the weights of the free rounds' drift from one overtone to a neighbor;
 - ``events.yaml`` — the events, filed by overtone, then by theme;
 - ``agenda.yaml`` — what the cast want from a listener, one item per exchange; the first opens every contact;
 - ``beats.yaml`` (optional) — the receiver beats' fixed lines, said word for word by a cast member instead of written
@@ -26,7 +26,7 @@ from jinja2 import Environment, StrictUndefined
 
 from app import config as app_config
 from app.config import ShowConfig
-from app.services.persona_store import parse_frontmatter
+from app.services.persona_store import REFERENCE_CLIP, parse_frontmatter
 from app.show.grammar import MOODS
 
 _RULES_DIR = Path(__file__).resolve().parent / "rules"
@@ -45,10 +45,16 @@ class StoryError(ValueError):
 
 @dataclass(frozen=True)
 class Overtone:
-    """One overtone of a story's palette: the moods a line may carry, and the tone words by theme."""
+    """One overtone of a story's palette: the moods a line may carry, and the tone words by theme.
+
+    voices names, for each mood, the reference clip a line in that mood is spoken with (ref.wav, the default
+    voice, or a recording beside it such as ref-fear.wav, in every persona's folder); empty when the story
+    declares no voices.
+    """
     name: str
     moods: Tuple[str, ...]
     tones: Dict[str, Tuple[str, ...]]
+    voices: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -155,7 +161,8 @@ def _load_overtones(name: str, path: Path) -> Tuple[Tuple[Overtone, ...], Dict[s
 
     Checks what the director relies on: each mood a plain lowercase word, in one overtone only; each tone word
     once, and never a mood; every kind of round given one overtone or two neighbors; a weight of at least 0 for
-    every overtone, not all 0.
+    every overtone, not all 0. The voices are optional, but all or nothing: once one overtone names them, every
+    overtone must, for each of its moods and no other, each a reference clip's plain name.
     """
     def fail(what: str):
         raise StoryError(f"story {name!r}: overtones.yaml {what}")
@@ -186,7 +193,11 @@ def _load_overtones(name: str, path: Path) -> Tuple[Tuple[Overtone, ...], Dict[s
             if word in tone_home:
                 fail(f"repeats the tone word {word!r}")
             tone_home[word] = overtone
-        overtones.append(Overtone(name=overtone, moods=moods, tones=tones))
+        voices = _voices(spec.get("voices"), moods, lambda what: fail(f"{what} under {overtone!r}"))
+        overtones.append(Overtone(name=overtone, moods=moods, tones=tones, voices=voices))
+    voiced = [o.name for o in overtones if o.voices]
+    if voiced and len(voiced) < len(overtones):
+        fail(f"names voices under {', '.join(voiced)} but not under every overtone")
     both = sorted(set(mood_home) & set(tone_home))
     if both:
         fail(f"uses {', '.join(both)} as both a mood and a tone word")
@@ -274,6 +285,26 @@ def _load_beats(name: str, path: Path) -> Optional[Beats]:
                  breakdown=texts(data.get("breakdown"), "breakdown"),
                  switch_off_nobody_answered=texts(switch_off.get("nobody-answered"), "switch-off: nobody-answered"),
                  switch_off_voice_lost=texts(switch_off.get("voice-lost"), "switch-off: voice-lost"))
+
+
+def _voices(raw, moods: Tuple[str, ...], fail) -> Dict[str, str]:
+    """An overtone's voices: a clip's plain name for each of its moods, or none at all."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        fail("needs voices as a mapping of moods to reference clips")
+    voices = {str(mood): str(clip) for mood, clip in raw.items()}
+    if set(voices) != set(moods):
+        fail(f"needs a voice for each mood ({', '.join(moods)}) and no other")
+    bad = sorted(clip for clip in voices.values() if not REFERENCE_CLIP.fullmatch(clip))
+    if bad:
+        fail(f"names {', '.join(bad)}, not a reference clip (ref.wav or ref-<word>.wav)")
+    return voices
+
+
+def voice_map(story: Story) -> Dict[str, str]:
+    """Every mood of the story and the reference clip it is spoken with; empty when the story declares no voices."""
+    return {mood: clip for o in story.overtones for mood, clip in o.voices.items()}
 
 
 def all_moods(story: Story) -> List[str]:

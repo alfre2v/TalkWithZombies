@@ -260,6 +260,8 @@ class ShowConfig(BaseModel):
     seed: Optional[int] = Field(default=None, ge=0)
     emotion_tags: bool = True
     debug: bool = False
+    # The line's mood picks the reference clip it is spoken with (the story's voices); off, every line uses ref.wav.
+    mood_voices: bool = True
     # Pacing, in rounds: an event every N free rounds (the gap), a tone word kept N rounds (the hold);
     # each drawn N +/- jitter, never below 1; 0 turns it off.
     event_every: int = Field(default=2, ge=0)

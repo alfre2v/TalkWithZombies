@@ -60,7 +60,7 @@ from app.show.listen import usable
 from app.show.parser import LineParser
 from app.show.script import (Heard, Line, Round, Run, append_round, assemble_messages, load_run, new_run,
                              round_share, script_size, trim)
-from app.show.story import Story, StoryError, load_story, render_cast_sheet
+from app.show.story import Story, StoryError, load_story, render_cast_sheet, voice_map
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/show", tags=["show"])
@@ -135,7 +135,7 @@ def start(req: ShowStartRequest):
     return ShowStartResponse(run_id=run.run_id, story=story.name, title=story.title,
                              cast=list(story.cast), operator=story.operator, seed=seed,
                              listen_window_s=show.listen_window_s, press_cap_s=show.press_cap_s,
-                             debug=show.debug)
+                             debug=show.debug, voices=voice_map(story) if show.mood_voices else {})
 
 
 def _load(run_id: str) -> Tuple[Run, Story]:

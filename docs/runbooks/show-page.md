@@ -148,6 +148,19 @@ the defaults, all in `settings.yaml` under `show:`.
   `/api/tts`, in the speaker's persona voice, the next while the current
   one plays, and played in order: 80 ms between the chunks of a line,
   250 ms after each line.
+- **The voice follows the mood** (`mood_voices`, on). Each line is
+  spoken with the reference clip of its mood, as the story's
+  `overtones.yaml` declares under `voices` — `afraid: ref-fear.wav`,
+  `calm: ref.wav`, one for each of its moods. The clips live in each
+  persona's folder, named after what was recorded (`ref-fear.wav` is the
+  voice dataset's "fear"), each with its transcript (`ref-fear.txt`);
+  they are cast there by zombie-radio's tools, which copy every recording
+  a speaker has (its runbook `docs/runbooks/cast-voices.md`, "With every
+  emotion"), so the story can remap a mood without a recast. The page learns the
+  map when the run starts and names the clip with every chunk of the
+  line; a clip a persona lacks, or a story without `voices`, falls back
+  to the persona's `ref.wav`. Off (`mood_voices: false` under `show:`),
+  every line uses `ref.wav`, as before — for an A/B by ear.
 - **The next round is asked for when the voice has said everything**,
   with the seconds of audio played so far — the sum of the clips'
   lengths — so the director's cadence counts what the listener heard.
@@ -205,7 +218,9 @@ exchange asked, a contact's answers so far (`answers 2 of 3`), what was heard, t
 trimmed and dropped rounds, the seconds to the first line and to the
 round's end, and — once the round has been said — the seconds from the
 round's request to its first sound (the silence the listener hears
-between rounds) and the seconds of audio it played; then the run id —
+between rounds), the seconds of audio it played, and the reference clip
+each line was spoken with (`voices Moira ref-fear.wav, Daniel ref.wav`,
+as the app reports it); then the run id —
 the run's record is
 `runs/<run-id>/script.json`. The debug files of the driver's runbook
 are written too.

@@ -24,6 +24,10 @@
  *   - the voice queue, with fetch and AudioContext stubbed: chunks played in
  *     order, a line's start once at its first clip, the played seconds, the
  *     drain, a stop that cuts the voice, a failed chunk skipped;
+ *   - the voices of the moods: a line's reference clip rides every chunk's
+ *     request (none sent when there is none), the clip the app used is
+ *     reported once per line, the clip of a mood from the run's voices, and
+ *     the debug line's "voices";
  *   - the listener's turn, with the microphone, the recorder and the
  *     transcription route stubbed: a press and a release give what was
  *     heard, no press gives silence, the press cap ends a long press, a stop
@@ -299,17 +303,22 @@ test("chunks: an unfinished tail is a sentence; an empty line says nothing", () 
 
 /**
  * The show's scripts with a stubbed voice: /api/tts answers with the chunk's
- * text as its "audio" (failing for the texts in `failing`), a clip lasts one
- * second per 10 characters, and clips end by themselves unless `manual`,
- * when the test ends them with endClip().
+ * text as its "audio" (failing for the texts in `failing`) and names the clip
+ * it used (the one asked for, else ref.wav); every request's body is kept in
+ * `requests`; a clip lasts one second per 10 characters, and clips end by
+ * themselves unless `manual`, when the test ends them with endClip().
  */
 function voiceHarness({ failing = [], manual = false } = {}) {
     const log = [];
     const live = [];
+    const requests = [];
     const fetchStub = async (url, options) => {
-        const { text } = JSON.parse(options.body);
+        const body = JSON.parse(options.body);
+        requests.push(body);
+        const { text } = body;
         if (failing.includes(text)) return { ok: false, status: 502, json: async () => ({}) };
-        return { ok: true, json: async () => ({ audio_base64: Buffer.from(text).toString("base64") }) };
+        const reply = { audio_base64: Buffer.from(text).toString("base64"), reference: body.reference || "ref.wav" };
+        return { ok: true, json: async () => reply };
     };
     class AudioContextStub {
         constructor() {
@@ -348,7 +357,7 @@ function voiceHarness({ failing = [], manual = false } = {}) {
     const until = async (predicate) => {
         for (let i = 0; i < 200 && !predicate(); i++) await new Promise((resolve) => setTimeout(resolve, 1));
     };
-    return { sandbox, log, hooks, endClip, until, warnings };
+    return { sandbox, log, hooks, endClip, until, warnings, requests };
 }
 
 test("the voice: chunks play in order, a line starts once at its first clip, the drain waits for all", async () => {
@@ -391,6 +400,46 @@ test("the voice: a chunk that cannot be said is skipped; its line still starts, 
         "start Ralph", "play Heard.", "played 0.6",
     ]);
     assert.equal(warnings.length, 1);
+});
+
+test("the voice: a line's clip rides every chunk's request; the first chunk says which clip spoke", async () => {
+    const { sandbox, hooks, requests } = voiceHarness();
+    const a = sentence(60, "a");
+    const b = sentence(60, "b");
+    const said = [];
+
+    const moira = { ...hooks("Moira"), onVoice: (clip) => said.push(clip) };
+    sandbox.speakLine("Moira", `${a} ${b}`, moira, "ref-fear.wav");
+    sandbox.speakLine("Ralph", "Over.", hooks("Ralph"));
+    await sandbox.drained();
+
+    assert.deepEqual(requests.map((r) => [r.persona_name, r.reference]),
+        [["Moira", "ref-fear.wav"], ["Moira", "ref-fear.wav"], ["Ralph", undefined]]);
+    assert.ok(!("reference" in requests[2]), "no clip: the request is the one it always was");
+    assert.deepEqual(said, ["ref-fear.wav"]);
+});
+
+test("voiceOf: a mood's clip from the run's voices; none for an unknown mood, no mood, or no voices", () => {
+    const { sandbox } = loadShow();
+    vm.runInContext('show.run = { voices: { afraid: "ref-fear.wav", calm: "ref.wav" } };', sandbox);
+
+    assert.equal(sandbox.voiceOf("afraid"), "ref-fear.wav");
+    assert.equal(sandbox.voiceOf("calm"), "ref.wav");
+    assert.equal(sandbox.voiceOf("giddy"), null);
+    assert.equal(sandbox.voiceOf(null), null);
+    vm.runInContext("show.run = { voices: {} };", sandbox); // show.mood_voices off
+    assert.equal(sandbox.voiceOf("afraid"), null);
+});
+
+test("debugLine: once said, the clip each line was spoken with", () => {
+    const { sandbox } = loadShow();
+    const summary = { n: 3, kind: "free", speakers: ["Moira", "Daniel"], event: null, tone: null, heard: null,
+        trimmed: [], dropped: [] };
+    const times = { firstLineS: 0.9, seconds: 2.1, voices: ["Moira ref-fear.wav", undefined, "Daniel ref.wav"] };
+
+    assert.equal(sandbox.debugLine(summary, times, "r"),
+        "round 3 · free · speakers Moira, Daniel · event — · tone —"
+        + " · voices Moira ref-fear.wav, Daniel ref.wav · first line 0.9 s · round 2.1 s · run r");
 });
 
 test("debugLine: once said, the round's first sound and the audio it played", () => {

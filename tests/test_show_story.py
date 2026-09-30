@@ -19,7 +19,8 @@ import pytest
 import app.config as app_config
 from app.config import Persona, PersonasConfig, ShowConfig
 from app.show.grammar import MOODS
-from app.show.story import Story, StoryError, all_moods, load_story, render_cast_sheet
+from app.services.persona_store import REFERENCE_CLIP
+from app.show.story import Story, StoryError, all_moods, load_story, render_cast_sheet, voice_map
 
 SHIPPED = Path(__file__).resolve().parent.parent / "stories"
 CAST = ["Daniel", "Moira", "Ralph", "Samantha"]
@@ -74,6 +75,10 @@ OVERTONES = ("overtones:\n"
              "  up:\n    moods: [happy]\n    tones:\n      Warm: [bright]\n"
              "  level:\n    moods: [calm]\n"
              "  down:\n    moods: [sad, afraid]\n    tones:\n      Dark: [grim, eerie]\n") + KINDS + WEIGHTS
+VOICED = (OVERTONES.replace("moods: [happy]\n", "moods: [happy]\n    voices: {happy: ref-amusement.wav}\n")
+          .replace("moods: [calm]\n", "moods: [calm]\n    voices: {calm: ref.wav}\n")
+          .replace("moods: [sad, afraid]\n",
+                   "moods: [sad, afraid]\n    voices: {sad: ref-sadness.wav, afraid: ref-fear.wav}\n"))
 EVENTS = "events:\n  down:\n    Dark:\n      - Something happens.\n"
 AGENDA = "agenda:\n  - Who are you?\n  - Where are you?\n"
 BEATS = ("repair:\n  after-breakdown:\n    - [Fixed!, Answer us.]\n  after-switch-off:\n    - [Back on!, Answer us.]\n"
@@ -122,6 +127,9 @@ class TestShippedStory:
         assert [len(beats.repair_after_breakdown), len(beats.repair_after_switch_off), len(beats.breakdown),
                 len(beats.switch_off_nobody_answered), len(beats.switch_off_voice_lost)] == [4, 4, 4, 4, 4]
         assert all(len(pair) == 2 for pair in beats.repair_after_breakdown + beats.repair_after_switch_off)
+        voices = voice_map(story)  # Which clip each mood gets is the story's to change: only its shape is pinned
+        assert set(voices) == set(moods)
+        assert all(REFERENCE_CLIP.fullmatch(clip) for clip in voices.values())
 
     def test_moods_off_renders_the_run_1_prompt(self, voices):
         story = load_story("lab-outbreak", SHIPPED)
@@ -203,6 +211,26 @@ class TestStoryErrors:
         (OVERTONES.replace(WEIGHTS, "weights: {up: 0, level: 0, down: 0}\n"), "weights"),
     ])
     def test_malformed_overtones_fail(self, voices, tmp_path, overtones, match):
+        with pytest.raises(StoryError, match=match):
+            load_story("s", _write_story(tmp_path, overtones=overtones))
+
+    def test_voices_are_optional_and_read_when_present(self, voices, tmp_path):
+        assert voice_map(load_story("s", _write_story(tmp_path / "a"))) == {}
+        story = load_story("s", _write_story(tmp_path / "b", overtones=VOICED))
+
+        assert voice_map(story) == {"happy": "ref-amusement.wav", "calm": "ref.wav", "sad": "ref-sadness.wav",
+                                    "afraid": "ref-fear.wav"}
+        assert story.overtones[2].voices == {"sad": "ref-sadness.wav", "afraid": "ref-fear.wav"}
+
+    @pytest.mark.parametrize("overtones, match", [
+        (VOICED.replace("sad: ref-sadness.wav, ", ""), "a voice for each mood"),
+        (VOICED.replace("{calm: ref.wav}", "{calm: ref.wav, sad: ref.wav}"), "a voice for each mood"),
+        (VOICED.replace("ref-fear.wav", "../fear.wav"), "not a reference clip"),
+        (VOICED.replace("ref-fear.wav", "ref-fear.mp3"), "not a reference clip"),
+        (VOICED.replace("    voices: {calm: ref.wav}\n", ""), "not under every overtone"),
+        (VOICED.replace("{calm: ref.wav}", "[ref.wav]"), "a mapping of moods"),
+    ])
+    def test_malformed_voices_fail(self, voices, tmp_path, overtones, match):
         with pytest.raises(StoryError, match=match):
             load_story("s", _write_story(tmp_path, overtones=overtones))
 

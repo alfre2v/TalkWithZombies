@@ -4,11 +4,16 @@
 #
 # moods: the emotion tags a line may carry; each mood belongs to one overtone. The emotion tag colors how a line
 #   sounds; the tone word colors what is said, so a tone word is never a mood.
+# voices: the reference clip each mood is spoken with, in every persona's folder: ref.wav, the default voice, or a
+#   recording beside it, named after what was recorded (ref-fear.wav is the voice dataset's "fear"). Every mood
+#   has one; a clip a persona lacks falls back to its ref.wav. Off with show.mood_voices: false.
 # tones: the tone words under their themes (the themes are data, for uses to come); a theme may appear under two
 #   overtones when its words differ. A tone word is kept for a few rounds (show.tone_hold, with jitter).
 overtones:
   positive:
     moods: [happy, hopeful, excited, relieved]
+    voices: {happy: ref-amusement.wav, hopeful: ref-interest.wav, excited: ref-extasy.wav,
+             relieved: ref-relief.wav}
     tones:
       Hope and warmth:
         - bright
@@ -114,6 +119,8 @@ overtones:
         - childlike
   neutral:
     moods: [calm, doubtful, urgent, curious, determined]
+    voices: {calm: ref.wav, doubtful: ref-confusion.wav, urgent: ref.wav, curious: ref-interest.wav,
+             determined: ref-pride.wav}
     tones:
       Manner of speech:
         - ornate
@@ -297,6 +304,8 @@ overtones:
         - authoritative
   negative:
     moods: [sad, afraid, terrified, angry, exhausted]
+    voices: {sad: ref-sadness.wav, afraid: ref-fear.wav, terrified: ref-distress.wav, angry: ref-anger.wav,
+             exhausted: ref-pain.wav}
     tones:
       Dread and horror:
         - macabre

@@ -57,6 +57,10 @@ class TTSRequest(BaseModel):
     """Proxy request to the TTS server."""
     text: str = Field(..., min_length=1, description="Text to synthesize")
     persona_name: str = Field(..., description="Which persona to synthesize for")
+    reference: Optional[str] = Field(
+        default=None,
+        description="Which of the persona's reference clips to speak with, e.g. ref-fear.wav; ref.wav when absent",
+    )
 
 
 class STTRequest(BaseModel):
@@ -333,7 +337,8 @@ class ShowStartResponse(BaseModel):
     """The run just opened: its id, story, cast and seed, and the show settings the page needs.
 
     listen_window_s and press_cap_s time the listener's turn; debug turns on
-    the page's debug line.
+    the page's debug line; voices maps each mood to the reference clip its
+    lines are spoken with (empty: every line uses ref.wav).
     """
     run_id: str
     story: str
@@ -344,6 +349,7 @@ class ShowStartResponse(BaseModel):
     listen_window_s: float
     press_cap_s: float
     debug: bool
+    voices: Dict[str, str] = Field(default_factory=dict)
 
 
 class ShowRoundRequest(BaseModel):

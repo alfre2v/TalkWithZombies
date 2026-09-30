@@ -50,6 +50,9 @@ PROMPT_FILENAME = "prompt.md"
 LANGUAGE_FILENAME = "language.txt"
 REFERENCE_AUDIO_FILENAME = "ref.wav"
 TRANSCRIPT_FILENAME = "ref.txt"
+# A reference clip's name as a story may ask for it: the default voice, ref.wav, or a recording beside it,
+# ref-<word>.wav (for instance ref-fear.wav), each with its transcript in the .txt of the same name.
+REFERENCE_CLIP = re.compile(r"ref(?:-[a-z]+)?\.wav")
 MEMORIES_FILENAME = "memories.txt"
 IMAGE_BASENAME = "image"
 DEFAULT_LANGUAGE = "en"
@@ -431,6 +434,19 @@ def remove_avatar_file(persona_dir: Path) -> bool:
             path.unlink()
             removed = True
     return removed
+
+
+def reference_clip(persona_dir: Path, name: Optional[str]) -> Optional[Tuple[Path, Path]]:
+    """A named reference clip of a persona and its transcript, e.g. ref-fear.wav and ref-fear.txt.
+
+    Only a plain name is accepted (REFERENCE_CLIP: ref.wav or ref-<lowercase word>.wav), so nothing outside the
+    persona's folder can be named. None when the name is not one, or when the clip or its transcript is missing.
+    """
+    if not name or not REFERENCE_CLIP.fullmatch(name):
+        return None
+    audio = persona_dir / name
+    transcript = audio.with_suffix(".txt")
+    return (audio, transcript) if audio.is_file() and transcript.is_file() else None
 
 
 def remove_reference_audio_file(persona_dir: Path) -> bool:
