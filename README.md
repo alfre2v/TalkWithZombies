@@ -6,6 +6,11 @@ trapped in a lab during a zombie outbreak, with the audience talking
 back over the radio. It will be presented in a talk at the Austin
 Python Meetup in Oct 2026.
 
+What the demo sets out to show — among it, what this app delivers:
+story coherence and improvisation, and emotional voices in support of
+the narration — is listed in
+[zombie-radio's README, "What the demo shows"](https://github.com/alfre2v/zombie-radio#what-the-demo-shows).
+
 ## Forked from TalkWithMe
 
 This repository is a fork of
