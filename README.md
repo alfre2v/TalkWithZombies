@@ -41,6 +41,13 @@ copyright notice are kept unchanged in [LICENSE](LICENSE).
   [ADR-0002](https://github.com/alfre2v/zombie-radio/blob/main/docs/decisions/0002-fork-talkwithme-as-talkwithzombies-in-a-sibling-repo.md)
   and
   [ADR-0003](https://github.com/alfre2v/zombie-radio/blob/main/docs/decisions/0003-adopt-shared-context-screenplay-engine-with-browser-clocked-director.md).
+- **The show's voices:** each character's reference clip,
+  `Personas/<Name>/ref.wav` with its transcript in `ref.txt`, is cast from
+  the EARS dataset with zombie-radio's tools: see
+  [zombie-radio's README, "Voices for the cast"](https://github.com/alfre2v/zombie-radio#voices-for-the-cast)
+  and its [runbook](https://github.com/alfre2v/zombie-radio/blob/main/docs/runbooks/cast-voices.md).
+  The app reads `ref.wav` again for every line it speaks, so a recast is
+  heard from the next line.
 
 The upstream README follows, unchanged.
 
