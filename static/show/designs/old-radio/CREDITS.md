@@ -16,3 +16,8 @@ the IFA 2012 in Berlin.
 
 This photograph stays under CC BY-SA 3.0; the rest of this repository keeps its own licence. The show page credits
 the photograph at the bottom of the screen.
+
+## Screenshots that show it
+
+`screenshots/show_old_radio.jpg` and `screenshots/show_choose.jpg` (the README's) show the photograph as the show page
+draws it; they are shared under the same licence, CC BY-SA 3.0, with the credit above.
