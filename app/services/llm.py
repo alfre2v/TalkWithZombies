@@ -193,6 +193,20 @@ async def count_tokens(text: str) -> int:
         return len(resp.json()["tokens"])
 
 
+async def server_context() -> Optional[int]:
+    """The context size the model server runs with, from llama.cpp's /props (n_ctx); None when it cannot say."""
+    settings = get_settings()
+    try:
+        async with _llm_client(timeout=5.0) as client:
+            resp = await client.get(f"{settings.llm.base_url}/props")
+            resp.raise_for_status()
+            return int(resp.json()["default_generation_settings"]["n_ctx"])
+    except Exception as exc:
+        logger.warning("The model server's context size is unknown (/props: %s); the show's budget is not checked",
+                       exc)
+        return None
+
+
 async def chat_completion(messages: List[Dict[str, str]], max_tokens: int = 64) -> str:
     """Non-streaming LLM call. Used for the persona router.
 

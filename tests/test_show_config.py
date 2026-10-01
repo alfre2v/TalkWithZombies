@@ -23,7 +23,9 @@ class TestShowConfig:
         assert show.episode is None
         assert show.model_prefix == "/no_think"
         assert show.max_tokens == 512
-        assert show.context_budget == 14000
+        assert show.context_budget == 34000
+        assert (show.trim_trigger, show.trim_target, show.trim_keep_first, show.trim_keep_last) == (0.9, 0.5, 2, 4)
+        assert show.instruction_room == 1000
         assert show.seed is None
         assert show.emotion_tags is True
         assert show.debug is False
@@ -79,6 +81,11 @@ class TestShowConfig:
         assert (show.interaction_min_s, show.interaction_max_s) == (5.0, 9.0)
         assert show.stt_language == "es"
 
+    @pytest.mark.parametrize("target", [0.9, 0.95])
+    def test_trim_target_at_or_above_the_trigger_rejected(self, target):
+        with pytest.raises(ValidationError, match="trim_target must be below show.trim_trigger"):
+            ShowConfig(trim_trigger=0.9, trim_target=target)
+
     def test_interaction_min_above_max_rejected(self):
         with pytest.raises(ValidationError):
             ShowConfig(interaction_min_s=200, interaction_max_s=100)
@@ -117,6 +124,12 @@ class TestShowConfig:
         ("recollection_every", -1),
         ("restatement_contacts", 0),
         ("voice_seed", "sometimes"),
+        ("trim_trigger", 0),
+        ("trim_trigger", 1.1),
+        ("trim_target", 0),
+        ("trim_keep_first", -1),
+        ("trim_keep_last", -1),
+        ("instruction_room", -1),
     ])
     def test_out_of_bounds_rejected(self, field, value):
         with pytest.raises(ValidationError):

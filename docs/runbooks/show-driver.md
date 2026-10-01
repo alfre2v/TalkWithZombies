@@ -151,13 +151,16 @@ record: runs/2026-09-24T02-18-51/script.json
   between round 4 and round 10. Without `--heard` the driver sends no
   listener's words, so every window is silence — a re-call, then the
   Switch-off; to answer, see [Run the checkpoint](#run-the-checkpoint).
-- **The trim.** When the script reaches 90% of `show.context_budget`
-  (14,000 tokens by default), the model stops reading whole rounds from
-  the middle of the script until it is back to 50%; the first two and
-  the last four rounds are always kept. The driver then prints
-  `trimmed before this round: rounds ...`. To watch it within a short
-  drive, set `context_budget: 1500` under `show:` and drive about 24
-  rounds: a trim comes near round 13.
+- **The trim.** When the script reaches `show.trim_trigger` (90%) of
+  `show.context_budget` (34,000 tokens by default), the model stops
+  reading whole rounds from the middle of the script until it is back to
+  `show.trim_target` (50%); the first `show.trim_keep_first` (2) and the
+  last `show.trim_keep_last` (4) rounds are always kept. The driver then
+  prints `trimmed before this round: rounds ...`. How the app counts the
+  script's size and decides: [How the app tracks the script's size, and
+  when it trims](#how-the-app-tracks-the-scripts-size-and-when-it-trims).
+  To watch it within a short drive, set `context_budget: 1500` under
+  `show:` and drive about 24 rounds: a trim comes near round 13.
 - Stop the app with Ctrl-C in terminal 1.
 
 **Options:** `--base` (the app's address, default
@@ -169,6 +172,121 @@ listening window; repeat it, one per window; `-` is a silent window),
 `--speak` (send the `--heard` items spoken and transcribed, not as
 text), `--report` (judge the drive against the checkpoint's criteria),
 `--runs-dir` (default `runs`).
+
+## How the app tracks the script's size, and when it trims
+
+*The whole story — the questions that led here, the old constants, the
+measurements at 16k and 32k, and a survey of every endpoint for testing the
+app without the page — is in zombie-radio's
+`docs/discussions/2026-10-01-the-app-from-the-outside.md`.*
+
+The show is one growing script: every round, the model reads the whole
+script so far (the cast sheet, then each kept round's instruction and
+reply) plus the new instruction. That must fit the model server's
+context (`-c`, zombie-radio's `zr_llama_ctx`: 32,768 tokens since
+2026-10-01). The trim keeps it in.
+
+**The app does not count tokens itself: it takes the model server's own
+count, after every round.** When the model finishes a round, llama.cpp's
+last streamed chunk carries `timings`, which the app keeps with the round
+in `runs/<run-id>/script.json`:
+
+- `prompt_n` — tokens of the prompt the server read fresh this time;
+- `cache_n` — tokens of the prompt it reused from its cache (the start
+  of the script, unchanged since the last round);
+- `predicted_n` — tokens it generated: the reply.
+
+Their sum is **the script's size after that round** — what the model
+will read next time, before the next instruction (`script_size()` in
+`app/show/script.py`). Each round also records **its share** (`tokens`):
+its size less the size before it — what the round added, its
+instruction and its reply (`round_share()`).
+
+**Before planning each round, the trim reads the last reported size**
+(`trim()`, called by the round route in `app/routers/show.py`):
+
+1. Below `trim_trigger × context_budget` (0.9 × 34,000 = 30,600 by
+   default): nothing happens.
+2. At or above it: the rounds the model still reads become candidates,
+   except the first `trim_keep_first` and the last `trim_keep_last`. The
+   middle candidate is flagged `trimmed`, again and again, outwards; each
+   one takes **its recorded share** off the size, until the estimate is
+   down to `trim_target × context_budget` (17,000) or no candidate is
+   left. A flagged round stays in the record, and the model no longer
+   reads it.
+3. The server reads the shortened script **from the start** — the cache
+   holds only an unbroken start, and the middle changed — which is the
+   pause after a trim: 8.2 s for 12,209 tokens at 32k (2026-10-01; 5.1 s
+   for 5,008 at 16k, 2026-09-28).
+4. **The next round's report is the truth.** The shares are an estimate;
+   whatever the trim got wrong, the server's next count is the real size,
+   and the next decision starts from it — an error never adds up.
+
+Two rounds without a count:
+
+- **A round with no model request** — the Repair, both of its lines
+  fixed — has no `timings`: the size is unknown after it, and the trim
+  skips that round. The next model round's count includes the Repair:
+  its instruction, which quotes its two fixed lines, joins the next
+  round's turn (`assemble_messages()` in `app/show/script.py`).
+- **Its share, and the next round's, are unknown** (`None`), and the
+  trim counts an unknown share as 0. So when trimmed rounds include them,
+  the trim **removes more than it estimates and cuts below its target**:
+  on 2026-10-01 the script landed at 12,269 tokens, not near 15,500 (50%
+  of that run's 31,000). The next round's share shows the correction as
+  a negative number (−2,837 below). Harmless — the model just reads a
+  little less — and the count is right again from the next round.
+
+**The room above the trigger.** The size the trim watches is the script
+*before* the next round; the request also carries that round's
+instruction and room for its reply. So a run starts only if
+`trim_trigger × context_budget + instruction_room + max_tokens` fits the
+server's context, which the app asks the server for (llama.cpp's
+`/props`, `n_ctx`) when the run opens; if it does not fit, the run is
+refused with the arithmetic in the message:
+
+```
+show.context_budget 40000 does not fit the model server's context of 32768 tokens: the trim lets the script reach 36000 tokens (show.trim_trigger 0.9), plus 1000 for the next instruction (show.instruction_room) and 512 for the reply (show.max_tokens) = 37512. Lower show.context_budget, or give the server a larger context.
+```
+
+With the defaults, 30,600 + 1,000 + 512 = 32,112 fits 32,768. The
+largest share in 82 recorded runs was 741 tokens, an exchange
+(instruction and reply); `instruction_room` keeps 1,000. The check runs
+once, when a run opens — the server's context changes only when it is
+redeployed — so Resume, which continues a run, does not check again. If
+the server cannot say, the run starts and the app's log warns.
+
+**Not the tally:** the token check in the debug files (above, [Look
+inside a round](#look-inside-a-round-the-debug-switch)) is a separate
+verification that the prompt the debug file shows is the one the model
+read; the trim never uses it.
+
+To see the tally of a run, round by round:
+
+```bash
+# Each round's count from the server, its share, and the trims (the run's record; rounds 111 to 117)
+python3 -c "import json,sys; [print(f\"round {r['n']:3} {r['kind']:9} read {(r['timings'] or {}).get('prompt_n','-'):>6} fresh + {(r['timings'] or {}).get('cache_n','-'):>6} cached, wrote {(r['timings'] or {}).get('predicted_n','-'):>4} | share {r['tokens']}\" + (f\" | trimmed before it: {len(r['trims'])} rounds\" if r['trims'] else '')) for r in json.load(open(sys.argv[1]))['rounds'] if int(sys.argv[2]) <= r['n'] <= int(sys.argv[3])]" runs/<run-id>/script.json 111 117
+```
+
+For example, the drive of 2026-10-01 (`2026-10-01T12-54-40`, a budget of
+31,000):
+
+```
+round 111 free      read    194 fresh +  27444 cached, wrote   19 | share 104
+round 112 free      read    194 fresh +  27549 cached, wrote   25 | share 111
+round 113 free      read    203 fresh +  27653 cached, wrote   50 | share 138
+round 114 free      read  12209 fresh +     43 cached, wrote   17 | share -2837 | trimmed before it: 58 rounds
+round 115 free      read    209 fresh +  12202 cached, wrote   57 | share 199
+round 116 repair    read      - fresh +      - cached, wrote    - | share None
+round 117 re-call   read    324 fresh +  12263 cached, wrote   16 | share None
+```
+
+Reading it: after round 113 the script is 203 + 27,653 + 50 = 27,906
+tokens, past the trigger (0.9 × 31,000 = 27,900), so before round 114 the
+trim flags 58 rounds; round 114 reads the shortened script fresh (12,209
+tokens, 43 from the cache) — the pause; from round 115 the cache serves
+the script again; the Repair (116) has no count, so neither it nor the
+re-call after it has a share.
 
 ## Check that the grammar binds
 

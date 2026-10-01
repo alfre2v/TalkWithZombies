@@ -43,7 +43,16 @@ def show_env(monkeypatch, tmp_path):
     monkeypatch.setattr(app_config, "_settings_cache", settings)
     voices = [Persona(name=n, system_prompt="-", reference_audio=f"{n}/ref.wav") for n in CAST]
     monkeypatch.setattr(app_config, "_personas_cache", PersonasConfig(personas=voices))
+    serve_context(monkeypatch, 32768)
     return tmp_path
+
+
+def serve_context(monkeypatch, n_ctx):
+    """The model server's context size as /props would report it (None: it cannot say)."""
+    async def fake_server_context():
+        return n_ctx
+
+    monkeypatch.setattr(show_router, "server_context", fake_server_context)
 
 
 @pytest.fixture
@@ -119,6 +128,29 @@ class TestStart:
 
         monkeypatch.setattr(app_config.get_settings(), "show", ShowConfig(seed=42, mood_voices=False))
         assert _start(client)["voices"] == {}
+
+    def test_a_budget_the_model_servers_context_cannot_hold_is_refused(self, client, show_env, monkeypatch):
+        serve_context(monkeypatch, 16384)
+
+        resp = client.post("/api/show/start", json={})
+
+        assert resp.status_code == 422
+        detail = resp.json()["detail"]
+        assert "show.context_budget 34000 does not fit the model server's context of 16384 tokens" in detail
+        assert "the script reach 30600 tokens" in detail and "= 32112" in detail
+        assert not runs_root().exists() or not any(runs_root().iterdir())
+
+    def test_a_run_starts_when_the_servers_context_is_unknown(self, client, show_env, monkeypatch):
+        serve_context(monkeypatch, None)
+
+        assert _start(client)["run_id"]
+
+    def test_the_budget_check_counts_the_trigger_the_instruction_and_the_reply(self):
+        show = ShowConfig(context_budget=10000, trim_trigger=0.8, instruction_room=700, max_tokens=300)
+
+        assert show_router.context_problem(show, 9000) is None  # 8000 + 700 + 300 = 9000
+        assert "= 9000" in show_router.context_problem(show, 8999)
+        assert show_router.context_problem(show, None) is None
 
     def test_unknown_story_is_refused(self, client, show_env):
         resp = client.post("/api/show/start", json={"story": "nope"})

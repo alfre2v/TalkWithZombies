@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 
+import httpx
 import pytest
 
 import app.config as app_config
@@ -221,6 +222,42 @@ class _UrlRecordingClient(FakeLLMClient):
     async def post(self, url, json=None):
         self.urls.append(url)
         return await super().post(url, json=json)
+
+
+class _PropsClient(FakeLLMClient):
+    """A model server that answers GET /props with `props`, or fails with `error`; records the URL asked."""
+
+    def __init__(self, props=None, error=None):
+        super().__init__([])
+        self.props, self.error, self.urls = props, error, []
+
+    async def get(self, url):
+        self.urls.append(url)
+        if self.error:
+            raise self.error
+        return httpx.Response(200, json=self.props, request=httpx.Request("GET", url))
+
+
+class TestServerContext:
+    """server_context: the context size the model server runs with, for the show's start check."""
+
+    def test_reads_n_ctx_from_props(self, monkeypatch):
+        client = _PropsClient({"default_generation_settings": {"n_ctx": 32768}, "total_slots": 1})
+        patch_llm_client(monkeypatch, client)
+
+        assert _run(llm.server_context()) == 32768
+        assert client.urls[0].endswith("/props")
+
+    @pytest.mark.parametrize("client", [
+        _PropsClient(error=httpx.ConnectError("refused")),
+        _PropsClient({"total_slots": 1}),
+    ])
+    def test_unknown_when_the_server_cannot_say(self, monkeypatch, caplog, client):
+        patch_llm_client(monkeypatch, client)
+
+        with caplog.at_level(logging.WARNING):
+            assert _run(llm.server_context()) is None
+        assert "the show's budget is not checked" in caplog.text
 
 
 class TestShowDebugHelpers:

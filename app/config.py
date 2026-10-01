@@ -256,7 +256,16 @@ class ShowConfig(BaseModel):
     episode: Optional[str] = None
     model_prefix: str = "/no_think"
     max_tokens: int = Field(default=512, ge=16, le=4096)
-    context_budget: int = Field(default=14000, ge=500, le=131072)
+    # The script's size the trim works against, in tokens: when the script reaches trim_trigger of it, whole rounds
+    # are cut from the middle until it is back to trim_target; the first trim_keep_first and the last
+    # trim_keep_last rounds stay. A run starts only if the model server's context holds trim_trigger of the budget
+    # plus instruction_room (the next round's instruction) plus max_tokens (its reply).
+    context_budget: int = Field(default=34000, ge=500, le=131072)
+    trim_trigger: float = Field(default=0.9, gt=0, le=1)
+    trim_target: float = Field(default=0.5, gt=0, lt=1)
+    trim_keep_first: int = Field(default=2, ge=0)
+    trim_keep_last: int = Field(default=4, ge=0)
+    instruction_room: int = Field(default=1000, ge=0)
     seed: Optional[int] = Field(default=None, ge=0)
     emotion_tags: bool = True
     debug: bool = False
@@ -311,6 +320,12 @@ class ShowConfig(BaseModel):
     no_speech_max: float = Field(default=0.6, ge=0, le=1)
     logprob_min: float = -1.0
     stt_language: str = "en"
+
+    @model_validator(mode="after")
+    def _trim_target_below_trigger(self):
+        if self.trim_target >= self.trim_trigger:
+            raise ValueError("show.trim_target must be below show.trim_trigger")
+        return self
 
     @model_validator(mode="after")
     def _interaction_window_is_ordered(self):
