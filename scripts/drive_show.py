@@ -145,14 +145,21 @@ def report(runs_dir, run_id, asked):
     checks = [(len(rounds) == asked and asked >= 10,
                f"{len(rounds)} of {asked} rounds played and recorded (10 needed)")]
 
-    strays = [f"round {r['n']}: {line['speaker']} not allowed" for r in rounds for line in r["lines"]
+    # The director's speakers and line budget bind the model's lines; fixed lines (an event read aloud, the
+    # Repair, the Breakdown's and the Switch-off's lines) are said word for word by code, outside them.
+    def model_lines(r):
+        return [line for line in r["lines"] if not line.get("fixed")]
+
+    strays = [f"round {r['n']}: {line['speaker']} not allowed" for r in rounds for line in model_lines(r)
               if line["speaker"] not in r["speakers"]]
-    over = [f"round {r['n']}: {len(r['lines'])} lines of {r['max_lines']}" for r in rounds
-            if len(r["lines"]) > r["max_lines"]]
+    over = [f"round {r['n']}: {len(model_lines(r))} lines of {r['max_lines']}" for r in rounds
+            if len(model_lines(r)) > r["max_lines"]]
     empty = [f"round {r['n']}: no line" for r in rounds if not r["lines"]]
     faults = strays + over + empty
+    fixed = sum(len(r["lines"]) - len(model_lines(r)) for r in rounds)
     checks.append((not faults, f"speakers and line counts obey the director: {sum(len(r['lines']) for r in rounds)} "
-                               f"lines, {sum(len(r['dropped']) for r in rounds)} dropped"
+                               f"lines ({fixed} fixed, outside the director's limits), "
+                               f"{sum(len(r['dropped']) for r in rounds)} dropped"
                                + (f"; {'; '.join(faults)}" if faults else "")))
 
     answers = [r for r in rounds if r["kind"] in _WORDS and r["lines"]]
@@ -172,20 +179,28 @@ def report(runs_dir, run_id, asked):
         "; ".join(f"before round {r['n']} (rounds {', '.join(map(str, r['trims']))})" for r in trims)
         or "no (set show.context_budget to 1500 and drive 20 rounds)")))
 
+    # A round whose lines are all fixed (the Repair) sends the model no request, so the server reports no size and
+    # its debug file says so: nothing to compare, not a difference.
     debug = folder / "debug"
-    missing, off = [], []
+    missing, off, unasked = [], [], []
     for r in rounds:
         text_file = debug / f"r{r['n']:03d}.txt"
         if not (text_file.exists() and (debug / f"r{r['n']:03d}.request.json").exists()):
             missing.append(r["n"])
             continue
-        found = re.search(r"^token check: .*difference (-?\d+)$", text_file.read_text(encoding="utf-8"), re.M)
+        text = text_file.read_text(encoding="utf-8")
+        if not r.get("timings") and r["lines"] and all(line.get("fixed") for line in r["lines"]):
+            if re.search(r"^token check: .*the server reported no size$", text, re.M):
+                unasked.append(r["n"])
+                continue
+        found = re.search(r"^token check: .*difference (-?\d+)$", text, re.M)
         if not (found and found.group(1) == "0"):
             off.append(r["n"])
     with_files = len(rounds) - len(missing)
     checks.append((bool(rounds) and not missing and not off,
                    f"debug files for {with_files} of {len(rounds)} rounds; token check difference 0 in "
-                   f"{with_files - len(off)} of them"
+                   f"{with_files - len(off) - len(unasked)} of them"
+                   + (f", no model request in {len(unasked)} (all lines fixed)" if unasked else "")
                    + (f"; missing: rounds {', '.join(map(str, missing))}" if missing else "")
                    + (f"; not 0 or not available: rounds {', '.join(map(str, off))}" if off else "")
                    + (" (is show.debug on?)" if not debug.exists() else "")))

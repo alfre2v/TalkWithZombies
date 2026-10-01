@@ -43,7 +43,16 @@ def show_env(monkeypatch, tmp_path):
     monkeypatch.setattr(app_config, "_settings_cache", settings)
     voices = [Persona(name=n, system_prompt="-", reference_audio=f"{n}/ref.wav") for n in CAST]
     monkeypatch.setattr(app_config, "_personas_cache", PersonasConfig(personas=voices))
+    serve_context(monkeypatch, 32768)
     return tmp_path
+
+
+def serve_context(monkeypatch, n_ctx):
+    """The model server's context size as /props would report it (None: it cannot say)."""
+    async def fake_server_context():
+        return n_ctx
+
+    monkeypatch.setattr(show_router, "server_context", fake_server_context)
 
 
 @pytest.fixture
@@ -119,6 +128,29 @@ class TestStart:
 
         monkeypatch.setattr(app_config.get_settings(), "show", ShowConfig(seed=42, mood_voices=False))
         assert _start(client)["voices"] == {}
+
+    def test_a_budget_the_model_servers_context_cannot_hold_is_refused(self, client, show_env, monkeypatch):
+        serve_context(monkeypatch, 16384)
+
+        resp = client.post("/api/show/start", json={})
+
+        assert resp.status_code == 422
+        detail = resp.json()["detail"]
+        assert "show.context_budget 34000 does not fit the model server's context of 16384 tokens" in detail
+        assert "the script reach 30600 tokens" in detail and "= 32112" in detail
+        assert not runs_root().exists() or not any(runs_root().iterdir())
+
+    def test_a_run_starts_when_the_servers_context_is_unknown(self, client, show_env, monkeypatch):
+        serve_context(monkeypatch, None)
+
+        assert _start(client)["run_id"]
+
+    def test_the_budget_check_counts_the_trigger_the_instruction_and_the_reply(self):
+        show = ShowConfig(context_budget=10000, trim_trigger=0.8, instruction_room=700, max_tokens=300)
+
+        assert show_router.context_problem(show, 9000) is None  # 8000 + 700 + 300 = 9000
+        assert "= 9000" in show_router.context_problem(show, 8999)
+        assert show_router.context_problem(show, None) is None
 
     def test_unknown_story_is_refused(self, client, show_env):
         resp = client.post("/api/show/start", json={"story": "nope"})
@@ -537,6 +569,55 @@ class TestTrim:
         assert [r.n for r in recorded.rounds if r.trimmed] == [3, 4, 5, 6]
         assert recorded.rounds[-1].trims == [3, 4, 5, 6]
         assert recorded.rounds[-1].tokens == 650 - (950 - 400)
+
+
+    def _full_run(self, client, monkeypatch, last_size):
+        """A run of 10 recorded rounds of 100 tokens each, the last reporting `last_size`; the model's requests kept."""
+        app_config._settings_cache.show = ShowConfig(seed=42, context_budget=1000)
+        requests = []
+
+        async def fake_stream_round(messages, *, grammar, max_tokens, seed):
+            requests.append(messages)
+            for token in REAL_ROUND:
+                yield {"token": token}
+            yield {"timings": {"prompt_n": 100, "cache_n": 700, "predicted_n": 50}, "finish_reason": "stop"}
+
+        monkeypatch.setattr(show_router, "stream_round", fake_stream_round)
+        run_id = _start(client)["run_id"]
+        run = load_run(run_id)
+        lines = [Line(**dataclasses.asdict(line)) for line in REAL_LINES]
+        for n in range(1, 11):
+            append_round(run, Round(n=n, instruction=f"Instruction {n}.", speakers=["Ralph", "Moira"],
+                                    max_lines=2, lines=lines, tokens=100))
+        run.rounds[-1].timings = {"prompt_n": last_size - 50, "cache_n": 0, "predicted_n": 50}
+        save_run(run)
+        return run_id, requests
+
+    def test_no_trim_before_a_round_without_a_model_request(self, client, show_env, monkeypatch):
+        run_id, requests = self._full_run(client, monkeypatch, 950)  # past the trigger: 90 % of 1000
+        planned = show_router.plan_round
+        monkeypatch.setattr(show_router, "plan_round",
+                            lambda *a, **kw: dataclasses.replace(planned(*a, **kw), max_lines=0))
+
+        summary = _summary(_round(client, run_id))
+
+        assert summary["trimmed"] == []
+        assert requests == []
+        assert not any(r.trimmed for r in load_run(run_id).rounds)
+
+    def test_the_round_after_a_repair_counts_its_share_from_the_size_before_the_repair(self, client, show_env,
+                                                                                        monkeypatch):
+        run_id, _ = self._full_run(client, monkeypatch, 800)
+        run = load_run(run_id)
+        repair = Line(**dataclasses.asdict(REAL_LINES[0]))
+        append_round(run, Round(n=11, kind="repair", instruction="The receiver is back.", speakers=["Samantha"],
+                                max_lines=0, lines=[repair.model_copy(update={"fixed": True})]))
+
+        _round(client, run_id)
+
+        recorded = load_run(run_id).rounds[-1]
+        assert recorded.n == 12 and recorded.trims == []
+        assert recorded.tokens == 850 - 800  # The Repair's tokens and its own, counted from before the Repair
 
 
 class TestDebug:

@@ -10,11 +10,13 @@ model) is never in a reply: it is quoted in the instruction turns, so the
 model never reads back a line as its own that it did not write.
 
 The trim keeps the script within the context budget: when the size the
-model server last reported reaches 90% of show.context_budget, whole rounds
-are flagged `trimmed`, from the middle outwards, until the script is back
-to 50%. Each round records its share of the size (`tokens`) for that count;
-the next round's reported size is the truth, so a share a few tokens off
-never adds up.
+model server last reported reaches show.trim_trigger (90%) of
+show.context_budget, whole rounds are flagged `trimmed`, from the middle
+outwards, until the script is back to show.trim_target (50%); the first
+show.trim_keep_first and the last show.trim_keep_last rounds stay. Each
+round records its share of the size (`tokens`) for that count; the next
+round's reported size is the truth, so a share a few tokens off never adds
+up.
 """
 
 import os
@@ -142,12 +144,6 @@ def reply_text(round_: Round) -> str:
     return "".join(line.raw + "\n" for line in round_.lines if not line.fixed)
 
 
-_KEEP_FIRST = 2
-_KEEP_LAST = 4
-_TRIGGER = 0.9
-_TARGET = 0.5
-
-
 def _size(timings: Optional[Dict[str, int]]) -> Optional[int]:
     """The script's size a response reported: the prompt read (fresh and cached) plus the reply."""
     if not timings:
@@ -160,21 +156,40 @@ def script_size(run: Run) -> Optional[int]:
     return _size(run.rounds[-1].timings) if run.rounds else None
 
 
-def trim(run: Run, budget: int) -> List[int]:
-    """Flag whole rounds `trimmed` when the script reaches 90% of the budget; return their numbers.
+def known_size(run: Run) -> Optional[int]:
+    """The script's size as the model server last reported it, stepping back over the rounds it reported none for.
 
-    The candidates are the rounds the model still reads, except the first two
-    and the last four. The middle candidate is flagged, again and again, until
-    the script is back to 50% of the budget or no candidate is left; each
-    flagged round takes its recorded share off the size.
+    A round with no model request (the Repair: both its lines are fixed) gets no size from the server. The size
+    before the next round is then the last one reported, from before the Repair, so the next round's share takes in
+    what the Repair added too (its instruction joins the next round's turn) and no tokens go uncounted. None when no
+    round has a size yet, or when a trim fell after the last reported size (the size no longer holds; the trim never
+    falls before a round without a model request since 2026-10-01, so only an older record has that).
     """
+    for round_ in reversed(run.rounds):
+        if round_.timings:
+            return _size(round_.timings)
+        if round_.trims:
+            return None
+    return None
+
+
+def trim(run: Run, show: ShowConfig) -> List[int]:
+    """Flag whole rounds `trimmed` when the script reaches show.trim_trigger of show.context_budget; return their
+    numbers.
+
+    The candidates are the rounds the model still reads, except the first show.trim_keep_first and the last
+    show.trim_keep_last. The middle candidate is flagged, again and again, until the script is back to
+    show.trim_target of the budget or no candidate is left; each flagged round takes its recorded share off the size.
+    """
+    budget = show.context_budget
     size = script_size(run)
-    if size is None or size < _TRIGGER * budget:
+    if size is None or size < show.trim_trigger * budget:
         return []
     read = [r for r in run.rounds if r.episode == run.episode and not r.trimmed and r.lines]
-    candidates = read[_KEEP_FIRST:max(_KEEP_FIRST, len(read) - _KEEP_LAST)]
+    first, last = show.trim_keep_first, show.trim_keep_last
+    candidates = read[first:max(first, len(read) - last)]
     flagged = []
-    while size > _TARGET * budget and candidates:
+    while size > show.trim_target * budget and candidates:
         round_ = candidates.pop(len(candidates) // 2)
         round_.trimmed = True
         size -= round_.tokens or 0
@@ -185,8 +200,9 @@ def trim(run: Run, budget: int) -> List[int]:
 def round_share(size_before: Optional[int], trimmed_tokens: int, timings: Optional[Dict[str, int]]) -> Optional[int]:
     """The tokens a round added to the script: its reported size less the size before it.
 
-    The size before it is the previous round's reported size, less the shares
-    of the rounds trimmed just before this one. None when either size is unknown.
+    The size before it is the last size the server reported (known_size: for the
+    round after a Repair, the size from before the Repair), less the shares of the
+    rounds trimmed just before this one. None when either size is unknown.
     """
     after = _size(timings)
     if size_before is None or after is None:

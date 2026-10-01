@@ -149,10 +149,13 @@ class TestDrive:
 
 
 def _round(n, kind="free", speakers=("Moira", "Ralph"), lines=("Moira",), max_lines=2, trims=(), listener=None,
-           heard=None):
+           heard=None, fixed=(), timings=True):
+    """A recorded round; `fixed` are the indexes of the lines said word for word by code (fixed: true)."""
     return {"n": n, "kind": kind, "speakers": list(speakers), "max_lines": max_lines, "trims": list(trims),
-            "lines": [{"speaker": s, "raw": "x", "spoken": "x"} for s in lines], "dropped": [],
-            "listener": listener, "heard": heard}
+            "lines": [{"speaker": s, "raw": "x", "spoken": "x", **({"fixed": True} if i in fixed else {})}
+                      for i, s in enumerate(lines)], "dropped": [],
+            "listener": listener, "heard": heard,
+            "timings": {"prompt_n": 1, "cache_n": 2, "predicted_n": 3} if timings else None}
 
 
 def _good_rounds():
@@ -166,7 +169,8 @@ def _good_rounds():
     return rounds
 
 
-def _write(folder, rounds, debug=True, difference=0, skip=()):
+def _write(folder, rounds, debug=True, difference=0, skip=(), unasked=()):
+    """The run's record and its debug files; the rounds in `unasked` say the server reported no size."""
     folder.mkdir(parents=True)
     (folder / "script.json").write_text(json.dumps({"rounds": rounds}))
     if not debug:
@@ -176,9 +180,10 @@ def _write(folder, rounds, debug=True, difference=0, skip=()):
         if r["n"] in skip:
             continue
         (folder / "debug" / f"r{r['n']:03d}.request.json").write_text("{}")
-        (folder / "debug" / f"r{r['n']:03d}.txt").write_text(
-            f"round {r['n']}\ntoken check: the rendered prompt has 420 tokens; the server read "
-            f"{420 - difference} (prompt_n + cache_n); difference {difference}\n")
+        check = ("the rendered prompt has 420 tokens; the server reported no size" if r["n"] in unasked else
+                 f"the rendered prompt has 420 tokens; the server read {420 - difference} (prompt_n + cache_n); "
+                 f"difference {difference}")
+        (folder / "debug" / f"r{r['n']:03d}.txt").write_text(f"round {r['n']}\ntoken check: {check}\n")
 
 
 class TestReport:
@@ -223,6 +228,46 @@ class TestReport:
         assert drive_show.report(tmp_path, "run", 12) is False
         [fail] = [line for line in capsys.readouterr().out.splitlines() if line.startswith("  FAIL  ")]
         assert failing in fail
+
+    def test_fixed_lines_are_outside_the_directors_limits(self, tmp_path, capsys):
+        # A Breakdown: Samantha's fixed line, then the one reaction the model may write, by Daniel, Moira or Ralph
+        rounds = _good_rounds()
+        rounds[4] = _round(5, "breakdown", ("Daniel", "Moira", "Ralph"), ("Samantha", "Daniel"), 1, fixed=(0,))
+        _write(tmp_path / "run", rounds)
+
+        assert drive_show.report(tmp_path, "run", 12) is True
+        assert "lines (1 fixed, outside the director's limits), 0 dropped" in capsys.readouterr().out
+
+    @pytest.mark.parametrize("lines, failing", [
+        (("Samantha", "Samantha"), "round 5: Samantha not allowed"),
+        (("Samantha", "Daniel", "Moira"), "round 5: 2 lines of 1"),
+    ])
+    def test_a_fixed_line_does_not_excuse_the_models_lines(self, tmp_path, capsys, lines, failing):
+        rounds = _good_rounds()
+        rounds[4] = _round(5, "breakdown", ("Daniel", "Moira", "Ralph"), lines, 1, fixed=(0,))
+        _write(tmp_path / "run", rounds)
+
+        assert drive_show.report(tmp_path, "run", 12) is False
+        [fail] = [line for line in capsys.readouterr().out.splitlines() if line.startswith("  FAIL  ")]
+        assert failing in fail
+
+    def test_a_round_without_a_model_request_has_no_size_to_check(self, tmp_path, capsys):
+        # The Repair: both lines fixed, nothing sent to the model, so the server reported no size
+        rounds = _good_rounds()
+        rounds[7] = _round(8, "repair", ("Daniel", "Samantha"), ("Daniel", "Samantha"), 0, fixed=(0, 1),
+                           timings=False)
+        _write(tmp_path / "run", rounds, unasked=(8,))
+
+        assert drive_show.report(tmp_path, "run", 12) is True
+        assert ("token check difference 0 in 11 of them, no model request in 1 (all lines fixed)"
+                in capsys.readouterr().out)
+
+    def test_no_size_for_a_round_the_model_wrote_is_a_failure(self, tmp_path, capsys):
+        _write(tmp_path / "run", _good_rounds(), unasked=(3,))
+
+        assert drive_show.report(tmp_path, "run", 12) is False
+        [fail] = [line for line in capsys.readouterr().out.splitlines() if line.startswith("  FAIL  ")]
+        assert "not 0 or not available: rounds 3" in fail
 
     def test_no_debug_folder_asks_whether_the_switch_is_on(self, tmp_path, capsys):
         _write(tmp_path / "run", _good_rounds(), debug=False)

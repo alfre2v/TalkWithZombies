@@ -151,13 +151,16 @@ record: runs/2026-09-24T02-18-51/script.json
   between round 4 and round 10. Without `--heard` the driver sends no
   listener's words, so every window is silence — a re-call, then the
   Switch-off; to answer, see [Run the checkpoint](#run-the-checkpoint).
-- **The trim.** When the script reaches 90% of `show.context_budget`
-  (14,000 tokens by default), the model stops reading whole rounds from
-  the middle of the script until it is back to 50%; the first two and
-  the last four rounds are always kept. The driver then prints
-  `trimmed before this round: rounds ...`. To watch it within a short
-  drive, set `context_budget: 1500` under `show:` and drive about 24
-  rounds: a trim comes near round 13.
+- **The trim.** When the script reaches `show.trim_trigger` (90%) of
+  `show.context_budget` (34,000 tokens by default), the model stops
+  reading whole rounds from the middle of the script until it is back to
+  `show.trim_target` (50%); the first `show.trim_keep_first` (2) and the
+  last `show.trim_keep_last` (4) rounds are always kept. The driver then
+  prints `trimmed before this round: rounds ...`. How the app counts the
+  script's size and decides: [How the app tracks the script's size, and
+  when it trims](#how-the-app-tracks-the-scripts-size-and-when-it-trims).
+  To watch it within a short drive, set `context_budget: 1500` under
+  `show:` and drive about 24 rounds: a trim comes near round 13.
 - Stop the app with Ctrl-C in terminal 1.
 
 **Options:** `--base` (the app's address, default
@@ -169,6 +172,151 @@ listening window; repeat it, one per window; `-` is a silent window),
 `--speak` (send the `--heard` items spoken and transcribed, not as
 text), `--report` (judge the drive against the checkpoint's criteria),
 `--runs-dir` (default `runs`).
+
+## How the app tracks the script's size, and when it trims
+
+*The whole story — the questions that led here, the old constants, the
+measurements at 16k and 32k, and a survey of every endpoint for testing the
+app without the page — is in zombie-radio's
+`docs/discussions/2026-10-01-the-app-from-the-outside.md`.*
+
+The show is one growing script: every round, the model reads the whole
+script so far (the cast sheet, then each kept round's instruction and
+reply) plus the new instruction. That must fit the model server's
+context (`-c`, zombie-radio's `zr_llama_ctx`: 32,768 tokens since
+2026-10-01). The trim keeps it in.
+
+**The app does not count tokens itself: it takes the model server's own
+count, after every round.** When the model finishes a round, llama.cpp's
+last streamed chunk carries `timings`, which the app keeps with the round
+in `runs/<run-id>/script.json`:
+
+- `prompt_n` — tokens of the prompt the server read fresh this time;
+- `cache_n` — tokens of the prompt it reused from its cache (the start
+  of the script, unchanged since the last round);
+- `predicted_n` — tokens it generated: the reply.
+
+Their sum is **the script's size after that round** — what the model
+will read next time, before the next instruction (`script_size()` in
+`app/show/script.py`). Each round also records **its share** (`tokens`):
+its size less the size before it — what the round added, its
+instruction and its reply (`round_share()`).
+
+**Before each round that asks the model, the trim reads the last reported
+size** (`trim()`, called by the round route in `app/routers/show.py`, once
+the director has planned the round):
+
+1. Below `trim_trigger × context_budget` (0.9 × 34,000 = 30,600 by
+   default): nothing happens.
+2. At or above it: the rounds the model still reads become candidates,
+   except the first `trim_keep_first` and the last `trim_keep_last`. The
+   middle candidate is flagged `trimmed`, again and again, outwards; each
+   one takes **its recorded share** off the size, until the estimate is
+   down to `trim_target × context_budget` (17,000) or no candidate is
+   left. A flagged round stays in the record, and the model no longer
+   reads it.
+3. The server reads the shortened script **from the start** — the cache
+   holds only an unbroken start, and the middle changed — which is the
+   pause after a trim: 8.2 s for 12,209 tokens at 32k (2026-10-01; 5.1 s
+   for 5,008 at 16k, 2026-09-28).
+4. **The next round's report is the truth.** The shares are an estimate;
+   whatever the trim got wrong, the server's next count is the real size,
+   and the next decision starts from it — an error never adds up.
+
+**The Repair, a round without a count.** The Repair (the call) sends the
+model no request — both of its lines are fixed — so the server reports
+no size after it, and the Repair's own share is unknown (`None`, counted
+as 0). Its lines still reach the model: its instruction, which quotes
+them, joins the next round's turn (`assemble_messages()` in
+`app/show/script.py`). So:
+
+- **The round after a Repair counts its share from the last size the
+  server reported** — the one from before the Repair (`known_size()`,
+  which steps back over rounds without a count) — and its share takes
+  in the Repair's tokens and its own. Nothing goes uncounted.
+- **The trim never fires before a round without a model request**: the
+  round route plans the round first and trims only if it will ask the
+  model (`plan.max_lines`), so a trim never falls between the last
+  reported size and the round that counts from it. (Nor right after a
+  Repair: the size is unknown there, and the trim waits for the next
+  round with a count.)
+
+**Before 2026-10-01** the round after a Repair counted from the Repair's
+missing size, so its share was unknown too: each call in a trimmed
+stretch went uncounted (about 600-850 tokens — the Repair and the
+exchange or re-call after it), the trim cut that much below its target,
+and the round after the trim carried the difference as a negative share,
+which a later trim then repeated, growing. The same drive at a budget of
+8,000 (target 4,000), before and after the fix:
+
+| | Before (run `2026-10-01T17-57-41`) | After (run `2026-10-01T18-03-25`) |
+|---|---|---|
+| Trims | 6 (130 rounds) | 12 (280 rounds) |
+| The trim's estimate against the real size after it | off by 641 to 4,218 tokens | off by 1 to 3 tokens |
+| Negative shares in the trimmed rounds | −527 up to −3,557, growing | none |
+| Where it landed, against the target | −678 to −1,815 (mean −1,025) | −5 to −619 (mean −174) |
+
+What remains is the trim's step, not an error: it removes whole rounds
+and stops at the first that brings the estimate to the target or below,
+so it lands up to one round (an exchange, ~600 tokens) under.
+
+**The room above the trigger.** The size the trim watches is the script
+*before* the next round; the request also carries that round's
+instruction and room for its reply. So a run starts only if
+`trim_trigger × context_budget + instruction_room + max_tokens` fits the
+server's context, which the app asks the server for (llama.cpp's
+`/props`, `n_ctx`) when the run opens; if it does not fit, the run is
+refused with the arithmetic in the message:
+
+```
+show.context_budget 40000 does not fit the model server's context of 32768 tokens: the trim lets the script reach 36000 tokens (show.trim_trigger 0.9), plus 1000 for the next instruction (show.instruction_room) and 512 for the reply (show.max_tokens) = 37512. Lower show.context_budget, or give the server a larger context.
+```
+
+With the defaults, 30,600 + 1,000 + 512 = 32,112 fits 32,768. The
+largest share in 82 recorded runs was 741 tokens, an exchange
+(instruction and reply); `instruction_room` keeps 1,000. The check runs
+once, when a run opens — the server's context changes only when it is
+redeployed — so Resume, which continues a run, does not check again. If
+the server cannot say, the run starts and the app's log warns.
+
+**Not the tally:** the token check in the debug files (above, [Look
+inside a round](#look-inside-a-round-the-debug-switch)) is a separate
+verification that the prompt the debug file shows is the one the model
+read; the trim never uses it.
+
+To see the tally of a run, round by round:
+
+```bash
+# Each round's count from the server, its share, and the trims (the run's record; rounds 112 to 121)
+python3 -c "import json,sys; [print(f\"round {r['n']:3} {r['kind']:9} read {(r['timings'] or {}).get('prompt_n','-'):>6} fresh + {(r['timings'] or {}).get('cache_n','-'):>6} cached, wrote {(r['timings'] or {}).get('predicted_n','-'):>4} | share {r['tokens']}\" + (f\" | trimmed before it: {len(r['trims'])} rounds\" if r['trims'] else '')) for r in json.load(open(sys.argv[1]))['rounds'] if int(sys.argv[2]) <= r['n'] <= int(sys.argv[3])]" runs/<run-id>/script.json 112 121
+```
+
+For example, the drive of 2026-10-01 (`2026-10-01T17-48-37`, the default
+budget of 34,000, with the fix):
+
+```
+round 112 last-exchange read   1146 fresh +  29207 cached, wrote   59 | share 625
+round 113 breakdown read    674 fresh +  29837 cached, wrote   31 | share 130
+round 114 free      read    276 fresh +  30408 cached, wrote   50 | share 192
+round 115 free      read  16650 fresh +     43 cached, wrote   18 | share 104 | trimmed before it: 53 rounds
+round 116 free      read    154 fresh +  16603 cached, wrote   39 | share 85
+round 117 free      read    138 fresh +  16707 cached, wrote   60 | share 109
+round 118 free      read    201 fresh +  16792 cached, wrote   58 | share 146
+round 119 free      read    286 fresh +  16901 cached, wrote   42 | share 178
+round 120 repair    read      - fresh +      - cached, wrote    - | share None
+round 121 re-call   read    303 fresh +  17047 cached, wrote   19 | share 140
+```
+
+Reading it: after round 114 the script is 276 + 30,408 + 50 = 30,734
+tokens, past the trigger (0.9 × 34,000 = 30,600), so before round 115 the
+trim flags 53 rounds and estimates 16,607 tokens remain — round 115 reads
+16,693, of which its own instruction is 85 tokens: 16,608 remained, one
+token off; round 115 reads the shortened
+script fresh (16,650 tokens, 43 from the cache) — the pause — and its
+share is an ordinary 104; from round 116 the cache serves the script
+again. The Repair (120) has no count; the re-call after it counts from
+round 119's size (16,901 + 286 + 42 = 17,229): 303 + 17,047 + 19 − 17,229
+= 140, the Repair's instruction and its own.
 
 ## Check that the grammar binds
 
@@ -272,37 +420,41 @@ and round 14 the aftermath; the next call, round 18, goes unanswered (a
 re-call, then the Switch-off). The trim fires before round 10. Leave out
 `--speak` to test without TTS and Whisper.
 
-**3. The report.** From a run of 2026-09-26 (step 3.4c), the first
-contact and the end:
+**3. The report.** From a run of 2026-10-01 (run `2026-10-01T14-21-40`; the
+fixed lines and the report that sets them apart), the first contact and the end:
 
 ```
-round 8 (repair): 2 line(s) of Daniel, Moira, Ralph, Samantha · ...
+round 8 (repair): 2 line(s) of Daniel, Samantha · ...
   overtone positive
-  the listener says "Moira, is the virus airborne?" in Samantha's voice (7.13s); Whisper heard "Moira is the virus airborne." (no_speech_prob 0.010, avg_logprob -0.434) in 1.39s
-  [ 0.80s] Moira (calm): The virus isn't airborne, it's *us*. Over.
-  [ 0.91s] Daniel (doubtful): Who are you? Over.
-  [ 1.12s] Samantha (curious): We need to know who's talking. Over.
+  the listener says "Moira, is the virus airborne?" in Samantha's voice (1.55s); Whisper heard "Moira, is the virus airborne?" (no_speech_prob 0.009, avg_logprob -0.360) in 0.40s
+  [ 0.86s] Moira (calm): The virus isn't airborne, it's *contagious* through proximity. Over.
+  [ 1.07s] Daniel (doubtful): Airborne would mean we'd all be dead by now. Over.
+  [ 1.28s] Samantha (determined): We need to know who's on the other end. Over.
 round 9 (exchange): 3 line(s) of Daniel, Moira, Ralph, Samantha · ...
-  listener: "Moira is the virus airborne."
-  overtone neutral · asks "Find out who the voice is. If the voice already said their name, greet them by it and ask how they found this frequency." · answers 1 of 3
-  the listener says nothing (2 s of silence); Whisper heard "" in 0.35s
-  [ 1.76s] Samantha (determined): We'll find out. Over.
+  listener: "Moira, is the virus airborne?"
+  overtone neutral · asks "Find out who the voice is. If the voice already said their name, greet them by it and ask how they found this frequency." · answers 1 of 5
+  the listener says nothing (2 s of silence); Whisper heard "" in 0.22s
+  [ 0.81s] Samantha (urgent): We need to know who's on the other end. Over.
 round 10 (re-call): 1 line(s) of Daniel, Moira, Ralph, Samantha · ...
   heard: "" -> silence: nothing heard
-  overtone neutral · answers 1 of 3
+  overtone neutral · answers 1 of 5
   trimmed before this round: rounds 3, 4, 5 (the model no longer reads them)
-  the listener says "Is anyone still alive in there?" in Samantha's voice (1.26s); Whisper heard "Is anyone still alive in there?" (no_speech_prob 0.013, avg_logprob -0.225) in 0.34s
-  [ 0.77s] Samantha (calm): They're asking if anyone's alive. Over.
-  [ 0.93s] Daniel (determined): We're still here. Over.
-  [ 1.20s] Moira (urgent): We need your help. Over.
+  the listener says "Is anyone still alive in there?" in Samantha's voice (1.13s); Whisper heard "Is anyone still alive in there?" (no_speech_prob 0.019, avg_logprob -0.193) in 0.36s
+  [ 0.89s] Samantha (determined): The dead are at every door. We need help, someone with a vehicle at the south fence. Over.
+  [ 1.11s] Daniel (urgent): Can you hear us? We're running out of time. Over.
+  [ 1.31s] Moira (curious): Who are you? What can you do? Over.
+round 11 (exchange): 3 line(s) of Daniel, Moira, Ralph, Samantha · ...
+  listener: "Is anyone still alive in there?"
+  overtone neutral · asks "Ask the voice to help get the cast out. The dead are at every door, and the lab needs someone with a vehicle at the south fence. If the voice already offered help, ask what they could bring and how soon." · answers 2 of 5
+  [ 1.62s] Moira (curious): We need to know who you are and what you can offer. Over.
 ...
-checkpoint report, run 2026-09-26T16-51-06:
+checkpoint report, run 2026-10-01T14-21-40:
   PASS  20 of 20 rounds played and recorded (10 needed)
-  PASS  speakers and line counts obey the director: 42 lines, 0 dropped
-  PASS  a call answered from the listener's words: round 9 heard "Moira is the virus airborne." -> Moira, Daniel, Samantha; round 11 heard "Is anyone still alive in there?" -> Samantha, Daniel, Moira
+  PASS  speakers and line counts obey the director: 42 lines (11 fixed, outside the director's limits), 0 dropped
+  PASS  a call answered from the listener's words: round 9 heard "Moira, is the virus airborne?" -> Moira, Daniel, Samantha; round 11 heard "Is anyone still alive in there?" -> Samantha, Daniel, Moira
   PASS  a silent window gave a re-call or the Switch-off: round 10 re-call (nothing heard); round 12 re-call (nothing sent); round 13 switch-off (nothing sent); round 19 re-call (nothing sent); round 20 switch-off (nothing sent)
-  PASS  the trim fired: before round 10 (rounds 3, 4, 5); before round 12 (rounds 6, 7); before round 14 (rounds 8, 9); before round 16 (rounds 10, 11); before round 18 (rounds 12, 13)
-  PASS  debug files for 20 of 20 rounds; token check difference 0 in 20 of them
+  PASS  the trim fired: before round 10 (rounds 3, 4, 5); before round 12 (rounds 6, 7); before round 13 (rounds 8); before round 14 (rounds 9); before round 15 (rounds 10); before round 16 (rounds 11); before round 18 (rounds 12, 13)
+  PASS  debug files for 20 of 20 rounds; token check difference 0 in 18 of them, no model request in 2 (all lines fixed)
 6 of 6 criteria pass
 ```
 

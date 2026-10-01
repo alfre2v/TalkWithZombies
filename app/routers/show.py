@@ -50,16 +50,17 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 from app import config as app_config
+from app.config import ShowConfig
 from app.models import (ShowListenRequest, ShowListenResponse, ShowRoundRequest, ShowStartRequest,
                         ShowStartResponse)
-from app.services.llm import stream_round
+from app.services.llm import server_context, stream_round
 from app.services.stt_client import transcribe_for_show
 from app.show.debug import write_round
 from app.show.director import LISTENS, plan_round
 from app.show.listen import usable
 from app.show.parser import LineParser
-from app.show.script import (RUN_ID, Heard, Line, Round, Run, append_round, assemble_messages, load_run,
-                             new_run, round_share, script_size, trim)
+from app.show.script import (RUN_ID, Heard, Line, Round, Run, append_round, assemble_messages, known_size,
+                             load_run, new_run, round_share, trim)
 from app.show.story import Story, StoryError, load_story, render_cast_sheet, voice_map
 
 logger = logging.getLogger(__name__)
@@ -120,14 +121,36 @@ async def show_page(request: Request, design: Optional[str] = None, mock: bool =
     return _templates.TemplateResponse(request, "show.html")
 
 
+def context_problem(show: ShowConfig, n_ctx: Optional[int]) -> Optional[str]:
+    """Why the show's budget does not fit the model server's context, or None (also when the context is unknown).
+
+    The trim lets the script grow to trim_trigger of the budget; the next round adds its instruction (kept within
+    instruction_room) and its reply (max_tokens). All of it must fit the server's context.
+    """
+    if n_ctx is None:
+        return None
+    script = int(show.trim_trigger * show.context_budget)
+    need = script + show.instruction_room + show.max_tokens
+    if need <= n_ctx:
+        return None
+    return (f"show.context_budget {show.context_budget} does not fit the model server's context of {n_ctx} tokens: "
+            f"the trim lets the script reach {script} tokens (show.trim_trigger {show.trim_trigger}), plus "
+            f"{show.instruction_room} for the next instruction (show.instruction_room) and {show.max_tokens} for the "
+            f"reply (show.max_tokens) = {need}. Lower show.context_budget, or give the server a larger context.")
+
+
 @router.post("/start", response_model=ShowStartResponse)
-def start(req: ShowStartRequest):
-    """Open a new run: load and check the story, render its cast sheet, pick the seed."""
+async def start(req: ShowStartRequest):
+    """Open a new run: load and check the story, check the budget against the model server's context, render the
+    cast sheet, pick the seed."""
     show = app_config.get_settings().show
     try:
         story = load_story(req.story or show.story)
     except StoryError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    problem = context_problem(show, await server_context())
+    if problem:
+        raise HTTPException(status_code=422, detail=problem)
     seed = show.seed if show.seed is not None else random.randrange(1, 2**31)
     run = new_run(story, show, render_cast_sheet(story, show), seed)
     logger.info("Show run %s opened: story %s, seed %s", run.run_id, story.name, seed)
@@ -200,14 +223,16 @@ async def _round_stream(run: Run, story: Story, req: ShowRoundRequest) -> AsyncI
         else:
             logger.warning("Show run %s, round %s: a transcript arrived outside a listening window; ignored",
                            run.run_id, n)
-    size_before = script_size(run)
-    trimmed = trim(run, show.context_budget)
+    plan = plan_round(run, story, show, req.played_s, words)
+    size_before = known_size(run)
+    # The trim only before a round that asks the model: a round without a request (the Repair) gets no size back, so
+    # the round after it counts its share from the size before both, which a trim in between would make wrong.
+    trimmed = trim(run, show) if plan.max_lines else []
     flagged = set(trimmed)
     trimmed_tokens = sum(r.tokens or 0 for r in run.rounds if r.n in flagged)
     if trimmed:
         logger.info("Show run %s, round %s: script at %s tokens (budget %s); trimmed rounds %s, about %s tokens",
                     run.run_id, n, size_before, show.context_budget, trimmed, trimmed_tokens)
-    plan = plan_round(run, story, show, req.played_s, words)
     messages = assemble_messages(run, plan.instruction)
     request = {"grammar": plan.grammar, "max_tokens": show.max_tokens, "seed": run.seed + n}
     parser = LineParser(run.moods)
