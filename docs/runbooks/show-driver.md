@@ -390,37 +390,41 @@ and round 14 the aftermath; the next call, round 18, goes unanswered (a
 re-call, then the Switch-off). The trim fires before round 10. Leave out
 `--speak` to test without TTS and Whisper.
 
-**3. The report.** From a run of 2026-09-26 (step 3.4c), the first
-contact and the end:
+**3. The report.** From a run of 2026-10-01 (run `2026-10-01T14-21-40`; the
+fixed lines and the report that sets them apart), the first contact and the end:
 
 ```
-round 8 (repair): 2 line(s) of Daniel, Moira, Ralph, Samantha · ...
+round 8 (repair): 2 line(s) of Daniel, Samantha · ...
   overtone positive
-  the listener says "Moira, is the virus airborne?" in Samantha's voice (7.13s); Whisper heard "Moira is the virus airborne." (no_speech_prob 0.010, avg_logprob -0.434) in 1.39s
-  [ 0.80s] Moira (calm): The virus isn't airborne, it's *us*. Over.
-  [ 0.91s] Daniel (doubtful): Who are you? Over.
-  [ 1.12s] Samantha (curious): We need to know who's talking. Over.
+  the listener says "Moira, is the virus airborne?" in Samantha's voice (1.55s); Whisper heard "Moira, is the virus airborne?" (no_speech_prob 0.009, avg_logprob -0.360) in 0.40s
+  [ 0.86s] Moira (calm): The virus isn't airborne, it's *contagious* through proximity. Over.
+  [ 1.07s] Daniel (doubtful): Airborne would mean we'd all be dead by now. Over.
+  [ 1.28s] Samantha (determined): We need to know who's on the other end. Over.
 round 9 (exchange): 3 line(s) of Daniel, Moira, Ralph, Samantha · ...
-  listener: "Moira is the virus airborne."
-  overtone neutral · asks "Find out who the voice is. If the voice already said their name, greet them by it and ask how they found this frequency." · answers 1 of 3
-  the listener says nothing (2 s of silence); Whisper heard "" in 0.35s
-  [ 1.76s] Samantha (determined): We'll find out. Over.
+  listener: "Moira, is the virus airborne?"
+  overtone neutral · asks "Find out who the voice is. If the voice already said their name, greet them by it and ask how they found this frequency." · answers 1 of 5
+  the listener says nothing (2 s of silence); Whisper heard "" in 0.22s
+  [ 0.81s] Samantha (urgent): We need to know who's on the other end. Over.
 round 10 (re-call): 1 line(s) of Daniel, Moira, Ralph, Samantha · ...
   heard: "" -> silence: nothing heard
-  overtone neutral · answers 1 of 3
+  overtone neutral · answers 1 of 5
   trimmed before this round: rounds 3, 4, 5 (the model no longer reads them)
-  the listener says "Is anyone still alive in there?" in Samantha's voice (1.26s); Whisper heard "Is anyone still alive in there?" (no_speech_prob 0.013, avg_logprob -0.225) in 0.34s
-  [ 0.77s] Samantha (calm): They're asking if anyone's alive. Over.
-  [ 0.93s] Daniel (determined): We're still here. Over.
-  [ 1.20s] Moira (urgent): We need your help. Over.
+  the listener says "Is anyone still alive in there?" in Samantha's voice (1.13s); Whisper heard "Is anyone still alive in there?" (no_speech_prob 0.019, avg_logprob -0.193) in 0.36s
+  [ 0.89s] Samantha (determined): The dead are at every door. We need help, someone with a vehicle at the south fence. Over.
+  [ 1.11s] Daniel (urgent): Can you hear us? We're running out of time. Over.
+  [ 1.31s] Moira (curious): Who are you? What can you do? Over.
+round 11 (exchange): 3 line(s) of Daniel, Moira, Ralph, Samantha · ...
+  listener: "Is anyone still alive in there?"
+  overtone neutral · asks "Ask the voice to help get the cast out. The dead are at every door, and the lab needs someone with a vehicle at the south fence. If the voice already offered help, ask what they could bring and how soon." · answers 2 of 5
+  [ 1.62s] Moira (curious): We need to know who you are and what you can offer. Over.
 ...
-checkpoint report, run 2026-09-26T16-51-06:
+checkpoint report, run 2026-10-01T14-21-40:
   PASS  20 of 20 rounds played and recorded (10 needed)
-  PASS  speakers and line counts obey the director: 42 lines, 0 dropped
-  PASS  a call answered from the listener's words: round 9 heard "Moira is the virus airborne." -> Moira, Daniel, Samantha; round 11 heard "Is anyone still alive in there?" -> Samantha, Daniel, Moira
+  PASS  speakers and line counts obey the director: 42 lines (11 fixed, outside the director's limits), 0 dropped
+  PASS  a call answered from the listener's words: round 9 heard "Moira, is the virus airborne?" -> Moira, Daniel, Samantha; round 11 heard "Is anyone still alive in there?" -> Samantha, Daniel, Moira
   PASS  a silent window gave a re-call or the Switch-off: round 10 re-call (nothing heard); round 12 re-call (nothing sent); round 13 switch-off (nothing sent); round 19 re-call (nothing sent); round 20 switch-off (nothing sent)
-  PASS  the trim fired: before round 10 (rounds 3, 4, 5); before round 12 (rounds 6, 7); before round 14 (rounds 8, 9); before round 16 (rounds 10, 11); before round 18 (rounds 12, 13)
-  PASS  debug files for 20 of 20 rounds; token check difference 0 in 20 of them
+  PASS  the trim fired: before round 10 (rounds 3, 4, 5); before round 12 (rounds 6, 7); before round 13 (rounds 8); before round 14 (rounds 9); before round 15 (rounds 10); before round 16 (rounds 11); before round 18 (rounds 12, 13)
+  PASS  debug files for 20 of 20 rounds; token check difference 0 in 18 of them, no model request in 2 (all lines fixed)
 6 of 6 criteria pass
 ```
 

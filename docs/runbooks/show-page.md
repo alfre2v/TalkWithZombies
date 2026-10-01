@@ -398,8 +398,19 @@ python3 scripts/replay_chunk.py runs/2026-09-30T18-51-36/debug/audio/r001-l1-c1-
 ## When something looks wrong
 
 - **"Error: the show could not start: …"** — the app could not open a
-  run: a persona without a reference voice (the message names it), or
-  a story that does not load. Fix it and press Start again.
+  run: a persona without a reference voice (the message names it), a
+  story that does not load, or **a budget the model server cannot hold**:
+  "show.context_budget … does not fit the model server's context of …
+  tokens", with the arithmetic. The app asks the server its context
+  (llama.cpp's `/props`) when a run opens; the script may grow to
+  `trim_trigger` of `context_budget`, plus `instruction_room` for the next
+  instruction and `max_tokens` for the reply, and all of it must fit. It
+  happens when the box runs a smaller context than the settings expect —
+  for example a target deployed with `zr_llama_ctx` 16384 while the budget
+  is the 32k one (34,000). Lower `context_budget` under `show:` (with the
+  defaults, the context must be at least 32,112 tokens for 34,000; for a
+  16,384 context, a budget of about 16,500 fits), or redeploy the box with
+  a larger context. Fix it and press Start again.
 - **"Error: the round request failed …" or a failed round** — the model
   did not answer: check the tunnel (`curl localhost:8080/health` must
   say `{"status":"ok"}`), then press **Resume**; the failed round is
