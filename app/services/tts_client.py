@@ -456,6 +456,7 @@ def build_synthesis_payload(
     audio_base64: Optional[str],
     language: str,
     configured_parameters: Optional[dict],
+    seed: Optional[int] = None,
 ) -> dict:
     """Build the /synthesize JSON body from a capabilities doc (plan T4).
 
@@ -470,6 +471,10 @@ def build_synthesis_payload(
 
     `configured_parameters` can never override the app-managed fields —
     see _APP_MANAGED_PARAMETER_NAMES.
+
+    `seed` is the request's own (the show's, with show.voice_seed on): sent,
+    fitted into the engine's range (fit_seed), when the engine advertises
+    `seed`; it wins over a configured one.
     """
     payload: dict = {"text": text}
     specs = _advertised_parameter_specs(doc) if doc is not None else None
@@ -507,7 +512,27 @@ def build_synthesis_payload(
             continue  # "not set" — let the engine decide
         if advertised(name):
             payload[name] = value
+    if seed is not None and advertised("seed"):
+        payload["seed"] = fit_seed(seed, specs.get("seed") if specs is not None else None)
     return payload
+
+
+def fit_seed(seed: int, spec: Optional[dict]) -> int:
+    """A seed fitted into the range an engine advertises for `seed` (its min and max), so any number can be sent.
+
+    Within the range, a seed is kept as it is; outside, it wraps around (min + (seed - min) modulo the range's size),
+    so different seeds stay different as far as the range allows. With one bound only, it is clamped to it; with none
+    (or no spec: no capabilities document), it is sent as it is.
+    """
+    low = _integer_bound(spec.get("min")) if spec else None
+    high = _integer_bound(spec.get("max")) if spec else None
+    if low is not None and high is not None and high >= low:
+        return low + (seed - low) % (high - low + 1)
+    if low is not None:
+        return max(seed, low)
+    if high is not None:
+        return min(seed, high)
+    return seed
 
 
 def _response_detail(response: httpx.Response) -> str:
@@ -533,11 +558,13 @@ async def synthesize(
     reference_text: str,
     audio_base64: str,
     language: str = "en",
+    seed: Optional[int] = None,
 ) -> Optional[dict]:
     """Call the TTS server's /synthesize endpoint with a doc-driven payload.
 
     Returns the server's raw response dict (engine extras pass through; the
-    frontend only reads `audio_base64`) or None on failure.
+    frontend only reads `audio_base64`) or None on failure. `seed`, if given,
+    is this request's seed (see build_synthesis_payload).
 
     The payload is built from the cached capabilities document (plan T4):
     only fields the engine advertises are sent. If no document is available
@@ -562,7 +589,7 @@ async def synthesize(
     def payload_for(doc: Optional[dict]) -> dict:
         return build_synthesis_payload(
             doc, text, reference_text, audio_base64, language,
-            settings.tts.parameters,
+            settings.tts.parameters, seed,
         )
 
     try:

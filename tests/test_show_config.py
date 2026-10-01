@@ -27,6 +27,7 @@ class TestShowConfig:
         assert show.seed is None
         assert show.emotion_tags is True
         assert show.debug is False
+        assert (show.mood_voices, show.voice_seed) == (True, False)
         assert (show.event_every, show.event_jitter, show.tone_hold, show.tone_jitter) == (2, 1, 3, 1)
         assert show.event_report is True
         assert (show.interaction_min_s, show.interaction_max_s) == (60.0, 180.0)
@@ -115,6 +116,7 @@ class TestShowConfig:
         ("orientation_every", -1),
         ("recollection_every", -1),
         ("restatement_contacts", 0),
+        ("voice_seed", "sometimes"),
     ])
     def test_out_of_bounds_rejected(self, field, value):
         with pytest.raises(ValidationError):

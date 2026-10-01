@@ -58,16 +58,15 @@ from app.show.debug import write_round
 from app.show.director import LISTENS, plan_round
 from app.show.listen import usable
 from app.show.parser import LineParser
-from app.show.script import (Heard, Line, Round, Run, append_round, assemble_messages, load_run, new_run,
-                             round_share, script_size, trim)
-from app.show.story import Story, StoryError, load_story, render_cast_sheet
+from app.show.script import (RUN_ID, Heard, Line, Round, Run, append_round, assemble_messages, load_run,
+                             new_run, round_share, script_size, trim)
+from app.show.story import Story, StoryError, load_story, render_cast_sheet, voice_map
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/show", tags=["show"])
 page_router = APIRouter(tags=["show"])
 _templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent.parent / "templates"))
 
-_RUN_ID = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(-\d+)?$")
 _DESIGNS = Path(__file__).resolve().parent.parent.parent / "static" / "show" / "designs"
 _DESIGN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
@@ -135,12 +134,13 @@ def start(req: ShowStartRequest):
     return ShowStartResponse(run_id=run.run_id, story=story.name, title=story.title,
                              cast=list(story.cast), operator=story.operator, seed=seed,
                              listen_window_s=show.listen_window_s, press_cap_s=show.press_cap_s,
-                             debug=show.debug)
+                             debug=show.debug, voices=voice_map(story) if show.mood_voices else {},
+                             voice_seed=show.voice_seed)
 
 
 def _load(run_id: str) -> Tuple[Run, Story]:
     """The run and its story, or the HTTP error: 404 for an unknown or malformed run id, 422 for a broken story."""
-    if not _RUN_ID.match(run_id):
+    if not RUN_ID.fullmatch(run_id):
         raise HTTPException(status_code=404, detail=f"Unknown run {run_id!r}")
     try:
         run = load_run(run_id)

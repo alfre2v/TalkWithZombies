@@ -6,8 +6,10 @@ exercised for real against tmp_path files.
 """
 
 import base64
+import json
 
 import httpx
+import pytest
 
 import app.config as app_config
 import app.routers.stt as stt_router
@@ -21,7 +23,8 @@ from tests.factories import (
     make_personas,
     make_settings,
 )
-from app.config import STTConfig, TTSConfig
+from app.config import ShowConfig, STTConfig, TTSConfig
+from app.show.script import runs_root
 
 
 def _active_tts_settings(monkeypatch, **tts_kwargs):
@@ -122,9 +125,9 @@ class TestTTSProxy:
         _persona_cache(monkeypatch, PersonasConfig(personas=[self._tts_capable_persona(tmp_path)]))
         seen = {}
 
-        async def fake_synthesize(text, reference_text, audio_base64, language):
+        async def fake_synthesize(text, reference_text, audio_base64, language, seed=None):
             seen.update(text=text, reference_text=reference_text,
-                        audio_base64=audio_base64, language=language)
+                        audio_base64=audio_base64, language=language, seed=seed)
             return {"audio_base64": "QUJD", "sample_rate": 24000}
 
         monkeypatch.setattr(tts_router, "synthesize", fake_synthesize)
@@ -132,11 +135,134 @@ class TestTTSProxy:
         resp = client.post("/api/tts", json={"text": "hello", "persona_name": "Luna"})
 
         assert resp.status_code == 200
-        assert resp.json() == {"audio_base64": "QUJD", "sample_rate": 24000}
+        assert resp.json() == {"audio_base64": "QUJD", "sample_rate": 24000, "reference": "ref.wav"}
         assert seen["text"] == "hello"
         assert seen["reference_text"] == "a reference transcript"
         assert seen["audio_base64"] == base64.b64encode(b"RIFF-ref").decode()
         assert seen["language"] == "en"
+        assert seen["seed"] is None  # No seed asked for: the engine picks one
+
+    def _fake_synthesize(self, monkeypatch):
+        """Replace the TTS call; returns what it was sent."""
+        seen = {}
+
+        async def fake_synthesize(text, reference_text, audio_base64, language, seed=None):
+            seen.update(reference_text=reference_text, audio=base64.b64decode(audio_base64))
+            return {"audio_base64": "QUJD", "sample_rate": 24000}
+
+        monkeypatch.setattr(tts_router, "synthesize", fake_synthesize)
+        return seen
+
+    def test_a_named_clip_the_persona_has_is_spoken_with(self, client, monkeypatch, tmp_path):
+        _persona_cache(monkeypatch, PersonasConfig(personas=[self._tts_capable_persona(tmp_path)]))
+        (tmp_path / "ref-fear.wav").write_bytes(b"RIFF-fear")
+        (tmp_path / "ref-fear.txt").write_text("a fearful transcript", encoding="utf-8")
+        seen = self._fake_synthesize(monkeypatch)
+
+        resp = client.post("/api/tts", json={"text": "hello", "persona_name": "Luna", "reference": "ref-fear.wav"})
+
+        assert resp.status_code == 200
+        assert resp.json()["reference"] == "ref-fear.wav"
+        assert seen == {"reference_text": "a fearful transcript", "audio": b"RIFF-fear"}
+
+    @pytest.mark.parametrize("name", ["ref-fear.wav", "ref-anger.wav"])
+    def test_a_clip_the_persona_lacks_falls_back_to_ref_wav(self, client, monkeypatch, tmp_path, name):
+        _persona_cache(monkeypatch, PersonasConfig(personas=[self._tts_capable_persona(tmp_path)]))
+        (tmp_path / "ref-fear.wav").write_bytes(b"RIFF-fear")  # No ref-fear.txt: not a usable clip
+        seen = self._fake_synthesize(monkeypatch)
+
+        resp = client.post("/api/tts", json={"text": "hello", "persona_name": "Luna", "reference": name})
+
+        assert resp.json()["reference"] == "ref.wav"
+        assert seen == {"reference_text": "a reference transcript", "audio": b"RIFF-ref"}
+
+    @pytest.mark.parametrize("name", ["../luna.wav", "ref-fear.txt", "REF-FEAR.wav", "ref-fear", "ref-a/b.wav",
+                                      "/tmp/ref-fear.wav", "ref-fear2.wav", ""])
+    def test_a_name_that_is_not_a_clip_s_falls_back_to_ref_wav(self, client, monkeypatch, tmp_path, name):
+        _persona_cache(monkeypatch, PersonasConfig(personas=[self._tts_capable_persona(tmp_path)]))
+        seen = self._fake_synthesize(monkeypatch)
+
+        resp = client.post("/api/tts", json={"text": "hello", "persona_name": "Luna", "reference": name})
+
+        assert resp.status_code == 200
+        assert resp.json()["reference"] == "ref.wav"
+        assert seen["audio"] == b"RIFF-ref"
+
+    RUN = "2026-09-30T19-02-11"
+
+    def _engine(self, monkeypatch):
+        """Replace the TTS call with an engine that answers "ABC" and echoes the seed; returns the seeds sent."""
+        seeds = []
+
+        async def fake_synthesize(text, reference_text, audio_base64, language, seed=None):
+            seeds.append(seed)
+            return {"audio_base64": "QUJD", "sample_rate": 24000, "seed": seed or 737, "time_used": 1.5}
+
+        monkeypatch.setattr(tts_router, "synthesize", fake_synthesize)
+        return seeds
+
+    def _debug(self, monkeypatch, on):
+        monkeypatch.setattr(app_config.get_settings(), "show", ShowConfig(debug=on))
+        (runs_root() / self.RUN).mkdir(parents=True)
+        return runs_root() / self.RUN / "debug" / "audio"
+
+    def test_the_request_s_seed_goes_to_the_engine(self, client, monkeypatch, tmp_path):
+        _persona_cache(monkeypatch, PersonasConfig(personas=[self._tts_capable_persona(tmp_path)]))
+        seeds = self._engine(monkeypatch)
+
+        resp = client.post("/api/tts", json={"text": "hello", "persona_name": "Luna", "seed": 42})
+
+        assert resp.status_code == 200
+        assert seeds == [42]
+
+    @pytest.mark.parametrize("seed", [-1, 1.5, "many"])
+    def test_a_seed_that_is_not_a_whole_number_from_0_is_refused(self, client, monkeypatch, tmp_path, seed):
+        _persona_cache(monkeypatch, PersonasConfig(personas=[self._tts_capable_persona(tmp_path)]))
+        seeds = self._engine(monkeypatch)
+
+        resp = client.post("/api/tts", json={"text": "hello", "persona_name": "Luna", "seed": seed})
+
+        assert resp.status_code == 422
+        assert seeds == []
+
+    def test_debug_on_a_tagged_chunk_is_kept_in_its_run_and_the_reply_is_the_same(self, client, monkeypatch,
+                                                                                   tmp_path):
+        _persona_cache(monkeypatch, PersonasConfig(personas=[self._tts_capable_persona(tmp_path)]))
+        self._engine(monkeypatch)
+        audio = self._debug(monkeypatch, on=True)
+
+        resp = client.post("/api/tts", json={"text": "hello", "persona_name": "Luna", "seed": 42,
+                                             "debug": f"{self.RUN}/r009-l2-c1"})
+
+        assert resp.json() == {"audio_base64": "QUJD", "sample_rate": 24000, "seed": 42, "time_used": 1.5,
+                               "reference": "ref.wav"}
+        assert (audio / "r009-l2-c1-Luna-ref.wav").read_bytes() == b"ABC"
+        kept = json.loads((audio / "r009-l2-c1-Luna-ref.json").read_text(encoding="utf-8"))
+        assert kept["text"] == "hello"
+        assert kept["seed_asked"] == 42
+        assert kept["reply"] == {"sample_rate": 24000, "seed": 42, "time_used": 1.5}
+        assert kept["transcript"] == "a reference transcript"
+
+    def test_debug_off_a_tagged_chunk_is_not_kept(self, client, monkeypatch, tmp_path):
+        _persona_cache(monkeypatch, PersonasConfig(personas=[self._tts_capable_persona(tmp_path)]))
+        self._engine(monkeypatch)
+        audio = self._debug(monkeypatch, on=False)
+
+        resp = client.post("/api/tts", json={"text": "hello", "persona_name": "Luna",
+                                             "debug": f"{self.RUN}/r009-l2-c1"})
+
+        assert resp.status_code == 200
+        assert not audio.exists()
+
+    def test_debug_on_an_untagged_request_is_not_kept(self, client, monkeypatch, tmp_path):
+        _persona_cache(monkeypatch, PersonasConfig(personas=[self._tts_capable_persona(tmp_path)]))
+        self._engine(monkeypatch)
+        audio = self._debug(monkeypatch, on=True)
+
+        resp = client.post("/api/tts", json={"text": "hello", "persona_name": "Luna"})
+
+        assert resp.status_code == 200
+        assert not audio.exists()
 
     def test_non_cloning_engine_503_without_calling_synthesize(self, client, monkeypatch, tmp_path):
         # The cached doc (for the current base_url) says reference_audio:
@@ -170,7 +296,7 @@ class TestTTSProxy:
                             make_capabilities_doc(engine="omnivoice", reference_audio=None))
         seen = {}
 
-        async def fake_synthesize(text, reference_text, audio_base64, language):
+        async def fake_synthesize(text, reference_text, audio_base64, language, seed=None):
             seen["called"] = True
             return {"audio_base64": "QUJD", "sample_rate": 24000}
 

@@ -1,10 +1,11 @@
-"""Tests for app/show/debug.py — the debug switch's two files per round.
+"""Tests for app/show/debug.py — the debug switch's two files per round, and the voice's chunks kept.
 
 The model server's two calls (render_prompt, count_tokens) are faked at the
 module's import site.
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 
@@ -109,3 +110,75 @@ class TestWriteRound:
             _write()
 
         assert "debug files not written" in caplog.text
+
+
+class TestWriteChunk:
+    REPLY = {"audio_base64": "QUJD", "sample_rate": 24000, "seed": 737, "time_used": 1.73}
+
+    def _keep(self, tmp_path, tag, **changes):
+        clip = tmp_path / "ref-fear.wav"
+        clip.write_bytes(b"RIFF-fear")
+        args = dict(persona="Daniel", text="Candles! Over.", language="en", asked="ref-fear.wav",
+                    used="ref-fear.wav", clip=clip, transcript="a fearful transcript", seed=737, reply=self.REPLY)
+        args.update(changes)
+        return debug.write_chunk(tag, **args)
+
+    def _run_folder(self):
+        folder = runs_root() / RUN_ID
+        folder.mkdir(parents=True)
+        return folder
+
+    def test_the_audio_and_what_made_it(self, tmp_path):
+        self._run_folder()
+
+        wav = self._keep(tmp_path, f"{RUN_ID}/r009-l2-c1")
+
+        assert wav == runs_root() / RUN_ID / "debug" / "audio" / "r009-l2-c1-Daniel-ref-fear.wav"
+        assert wav.read_bytes() == b"ABC"
+        kept = json.loads(wav.with_suffix(".json").read_text(encoding="utf-8"))
+        assert kept.pop("kept")  # The time it was kept
+        assert kept == {
+            "tag": f"{RUN_ID}/r009-l2-c1",
+            "persona": "Daniel",
+            "text": "Candles! Over.",
+            "language": "en",
+            "reference_asked": "ref-fear.wav",
+            "reference_used": "ref-fear.wav",
+            "clip": str(tmp_path / "ref-fear.wav"),
+            "clip_sha256": hashlib.sha256(b"RIFF-fear").hexdigest(),
+            "transcript": "a fearful transcript",
+            "seed_asked": 737,
+            "reply": {"sample_rate": 24000, "seed": 737, "time_used": 1.73},
+        }
+
+    def test_the_clip_used_names_the_file_even_when_another_was_asked_for(self, tmp_path):
+        self._run_folder()
+
+        wav = self._keep(tmp_path, f"{RUN_ID}/r010-l1-c2", persona="Ralph Jr.", asked="ref-awe.wav", used="ref.wav")
+
+        assert wav.name == "r010-l1-c2-Ralph_Jr_-ref.wav"
+
+    @pytest.mark.parametrize("tag", ["", "../x", f"{RUN_ID}", f"{RUN_ID}/r9-l2-c1", f"{RUN_ID}/r009-l2",
+                                     f"{RUN_ID}/../r009-l2-c1", f"{RUN_ID}/r009-l2-c1/../x", f"x/{RUN_ID}/r009-l2-c1",
+                                     f"/{RUN_ID}/r009-l2-c1", "latest/r009-l2-c1", f"{RUN_ID}/r009-l2-c1\n"])
+    def test_a_tag_that_is_not_a_run_s_and_a_place_s_keeps_nothing(self, tmp_path, caplog, tag):
+        self._run_folder()
+        with caplog.at_level(logging.WARNING):
+            assert self._keep(tmp_path, tag) is None
+
+        assert [p.name for p in runs_root().rglob("*")] == [RUN_ID]
+        assert "is not a run's and a place's" in caplog.text
+
+    def test_a_run_with_no_folder_keeps_nothing(self, tmp_path, caplog):
+        with caplog.at_level(logging.WARNING):
+            assert self._keep(tmp_path, f"{RUN_ID}/r009-l2-c1") is None
+
+        assert not (runs_root() / RUN_ID).exists()
+        assert f"no run {RUN_ID}" in caplog.text
+
+    def test_a_failure_never_raises(self, tmp_path, caplog):
+        self._run_folder()
+        with caplog.at_level(logging.WARNING):
+            assert self._keep(tmp_path, f"{RUN_ID}/r009-l2-c1", reply={"audio_base64": "not base64!"}) is None
+
+        assert "chunk 2026-09-24T01-23-45/r009-l2-c1 not kept" in caplog.text

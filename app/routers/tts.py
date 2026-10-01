@@ -8,6 +8,7 @@ STT routing lives in its own module: app.routers.stt
 """
 
 import logging
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Query
@@ -15,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import clean_base_url, get_personas, get_settings
 from app.models import TTSRequest, TTSHealthResponse
+from app.services import persona_store
 from app.services.tts_client import (
     cached_capabilities,
     check_tts_health,
@@ -25,6 +27,7 @@ from app.services.tts_client import (
     read_transcript,
     synthesize,
 )
+from app.show.debug import write_chunk
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["tts"])
@@ -102,7 +105,16 @@ async def tts_proxy(req: TTSRequest):
     """Proxy a synthesis request to the TTS server.
 
     Looks up the persona's reference audio and transcript, then calls
-    the TTS server's /synthesize endpoint.
+    the TTS server's /synthesize endpoint. A request may name one of the
+    persona's reference clips (the show names the clip of each line's mood,
+    e.g. ref-fear.wav); a clip the persona lacks, or a name that is not a
+    clip's, falls back to ref.wav. The reply says which clip was used, in
+    "reference".
+
+    A request's seed goes to the engine, if it advertises one (the show sends
+    one with every chunk). With show.debug on, a request tagged by the show
+    (debug: "<run-id>/r009-l2-c1") keeps its chunk in that run's debug
+    folder (app.show.debug.write_chunk); the reply is the same either way.
     """
     config = get_personas()
     persona = next((p for p in config.personas if p.name == req.persona_name), None)
@@ -130,9 +142,15 @@ async def tts_proxy(req: TTSRequest):
             content={"detail": "The connected TTS engine does not support reference-audio voice cloning"},
         )
 
-    # Load reference audio and transcript
-    audio_b64 = encode_reference_audio(persona.reference_audio)
-    transcript = read_transcript(persona.reference_audio_transcript)
+    # Load reference audio and transcript: the clip asked for if the persona has it, else ref.wav
+    audio_path, transcript_path = persona.reference_audio, persona.reference_audio_transcript
+    used = persona_store.REFERENCE_AUDIO_FILENAME
+    clip = persona_store.reference_clip(Path(audio_path).parent, req.reference) if req.reference else None
+    if clip:
+        audio_path, transcript_path = str(clip[0]), str(clip[1])
+        used = req.reference
+    audio_b64 = encode_reference_audio(audio_path)
+    transcript = read_transcript(transcript_path)
 
     if not audio_b64 or not transcript:
         return JSONResponse(status_code=503, content={"detail": "TTS reference files unavailable"})
@@ -142,9 +160,15 @@ async def tts_proxy(req: TTSRequest):
         reference_text=transcript,
         audio_base64=audio_b64,
         language=persona.reference_audio_language,
+        seed=req.seed,
     )
 
     if not result:
         return JSONResponse(status_code=502, content={"detail": "TTS server returned no audio"})
 
-    return result
+    if req.debug and get_settings().show.debug:
+        write_chunk(req.debug, persona=persona.name, text=req.text, language=persona.reference_audio_language,
+                    asked=req.reference, used=used, clip=Path(audio_path), transcript=transcript, seed=req.seed,
+                    reply=result)
+
+    return {**result, "reference": used}

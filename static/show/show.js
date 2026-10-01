@@ -126,7 +126,8 @@ function formatSeconds(seconds) {
  * how long the round took to write, and — once it has been said — how long
  * the listener waited for its first sound and how much audio it played. The
  * overtone, the event slot's filling, the agenda item asked and a contact's
- * answers so far appear when the summary has them.
+ * answers so far appear when the summary has them; once said, the reference
+ * clip each line was spoken with.
  */
 function debugLine(summary, times, runId) {
     const parts = [`round ${summary.n}`, summary.kind];
@@ -148,6 +149,8 @@ function debugLine(summary, times, runId) {
     }
     if (summary.trimmed && summary.trimmed.length) parts.push(`trimmed rounds ${summary.trimmed.join(", ")}`);
     if (summary.dropped && summary.dropped.length) parts.push(`dropped ${summary.dropped.length}`);
+    const voices = (times.voices || []).filter(Boolean);
+    if (voices.length) parts.push(`voices ${voices.join(", ")}`);
     parts.push(
         `first line ${formatSeconds(times.firstLineS)} s`,
         `round ${formatSeconds(times.seconds)} s`,
@@ -176,6 +179,7 @@ async function startShow() {
         const body = await resp.json();
         if (!resp.ok) throw new Error(body.detail || `HTTP ${resp.status}`);
         show.run = body;
+        voice.run = { id: body.run_id, seed: body.seed, sendSeed: body.voice_seed, debug: body.debug };
         show.playedS = 0;
         show.listens = false;
         setReceiver(false);
@@ -234,7 +238,7 @@ async function playRound(signal, heard) {
     const round = {
         summary: null, lines: [], started, firstLineS: null, seconds: null, element: addRoundElement(),
         firstSoundS: show.voice ? null : undefined, playedS: show.voice ? 0 : undefined, debugElement: null,
-        lastStarted: null,
+        lastStarted: null, voices: [],
     };
     show.current = round;
     let mood = null;
@@ -260,7 +264,10 @@ async function playRound(signal, heard) {
                     speakLine(persona, event.text, {
                         onStart: () => lineStarts(round, line, persona, index),
                         onFail: (err) => voiceFailed(round, persona, err),
-                    });
+                        onVoice: (clip) => {
+                            if (clip) round.voices[index] = `${persona} ${clip}`;
+                        },
+                    }, voiceOf(mood), placeOf(event.message_id));
                 } else {
                     lightSpeaker(event.persona);
                 }
@@ -290,6 +297,18 @@ async function playRound(signal, heard) {
         round.debugElement = addDebugLine(round.element, debugLine(round.summary, written, show.run.run_id));
     }
     return round;
+}
+
+/** A line's place in the run, "r009-l2", from its message_id ("<run-id>-r009-l2"); null without one. */
+function placeOf(messageId) {
+    const match = /-(r\d{3}-l\d+)$/.exec(messageId || "");
+    return match ? match[1] : null;
+}
+
+/** The reference clip a line in this mood is spoken with (the story's voices), or null: the persona's ref.wav. */
+function voiceOf(mood) {
+    const voices = show.run && show.run.voices;
+    return (mood && voices && voices[mood]) || null;
 }
 
 /** A line's voice has started: show the line, light its speaker, and say the show is on air. */
