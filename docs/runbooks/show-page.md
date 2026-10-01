@@ -35,6 +35,57 @@ Then open <http://127.0.0.1:8010/show> (the root, <http://127.0.0.1:8010/>,
 sends you there too), choose a look, and press **Start**. The page opens a run, puts the story's title and cast in
 place, and plays rounds one after another until you press **Stop**.
 
+## The show's settings: the demo, or a test show
+
+The show reads its settings from the `show:` section of `settings.yaml`,
+in the folder the app runs from — this checkout's, or the installed
+client's, `~/TalkWithZombies-client/settings.yaml`. **A show needs no
+`show:` section at all:** every setting has a default, and the defaults
+are the demo's configuration. The four switches worth knowing:
+
+| Setting | Default | What it does |
+|---|---|---|
+| `debug` | `false` | On: the debug line under each round, the model's debug files, and every chunk the voice said, in `runs/<run-id>/debug/` (see "The debug line") |
+| `seed` | none: a random one per run | A number: the model writes the same story every run |
+| `mood_voices` | `true` | Each line is spoken with its mood's reference clip; off, every line with `ref.wav` (see "The voice") |
+| `voice_seed` | `false` | On: every chunk is spoken with the run's seed — with `seed` set, the same voices every run too (see "The voice") |
+
+The rest of the section — about 40 numbers for the pacing, the
+listener's turn and the contacts — has tuned defaults; they are listed,
+with what each does, in `app/config.py` (`ShowConfig`).
+
+**For a test show**, add what you need under `show:` and restart the app
+(the settings are read when it starts):
+
+```yaml
+show:
+  debug: true        # the debug line, and every chunk's audio kept
+  seed: 42           # optional: the same story every run
+  voice_seed: true   # optional, with seed: the same voices every run too
+```
+
+**Back to the demo:** delete those lines (or the whole `show:`
+section) and restart the app.
+
+To see what a settings file sets for the show:
+
+```bash
+# The show section of this checkout's settings (no output: no show section, the demo's defaults)
+grep -A5 '^show:' settings.yaml
+```
+
+For example, this checkout on 2026-09-30:
+
+```
+show:
+  seed: 42
+```
+
+`mood_voices`, `voice_seed` and the kept audio arrive with the fork's
+`tz-0.4` (alfre2v/TalkWithZombies#8); an older version ignores settings
+it does not know, without a word, so a `voice_seed: true` there does
+nothing.
+
 ## Choosing a look
 
 `/show` offers every design of `static/show/designs/`, in the order their
