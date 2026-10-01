@@ -262,6 +262,9 @@ class ShowConfig(BaseModel):
     debug: bool = False
     # The line's mood picks the reference clip it is spoken with (the story's voices); off, every line uses ref.wav.
     mood_voices: bool = True
+    # On, every chunk of the voice is asked for with the run's seed (fitted into the seed range the engine advertises),
+    # so a run replayed with the same seed is said the same way; off, none is sent and the engine picks one per chunk.
+    voice_seed: bool = False
     # Pacing, in rounds: an event every N free rounds (the gap), a tone word kept N rounds (the hold);
     # each drawn N +/- jitter, never below 1; 0 turns it off.
     event_every: int = Field(default=2, ge=0)

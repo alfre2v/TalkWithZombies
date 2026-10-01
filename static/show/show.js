@@ -179,6 +179,7 @@ async function startShow() {
         const body = await resp.json();
         if (!resp.ok) throw new Error(body.detail || `HTTP ${resp.status}`);
         show.run = body;
+        voice.run = { id: body.run_id, seed: body.seed, sendSeed: body.voice_seed, debug: body.debug };
         show.playedS = 0;
         show.listens = false;
         setReceiver(false);
@@ -266,7 +267,7 @@ async function playRound(signal, heard) {
                         onVoice: (clip) => {
                             if (clip) round.voices[index] = `${persona} ${clip}`;
                         },
-                    }, voiceOf(mood));
+                    }, voiceOf(mood), placeOf(event.message_id));
                 } else {
                     lightSpeaker(event.persona);
                 }
@@ -296,6 +297,12 @@ async function playRound(signal, heard) {
         round.debugElement = addDebugLine(round.element, debugLine(round.summary, written, show.run.run_id));
     }
     return round;
+}
+
+/** A line's place in the run, "r009-l2", from its message_id ("<run-id>-r009-l2"); null without one. */
+function placeOf(messageId) {
+    const match = /-(r\d{3}-l\d+)$/.exec(messageId || "");
+    return match ? match[1] : null;
 }
 
 /** The reference clip a line in this mood is spoken with (the story's voices), or null: the persona's ref.wav. */

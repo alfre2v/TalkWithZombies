@@ -27,6 +27,7 @@ from app.services.tts_client import (
     read_transcript,
     synthesize,
 )
+from app.show.debug import write_chunk
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["tts"])
@@ -109,6 +110,11 @@ async def tts_proxy(req: TTSRequest):
     e.g. ref-fear.wav); a clip the persona lacks, or a name that is not a
     clip's, falls back to ref.wav. The reply says which clip was used, in
     "reference".
+
+    A request's seed goes to the engine, if it advertises one (the show sends
+    one with every chunk). With show.debug on, a request tagged by the show
+    (debug: "<run-id>/r009-l2-c1") keeps its chunk in that run's debug
+    folder (app.show.debug.write_chunk); the reply is the same either way.
     """
     config = get_personas()
     persona = next((p for p in config.personas if p.name == req.persona_name), None)
@@ -154,9 +160,15 @@ async def tts_proxy(req: TTSRequest):
         reference_text=transcript,
         audio_base64=audio_b64,
         language=persona.reference_audio_language,
+        seed=req.seed,
     )
 
     if not result:
         return JSONResponse(status_code=502, content={"detail": "TTS server returned no audio"})
+
+    if req.debug and get_settings().show.debug:
+        write_chunk(req.debug, persona=persona.name, text=req.text, language=persona.reference_audio_language,
+                    asked=req.reference, used=used, clip=Path(audio_path), transcript=transcript, seed=req.seed,
+                    reply=result)
 
     return {**result, "reference": used}

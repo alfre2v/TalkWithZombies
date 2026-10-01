@@ -12,6 +12,13 @@
  * reference clip it is spoken with (its mood's, e.g. ref-fear.wav); every
  * chunk of the line carries it.
  *
+ * A line may also name its place in the run (r009-l2: round 9, line 2); its
+ * chunks are then r009-l2-c1, -c2... With the run's show.voice_seed on, such
+ * a chunk is asked for with the run's seed (the app fits it into the engine's
+ * range); off, with none, and the engine picks one. With the run's debug on,
+ * the request also carries the tag <run-id>/r009-l2-c1, and the app keeps the
+ * chunk in the run's debug folder.
+ *
  * A classic script sharing globals, like upstream's; show.js drives it
  * through speakLine, drained, stopVoice and unlockAudio.
  */
@@ -26,7 +33,7 @@ const VOICE = {
 
 const voice = {
     ctx: null,          // the AudioContext, created on a click
-    pending: [],        // chunks waiting to be synthesized: {persona, text, hooks, first, last, reference}
+    pending: [],        // chunks waiting to be synthesized: {persona, text, hooks, first, last, reference, place}
     ready: [],          // chunks synthesized, waiting to play: the same, plus buffer (null when it failed)
     fetching: false,
     playing: false,
@@ -35,6 +42,7 @@ const voice = {
     onPlayed: null,     // called with each finished clip's seconds
     waiters: [],        // resolvers of drained()
     generation: 0,      // moved on by stopVoice, so the late results of a stopped queue are dropped
+    run: null,          // the run spoken for, {id, seed, sendSeed, debug}: set by show.js at the start
 };
 
 /* ==========================================================================
@@ -105,7 +113,8 @@ function unlockAudio() {
 
 /**
  * Queue a line to be said in a persona's voice — with the reference clip
- * named, if any (e.g. ref-fear.wav), else the persona's ref.wav.
+ * named, if any (e.g. ref-fear.wav), else the persona's ref.wav; place is the
+ * line's place in the run (r009-l2), if known.
  *
  * hooks.onStart() runs when the line's first chunk starts playing (or at its
  * turn, if no chunk could be synthesized); hooks.onFail(err) runs for each
@@ -113,14 +122,17 @@ function unlockAudio() {
  * if given, runs once the line's first chunk is synthesized, with the clip
  * the app says it used.
  */
-function speakLine(persona, text, hooks, reference) {
+function speakLine(persona, text, hooks, reference, place) {
     const parts = chunks(text);
     if (!parts.length) {
         hooks.onStart();
         return;
     }
     parts.forEach((part, i) => {
-        voice.pending.push({ persona, text: part, hooks, first: i === 0, last: i === parts.length - 1, reference });
+        voice.pending.push({
+            persona, text: part, hooks, first: i === 0, last: i === parts.length - 1, reference,
+            place: place ? `${place}-c${i + 1}` : null,
+        });
     });
     synthesizeNext();
 }
@@ -173,7 +185,7 @@ async function synthesizeNext() {
     voice.controller = controller;
     let buffer = null;
     try {
-        const said = await synthesize(item.persona, item.text, controller.signal, item.reference);
+        const said = await synthesize(voiceRequest(item), controller.signal);
         buffer = said.buffer;
         if (item.first && item.hooks.onVoice) item.hooks.onVoice(said.reference);
     } catch (err) {
@@ -190,12 +202,27 @@ async function synthesizeNext() {
 }
 
 /**
- * Ask the app's TTS for a chunk in a persona's voice, with the reference clip
- * named if any; decode the WAV it returns. Resolves to {buffer, reference}:
- * the audio, and the clip the app says it used.
+ * The body of a chunk's voice request: the text and the persona, the clip if
+ * one is named; for a chunk with a place in the run, the run's seed when the
+ * run sends it, and with the run's debug on, the debug tag <run-id>/<place>.
  */
-async function synthesize(persona, text, signal, reference) {
-    const request = reference ? { text, persona_name: persona, reference } : { text, persona_name: persona };
+function voiceRequest(item) {
+    const request = { text: item.text, persona_name: item.persona };
+    if (item.reference) request.reference = item.reference;
+    const run = voice.run;
+    if (run && item.place) {
+        if (run.sendSeed) request.seed = run.seed;
+        if (run.debug) request.debug = `${run.id}/${item.place}`;
+    }
+    return request;
+}
+
+/**
+ * Ask the app's TTS for a chunk (the body from voiceRequest); decode the WAV
+ * it returns. Resolves to {buffer, reference}: the audio, and the clip the
+ * app says it used.
+ */
+async function synthesize(request, signal) {
     const resp = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

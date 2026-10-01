@@ -161,6 +161,33 @@ the defaults, all in `settings.yaml` under `show:`.
   line; a clip a persona lacks, or a story without `voices`, falls back
   to the persona's `ref.wav`. Off (`mood_voices: false` under `show:`),
   every line uses `ref.wav`, as before — for an A/B by ear.
+- **The run's seed for the voice** (`voice_seed`, off). The voice engine
+  draws each chunk from a random seed; a chunk sent without one gets a
+  new random seed from the engine every time (Faster Qwen3-TTS picks one
+  in 1..1000 and says which in its reply), so the same line said twice
+  can sound different. A seed does not make a voice better or steadier:
+  the same clip, text and seed give the same audio, byte for byte, a bad
+  chunk as much as a good one. What it gives is a run said the same way
+  twice:
+  - off (the default): no seed is sent; the engine picks one per chunk,
+    as before this setting existed. Any chunk can still be said again
+    exactly with the debug folder (below), from the seed the engine said
+    it used.
+  - `voice_seed: true` under `show:`: every chunk is asked for with the
+    run's seed (`seed:` under `show:`, or the random one the run drew).
+    With `seed:` set, the model already writes the same script; with
+    this on, the voice says it the same way too — for comparing two
+    runs that differ in one thing only (a clip, a remapped mood, a
+    recast), or re-saying a recorded show.
+
+  The app fits the run's seed into the range the engine advertises for
+  `seed` in its capabilities (a seed within the range is kept as it is;
+  outside, it wraps around: 4000000001 becomes 1 in 1..1000), and sends
+  nothing to an engine that advertises no `seed`. The show's seed wins
+  over a `seed` under `tts.parameters` (which the chat uses). Decided
+  2026-09-30, after a per-chunk seed was built and dropped: no strategy
+  for the seed makes the voices steadier, and one seed per run is the
+  simplest that replays a run.
 - **The next round is asked for when the voice has said everything**,
   with the seconds of audio played so far — the sum of the clips'
   lengths — so the director's cadence counts what the listener heard.
@@ -224,6 +251,82 @@ as the app reports it); then the run id —
 the run's record is
 `runs/<run-id>/script.json`. The debug files of the driver's runbook
 are written too.
+
+### Every chunk the voice said, kept
+
+With debug on, the page also tags each chunk's voice request with its
+run and place (`debug: "2026-09-30T18-51-36/r001-l1-c1"`), with
+`voice_seed` on or off, and the app
+keeps the chunk in the run's folder, `runs/<run-id>/debug/audio/`, as
+two files named after the place, the persona and the clip spoken with:
+
+- `r001-l1-c1-Daniel-ref-fear.wav` — the audio exactly as the engine
+  returned it, the one the page played;
+- `r001-l1-c1-Daniel-ref-fear.json` — what made it: the text, the
+  persona, the language, the clip the page asked for and the clip used,
+  that clip's file and SHA-256 (so a recast after the run shows), its
+  transcript, the seed the page asked for (`seed_asked`: none with
+  `voice_seed` off, and before the app fitted it into the engine's
+  range), and the engine's reply without the audio (the seed it used,
+  `time_used`, the sample rate), with the time it was kept.
+
+The audio takes 48 KB per second of speech (24 kHz, 16-bit, mono); a
+50-round run keeps an estimated 35-45 MB (`runs/` is not in git). Without
+debug, or for a request without the tag (TalkWithMe's chat), nothing is
+kept; a tag that is not a run's and a place's, or names a run without a
+folder, keeps nothing either — the tag can name no other folder.
+
+To find a line you heard go wrong: its text is in the run's
+`script.json` and in the `.json` files; the place gives the round and
+the line.
+
+```bash
+# Every chunk of round 1, with the seed the engine used and its text
+for f in runs/2026-09-30T18-51-36/debug/audio/r001-*.json; do python3 -c "import json,sys; k=json.load(open(sys.argv[1])); print(sys.argv[1].rsplit('/',1)[1], k['reply'].get('seed'), k['text'])" "$f"; done
+```
+
+For example (the live check of 2026-09-30: two chunks sent by hand, the
+first with no seed, as `voice_seed` off sends it, the second with
+4000000001, which the app fitted to 1):
+
+```
+r001-l1-c1-Daniel-ref-fear.json 97 Candles! We found candles in the supply closet. Over.
+r001-l1-c2-Daniel-ref-fear.json 1 Candles! We found candles in the supply closet. Over.
+```
+
+### Say a chunk again
+
+`scripts/replay_chunk.py` asks the app (`/api/tts`, while it is serving)
+for a kept chunk again, the way the page asked: the same persona, clip
+and text, and the same seed — the one the page sent, or, with
+`voice_seed` off, the one the engine said it used. The app builds the
+engine's request as it did during the show (the seed fitted, the
+`tts.parameters`), and the answer is written beside the chunk as
+`<chunk>.replay-seed<N>.wav`. It says whether the new audio is
+byte-identical to the kept one: for a given clip, text and seed the
+engine answers the same, so a difference means something else changed
+(the engine, its library, the settings). If the clip's file changed
+since the run (a recast), it says so and asks nothing. An engine that
+neither receives a seed nor says which it used cannot be replayed
+exactly: give one with `--seed`.
+
+```bash
+# Say one chunk again, with the seed it was said with (the app must be serving)
+python3 scripts/replay_chunk.py runs/2026-09-30T18-51-36/debug/audio/r001-l1-c1-Daniel-ref-fear.json
+```
+
+For example:
+
+```
+r001-l1-c1-Daniel-ref-fear.json: seed 97 (kept: 97), 3.28 s (kept: 3.28 s), engine 1.1230215200012026 s; byte-identical to the kept chunk
+  -> runs/2026-09-30T18-51-36/debug/audio/r001-l1-c1-Daniel-ref-fear.replay-seed97.wav
+```
+
+```bash
+
+# Say it with another seed, to hear whether the seed is to blame
+python3 scripts/replay_chunk.py runs/2026-09-30T18-51-36/debug/audio/r001-l1-c1-Daniel-ref-fear.json --seed 42
+```
 
 ## Stop, Resume, and a reload
 

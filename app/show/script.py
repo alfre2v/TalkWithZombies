@@ -96,6 +96,10 @@ class Run(BaseModel):
     rounds: List[Round] = Field(default_factory=list)
 
 
+# A run's id: the time it started (see new_run), with a suffix when two runs start in the same second.
+RUN_ID = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:-\d+)?")
+
+
 def runs_root() -> Path:
     return app_config._PROJECT_ROOT / "runs"
 

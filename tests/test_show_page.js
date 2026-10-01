@@ -28,6 +28,9 @@
  *     request (none sent when there is none), the clip the app used is
  *     reported once per line, the clip of a mood from the run's voices, and
  *     the debug line's "voices";
+ *   - a chunk's seed and debug tag: a line's place from its message_id; the
+ *     run's seed only with the run's voice_seed on; the tag only with the
+ *     run's debug on; neither for a line without a place;
  *   - the listener's turn, with the microphone, the recorder and the
  *     transcription route stubbed: a press and a release give what was
  *     heard, no press gives silence, the press cap ends a long press, a stop
@@ -417,6 +420,54 @@ test("the voice: a line's clip rides every chunk's request; the first chunk says
         [["Moira", "ref-fear.wav"], ["Moira", "ref-fear.wav"], ["Ralph", undefined]]);
     assert.ok(!("reference" in requests[2]), "no clip: the request is the one it always was");
     assert.deepEqual(said, ["ref-fear.wav"]);
+});
+
+test("placeOf: a line's place from its message_id, the run id's suffix included; none without one", () => {
+    const { sandbox } = loadShow();
+
+    assert.equal(sandbox.placeOf("2026-09-30T17-28-18-r009-l2"), "r009-l2");
+    assert.equal(sandbox.placeOf("2026-09-30T17-28-18-2-r010-l12"), "r010-l12");
+    assert.equal(sandbox.placeOf("2026-09-30T17-28-18"), null);
+    assert.equal(sandbox.placeOf(undefined), null);
+});
+
+test("the voice: with the seed on, each chunk of a placed line carries the run's seed; with debug on, its tag",
+    async () => {
+        const { sandbox, requests } = voiceHarness();
+        const a = sentence(60, "a");
+        const b = sentence(60, "b");
+        vm.runInContext('voice.run = { id: "2026-09-30T17-28-18", seed: 42, sendSeed: true, debug: true };', sandbox);
+
+        sandbox.speakLine("Moira", `${a} ${b}`, { onStart() {}, onFail() {} }, "ref-fear.wav", "r009-l2");
+        sandbox.speakLine("Ralph", "Over.", { onStart() {}, onFail() {} });
+        await sandbox.drained();
+
+        assert.deepEqual(requests.map((r) => [r.seed, r.debug]), [
+            [42, "2026-09-30T17-28-18/r009-l2-c1"],
+            [42, "2026-09-30T17-28-18/r009-l2-c2"],
+            [undefined, undefined],
+        ]);
+        assert.deepEqual(Object.keys(requests[2]), ["text", "persona_name"], "no place: the request it always was");
+    });
+
+test("the voice: with the seed on and debug off, the run's seed and no tag", async () => {
+    const { sandbox, requests } = voiceHarness();
+    vm.runInContext('voice.run = { id: "2026-09-30T17-28-18", seed: 42, sendSeed: true, debug: false };', sandbox);
+
+    sandbox.speakLine("Moira", "Over.", { onStart() {}, onFail() {} }, null, "r001-l1");
+    await sandbox.drained();
+
+    assert.deepEqual(requests, [{ text: "Over.", persona_name: "Moira", seed: 42 }]);
+});
+
+test("the voice: with the seed off, no seed; with debug on, the tag still goes", async () => {
+    const { sandbox, requests } = voiceHarness();
+    vm.runInContext('voice.run = { id: "2026-09-30T17-28-18", seed: 42, sendSeed: false, debug: true };', sandbox);
+
+    sandbox.speakLine("Moira", "Over.", { onStart() {}, onFail() {} }, null, "r001-l1");
+    await sandbox.drained();
+
+    assert.deepEqual(requests, [{ text: "Over.", persona_name: "Moira", debug: "2026-09-30T17-28-18/r001-l1-c1" }]);
 });
 
 test("voiceOf: a mood's clip from the run's voices; none for an unknown mood, no mood, or no voices", () => {

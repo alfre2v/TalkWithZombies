@@ -18,6 +18,7 @@ from tests.factories import (
     FakeAsyncClient,
     json_response,
     make_capabilities_doc,
+    make_minimal_capabilities_doc,
     make_settings,
     make_unexpected_field_422,
 )
@@ -158,6 +159,51 @@ class TestSynthesize:
             "guidance_scale": 2.5,
             "seed": 42,
         }
+
+    def test_a_request_s_seed_is_sent_and_wins_over_a_configured_one(self, monkeypatch):
+        _active_tts(monkeypatch, parameters={"seed": 42})
+        _cache_capabilities(monkeypatch, make_minimal_capabilities_doc())
+        seen = {}
+
+        def responder(method, url, **kw):
+            seen["payload"] = kw.get("json")
+            return json_response(200, {"audio_base64": "QUJD", "sample_rate": 24000, "seed": 737})
+
+        _patch_http(monkeypatch, responder)
+        result = _run(tts_client.synthesize("hi", "the transcript", "QUJD", language="en", seed=737))
+
+        assert seen["payload"]["seed"] == 737
+        assert result["seed"] == 737
+
+    def test_a_request_s_seed_is_fitted_into_the_engine_s_range(self, monkeypatch):
+        _active_tts(monkeypatch)
+        _cache_capabilities(monkeypatch, make_minimal_capabilities_doc())  # seed: min 1.0, max 1000.0
+        seen = {}
+
+        def responder(method, url, **kw):
+            seen["payload"] = kw.get("json")
+            return json_response(200, {"audio_base64": "QUJD", "sample_rate": 24000})
+
+        _patch_http(monkeypatch, responder)
+        _run(tts_client.synthesize("hi", "the transcript", "QUJD", language="en", seed=4_000_000_001))
+
+        assert seen["payload"]["seed"] == 1 + (4_000_000_001 - 1) % 1000
+
+    def test_a_request_s_seed_is_not_sent_to_an_engine_that_advertises_none(self, monkeypatch):
+        _active_tts(monkeypatch)
+        doc = make_minimal_capabilities_doc()
+        doc["parameters"] = [p for p in doc["parameters"] if p["name"] != "seed"]
+        _cache_capabilities(monkeypatch, doc)
+        seen = {}
+
+        def responder(method, url, **kw):
+            seen["payload"] = kw.get("json")
+            return json_response(200, {"audio_base64": "QUJD", "sample_rate": 24000})
+
+        _patch_http(monkeypatch, responder)
+        _run(tts_client.synthesize("hi", "the transcript", "QUJD", language="en", seed=737))
+
+        assert "seed" not in seen["payload"]
 
     def test_synthesize_chatterbox_never_receives_reference_text(self, monkeypatch):
         # The chatterbox snapshot advertises no reference_text parameter,
@@ -442,6 +488,21 @@ class TestSynthesize:
 
         _patch_http(monkeypatch, refuse)
         assert _run(tts_client.synthesize("hi", "p", "QUJD")) is None
+
+
+class TestFitSeed:
+    @pytest.mark.parametrize("seed, fitted", [(1, 1), (42, 42), (1000, 1000), (1001, 1), (0, 1000), (2042, 42)])
+    def test_within_the_range_kept_outside_wrapped(self, seed, fitted):
+        assert tts_client.fit_seed(seed, {"name": "seed", "min": 1.0, "max": 1000.0}) == fitted
+
+    def test_one_bound_clamps(self):
+        assert tts_client.fit_seed(0, {"min": 1, "max": None}) == 1
+        assert tts_client.fit_seed(5000, {"min": None, "max": 999}) == 999
+        assert tts_client.fit_seed(7, {"min": 1, "max": None}) == 7
+
+    @pytest.mark.parametrize("spec", [None, {}, {"min": None, "max": None}, {"min": "one", "max": True}])
+    def test_no_usable_range_sends_the_seed_as_it_is(self, spec):
+        assert tts_client.fit_seed(4_000_000_001, spec) == 4_000_000_001
 
 
 class TestLanguageFit:

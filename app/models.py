@@ -61,6 +61,15 @@ class TTSRequest(BaseModel):
         default=None,
         description="Which of the persona's reference clips to speak with, e.g. ref-fear.wav; ref.wav when absent",
     )
+    seed: Optional[int] = Field(
+        default=None, ge=0,
+        description="A seed for this request, fitted into the range the engine advertises (if it advertises a seed); "
+                    "the engine picks one when absent",
+    )
+    debug: Optional[str] = Field(
+        default=None,
+        description="The show's debug tag, <run-id>/rNNN-lL-cC: with show.debug on, the chunk is kept in that run",
+    )
 
 
 class STTRequest(BaseModel):
@@ -338,7 +347,8 @@ class ShowStartResponse(BaseModel):
 
     listen_window_s and press_cap_s time the listener's turn; debug turns on
     the page's debug line; voices maps each mood to the reference clip its
-    lines are spoken with (empty: every line uses ref.wav).
+    lines are spoken with (empty: every line uses ref.wav); voice_seed says
+    whether the page sends the run's seed with each chunk of the voice.
     """
     run_id: str
     story: str
@@ -350,6 +360,7 @@ class ShowStartResponse(BaseModel):
     press_cap_s: float
     debug: bool
     voices: Dict[str, str] = Field(default_factory=dict)
+    voice_seed: bool = False
 
 
 class ShowRoundRequest(BaseModel):

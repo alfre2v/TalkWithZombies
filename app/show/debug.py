@@ -7,16 +7,34 @@ model server's /apply-template, and the reply as it streamed) and
 rendered prompt's token count is checked against the size the server reported
 for the request (prompt_n + cache_n); a difference is logged. Writing the files
 never breaks a round: a failure is noted in the file, or logged.
+
+The voice's side: the page tags each chunk it asks the voice for with its run
+and place (``<run-id>/r009-l2-c1``: round 9, line 2, chunk 1), and the voice
+route keeps the chunk in ``runs/<run-id>/debug/audio/``: the audio as the
+engine returned it (``r009-l2-c1-Daniel-ref-extasy.wav``) and a ``.json``
+beside it with what made it (the text, the clip asked for and used, the
+clip's SHA-256 and transcript, the seed the page asked for, the engine's reply
+without the audio: the seed it used, its timing). A tag that is not a run's and a place's,
+or names a run with no folder, keeps nothing. Keeping a chunk never breaks the
+voice: a failure is logged.
 """
 
+import base64
+import hashlib
 import json
 import logging
+import re
+from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from app.services.llm import count_tokens, render_prompt, round_payload
-from app.show.script import Heard, runs_root
+from app.show.script import RUN_ID, Heard, runs_root
 
 logger = logging.getLogger(__name__)
+
+_CHUNK_TAG = re.compile(rf"(?P<run_id>{RUN_ID.pattern})/(?P<place>r\d{{3}}-l\d+-c\d+)")
+_UNSAFE = re.compile(r"[^A-Za-z0-9_-]+")
 
 
 async def write_round(run_id: str, n: int, kind: str, messages: List[Dict[str, str]], *, grammar: str,
@@ -44,6 +62,50 @@ async def write_round(run_id: str, n: int, kind: str, messages: List[Dict[str, s
         (folder / f"r{n:03d}.txt").write_text(text + "\n", encoding="utf-8")
     except Exception as exc:
         logger.warning("Show run %s, round %s: debug files not written: %s", run_id, n, exc)
+
+
+def write_chunk(tag: str, *, persona: str, text: str, language: str, asked: Optional[str], used: str, clip: Path,
+                transcript: str, seed: Optional[int], reply: dict) -> Optional[Path]:
+    """Keep one chunk of the show's voice, when its tag names a run and a place; the .wav's path, or None.
+
+    `asked` is the clip the page named, `used` the one spoken with, `clip` its file and `transcript` its text;
+    `seed` is the seed the page asked for, before the app fitted it into the engine's range (None: the engine picked
+    one; the seed it used is in its reply, if it says); `reply` is the engine's reply. Never raises.
+    """
+    match = _CHUNK_TAG.fullmatch(tag)
+    if not match:
+        logger.warning("Show voice: the debug tag %r is not a run's and a place's; the chunk is not kept", tag)
+        return None
+    run_dir = runs_root() / match["run_id"]
+    if not run_dir.is_dir():
+        logger.warning("Show voice: no run %s; chunk %s is not kept", match["run_id"], match["place"])
+        return None
+    try:
+        folder = run_dir / "debug" / "audio"
+        folder.mkdir(parents=True, exist_ok=True)
+        stem = f"{match['place']}-{_UNSAFE.sub('_', persona)}-{_UNSAFE.sub('_', Path(used).stem)}"
+        wav = folder / f"{stem}.wav"
+        wav.write_bytes(base64.b64decode(reply.get("audio_base64") or ""))
+        record = {
+            "tag": tag,
+            "kept": datetime.now().isoformat(timespec="milliseconds"),
+            "persona": persona,
+            "text": text,
+            "language": language,
+            "reference_asked": asked,
+            "reference_used": used,
+            "clip": str(clip),
+            "clip_sha256": hashlib.sha256(clip.read_bytes()).hexdigest(),
+            "transcript": transcript,
+            "seed_asked": seed,
+            "reply": {k: v for k, v in reply.items() if k != "audio_base64"},
+        }
+        (folder / f"{stem}.json").write_text(json.dumps(record, indent=1, ensure_ascii=False) + "\n",
+                                             encoding="utf-8")
+        return wav
+    except Exception as exc:
+        logger.warning("Show voice: chunk %s not kept: %s", tag, exc)
+        return None
 
 
 def _listener_line(heard: Heard) -> str:

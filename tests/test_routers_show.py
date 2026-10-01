@@ -99,6 +99,12 @@ class TestStart:
         body = _start(client)
         assert (body["listen_window_s"], body["press_cap_s"], body["debug"]) == (7.0, 20.0, True)
 
+    def test_gives_the_page_the_voice_seed_switch(self, client, show_env, monkeypatch):
+        assert _start(client)["voice_seed"] is False
+
+        monkeypatch.setattr(app_config.get_settings(), "show", ShowConfig(seed=42, voice_seed=True))
+        assert _start(client)["voice_seed"] is True
+
     def test_gives_the_page_the_voice_of_each_mood_unless_the_switch_is_off(self, client, show_env, monkeypatch):
         # The run's copy of the story gets a made-up mapping, so the test does not depend on the shipped one.
         path = show_env / "stories" / "lab-outbreak" / "overtones.yaml"
