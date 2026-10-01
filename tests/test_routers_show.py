@@ -571,6 +571,55 @@ class TestTrim:
         assert recorded.rounds[-1].tokens == 650 - (950 - 400)
 
 
+    def _full_run(self, client, monkeypatch, last_size):
+        """A run of 10 recorded rounds of 100 tokens each, the last reporting `last_size`; the model's requests kept."""
+        app_config._settings_cache.show = ShowConfig(seed=42, context_budget=1000)
+        requests = []
+
+        async def fake_stream_round(messages, *, grammar, max_tokens, seed):
+            requests.append(messages)
+            for token in REAL_ROUND:
+                yield {"token": token}
+            yield {"timings": {"prompt_n": 100, "cache_n": 700, "predicted_n": 50}, "finish_reason": "stop"}
+
+        monkeypatch.setattr(show_router, "stream_round", fake_stream_round)
+        run_id = _start(client)["run_id"]
+        run = load_run(run_id)
+        lines = [Line(**dataclasses.asdict(line)) for line in REAL_LINES]
+        for n in range(1, 11):
+            append_round(run, Round(n=n, instruction=f"Instruction {n}.", speakers=["Ralph", "Moira"],
+                                    max_lines=2, lines=lines, tokens=100))
+        run.rounds[-1].timings = {"prompt_n": last_size - 50, "cache_n": 0, "predicted_n": 50}
+        save_run(run)
+        return run_id, requests
+
+    def test_no_trim_before_a_round_without_a_model_request(self, client, show_env, monkeypatch):
+        run_id, requests = self._full_run(client, monkeypatch, 950)  # past the trigger: 90 % of 1000
+        planned = show_router.plan_round
+        monkeypatch.setattr(show_router, "plan_round",
+                            lambda *a, **kw: dataclasses.replace(planned(*a, **kw), max_lines=0))
+
+        summary = _summary(_round(client, run_id))
+
+        assert summary["trimmed"] == []
+        assert requests == []
+        assert not any(r.trimmed for r in load_run(run_id).rounds)
+
+    def test_the_round_after_a_repair_counts_its_share_from_the_size_before_the_repair(self, client, show_env,
+                                                                                        monkeypatch):
+        run_id, _ = self._full_run(client, monkeypatch, 800)
+        run = load_run(run_id)
+        repair = Line(**dataclasses.asdict(REAL_LINES[0]))
+        append_round(run, Round(n=11, kind="repair", instruction="The receiver is back.", speakers=["Samantha"],
+                                max_lines=0, lines=[repair.model_copy(update={"fixed": True})]))
+
+        _round(client, run_id)
+
+        recorded = load_run(run_id).rounds[-1]
+        assert recorded.n == 12 and recorded.trims == []
+        assert recorded.tokens == 850 - 800  # The Repair's tokens and its own, counted from before the Repair
+
+
 class TestDebug:
     @pytest.fixture
     def debug_server(self, monkeypatch):

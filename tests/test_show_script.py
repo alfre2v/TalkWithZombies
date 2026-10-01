@@ -11,7 +11,8 @@ import pytest
 
 from app.config import ShowConfig
 from app.show.script import (
-    Line, Round, Run, append_round, assemble_messages, load_run, new_run, reply_text, round_share, runs_root,
+    Line, Round, Run, append_round, assemble_messages, known_size, load_run, new_run, reply_text, round_share,
+    runs_root,
     script_size, trim,
 )
 from app.show.story import Story
@@ -254,6 +255,19 @@ class TestTrim:
         run = _sized(20, 5000)
 
         assert trim(run, _budget(2000, trim_keep_first=5, trim_keep_last=1)) == list(range(6, 20))
+
+    def test_the_known_size_steps_back_over_a_round_the_server_reported_nothing_for(self):
+        run = _sized(5, 1200)
+        run.rounds.append(_round(6, tokens=None))  # A Repair: no model request, no timings
+        assert script_size(run) is None
+        assert known_size(run) == 1200
+
+        run.rounds[-1].trims = [3]  # A trim fell after the last reported size: it no longer holds
+        assert known_size(run) is None
+        assert known_size(_sized(3, 900)) == 900
+        run = _sized(3, 900)
+        run.rounds[-1].timings = None
+        assert known_size(run) is None
 
     def test_a_round_share_is_its_size_less_the_size_before_it(self):
         assert round_share(900, 0, {"prompt_n": 120, "cache_n": 830, "predicted_n": 50}) == 100

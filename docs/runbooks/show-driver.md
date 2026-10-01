@@ -202,8 +202,9 @@ will read next time, before the next instruction (`script_size()` in
 its size less the size before it — what the round added, its
 instruction and its reply (`round_share()`).
 
-**Before planning each round, the trim reads the last reported size**
-(`trim()`, called by the round route in `app/routers/show.py`):
+**Before each round that asks the model, the trim reads the last reported
+size** (`trim()`, called by the round route in `app/routers/show.py`, once
+the director has planned the round):
 
 1. Below `trim_trigger × context_budget` (0.9 × 34,000 = 30,600 by
    default): nothing happens.
@@ -222,20 +223,42 @@ instruction and its reply (`round_share()`).
    whatever the trim got wrong, the server's next count is the real size,
    and the next decision starts from it — an error never adds up.
 
-Two rounds without a count:
+**The Repair, a round without a count.** The Repair (the call) sends the
+model no request — both of its lines are fixed — so the server reports
+no size after it, and the Repair's own share is unknown (`None`, counted
+as 0). Its lines still reach the model: its instruction, which quotes
+them, joins the next round's turn (`assemble_messages()` in
+`app/show/script.py`). So:
 
-- **A round with no model request** — the Repair, both of its lines
-  fixed — has no `timings`: the size is unknown after it, and the trim
-  skips that round. The next model round's count includes the Repair:
-  its instruction, which quotes its two fixed lines, joins the next
-  round's turn (`assemble_messages()` in `app/show/script.py`).
-- **Its share, and the next round's, are unknown** (`None`), and the
-  trim counts an unknown share as 0. So when trimmed rounds include them,
-  the trim **removes more than it estimates and cuts below its target**:
-  on 2026-10-01 the script landed at 12,269 tokens, not near 15,500 (50%
-  of that run's 31,000). The next round's share shows the correction as
-  a negative number (−2,837 below). Harmless — the model just reads a
-  little less — and the count is right again from the next round.
+- **The round after a Repair counts its share from the last size the
+  server reported** — the one from before the Repair (`known_size()`,
+  which steps back over rounds without a count) — and its share takes
+  in the Repair's tokens and its own. Nothing goes uncounted.
+- **The trim never fires before a round without a model request**: the
+  round route plans the round first and trims only if it will ask the
+  model (`plan.max_lines`), so a trim never falls between the last
+  reported size and the round that counts from it. (Nor right after a
+  Repair: the size is unknown there, and the trim waits for the next
+  round with a count.)
+
+**Before 2026-10-01** the round after a Repair counted from the Repair's
+missing size, so its share was unknown too: each call in a trimmed
+stretch went uncounted (about 600-850 tokens — the Repair and the
+exchange or re-call after it), the trim cut that much below its target,
+and the round after the trim carried the difference as a negative share,
+which a later trim then repeated, growing. The same drive at a budget of
+8,000 (target 4,000), before and after the fix:
+
+| | Before (run `2026-10-01T17-57-41`) | After (run `2026-10-01T18-03-25`) |
+|---|---|---|
+| Trims | 6 (130 rounds) | 12 (280 rounds) |
+| The trim's estimate against the real size after it | off by 641 to 4,218 tokens | off by 1 to 3 tokens |
+| Negative shares in the trimmed rounds | −527 up to −3,557, growing | none |
+| Where it landed, against the target | −678 to −1,815 (mean −1,025) | −5 to −619 (mean −174) |
+
+What remains is the trim's step, not an error: it removes whole rounds
+and stops at the first that brings the estimate to the target or below,
+so it lands up to one round (an exchange, ~600 tokens) under.
 
 **The room above the trigger.** The size the trim watches is the script
 *before* the next round; the request also carries that round's
@@ -264,29 +287,36 @@ read; the trim never uses it.
 To see the tally of a run, round by round:
 
 ```bash
-# Each round's count from the server, its share, and the trims (the run's record; rounds 111 to 117)
-python3 -c "import json,sys; [print(f\"round {r['n']:3} {r['kind']:9} read {(r['timings'] or {}).get('prompt_n','-'):>6} fresh + {(r['timings'] or {}).get('cache_n','-'):>6} cached, wrote {(r['timings'] or {}).get('predicted_n','-'):>4} | share {r['tokens']}\" + (f\" | trimmed before it: {len(r['trims'])} rounds\" if r['trims'] else '')) for r in json.load(open(sys.argv[1]))['rounds'] if int(sys.argv[2]) <= r['n'] <= int(sys.argv[3])]" runs/<run-id>/script.json 111 117
+# Each round's count from the server, its share, and the trims (the run's record; rounds 112 to 121)
+python3 -c "import json,sys; [print(f\"round {r['n']:3} {r['kind']:9} read {(r['timings'] or {}).get('prompt_n','-'):>6} fresh + {(r['timings'] or {}).get('cache_n','-'):>6} cached, wrote {(r['timings'] or {}).get('predicted_n','-'):>4} | share {r['tokens']}\" + (f\" | trimmed before it: {len(r['trims'])} rounds\" if r['trims'] else '')) for r in json.load(open(sys.argv[1]))['rounds'] if int(sys.argv[2]) <= r['n'] <= int(sys.argv[3])]" runs/<run-id>/script.json 112 121
 ```
 
-For example, the drive of 2026-10-01 (`2026-10-01T12-54-40`, a budget of
-31,000):
+For example, the drive of 2026-10-01 (`2026-10-01T17-48-37`, the default
+budget of 34,000, with the fix):
 
 ```
-round 111 free      read    194 fresh +  27444 cached, wrote   19 | share 104
-round 112 free      read    194 fresh +  27549 cached, wrote   25 | share 111
-round 113 free      read    203 fresh +  27653 cached, wrote   50 | share 138
-round 114 free      read  12209 fresh +     43 cached, wrote   17 | share -2837 | trimmed before it: 58 rounds
-round 115 free      read    209 fresh +  12202 cached, wrote   57 | share 199
-round 116 repair    read      - fresh +      - cached, wrote    - | share None
-round 117 re-call   read    324 fresh +  12263 cached, wrote   16 | share None
+round 112 last-exchange read   1146 fresh +  29207 cached, wrote   59 | share 625
+round 113 breakdown read    674 fresh +  29837 cached, wrote   31 | share 130
+round 114 free      read    276 fresh +  30408 cached, wrote   50 | share 192
+round 115 free      read  16650 fresh +     43 cached, wrote   18 | share 104 | trimmed before it: 53 rounds
+round 116 free      read    154 fresh +  16603 cached, wrote   39 | share 85
+round 117 free      read    138 fresh +  16707 cached, wrote   60 | share 109
+round 118 free      read    201 fresh +  16792 cached, wrote   58 | share 146
+round 119 free      read    286 fresh +  16901 cached, wrote   42 | share 178
+round 120 repair    read      - fresh +      - cached, wrote    - | share None
+round 121 re-call   read    303 fresh +  17047 cached, wrote   19 | share 140
 ```
 
-Reading it: after round 113 the script is 203 + 27,653 + 50 = 27,906
-tokens, past the trigger (0.9 × 31,000 = 27,900), so before round 114 the
-trim flags 58 rounds; round 114 reads the shortened script fresh (12,209
-tokens, 43 from the cache) — the pause; from round 115 the cache serves
-the script again; the Repair (116) has no count, so neither it nor the
-re-call after it has a share.
+Reading it: after round 114 the script is 276 + 30,408 + 50 = 30,734
+tokens, past the trigger (0.9 × 34,000 = 30,600), so before round 115 the
+trim flags 53 rounds and estimates 16,607 tokens remain — round 115 reads
+16,693, of which its own instruction is 85 tokens: 16,608 remained, one
+token off; round 115 reads the shortened
+script fresh (16,650 tokens, 43 from the cache) — the pause — and its
+share is an ordinary 104; from round 116 the cache serves the script
+again. The Repair (120) has no count; the re-call after it counts from
+round 119's size (16,901 + 286 + 42 = 17,229): 303 + 17,047 + 19 − 17,229
+= 140, the Repair's instruction and its own.
 
 ## Check that the grammar binds
 

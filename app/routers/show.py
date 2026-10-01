@@ -59,8 +59,8 @@ from app.show.debug import write_round
 from app.show.director import LISTENS, plan_round
 from app.show.listen import usable
 from app.show.parser import LineParser
-from app.show.script import (RUN_ID, Heard, Line, Round, Run, append_round, assemble_messages, load_run,
-                             new_run, round_share, script_size, trim)
+from app.show.script import (RUN_ID, Heard, Line, Round, Run, append_round, assemble_messages, known_size,
+                             load_run, new_run, round_share, trim)
 from app.show.story import Story, StoryError, load_story, render_cast_sheet, voice_map
 
 logger = logging.getLogger(__name__)
@@ -223,14 +223,16 @@ async def _round_stream(run: Run, story: Story, req: ShowRoundRequest) -> AsyncI
         else:
             logger.warning("Show run %s, round %s: a transcript arrived outside a listening window; ignored",
                            run.run_id, n)
-    size_before = script_size(run)
-    trimmed = trim(run, show)
+    plan = plan_round(run, story, show, req.played_s, words)
+    size_before = known_size(run)
+    # The trim only before a round that asks the model: a round without a request (the Repair) gets no size back, so
+    # the round after it counts its share from the size before both, which a trim in between would make wrong.
+    trimmed = trim(run, show) if plan.max_lines else []
     flagged = set(trimmed)
     trimmed_tokens = sum(r.tokens or 0 for r in run.rounds if r.n in flagged)
     if trimmed:
         logger.info("Show run %s, round %s: script at %s tokens (budget %s); trimmed rounds %s, about %s tokens",
                     run.run_id, n, size_before, show.context_budget, trimmed, trimmed_tokens)
-    plan = plan_round(run, story, show, req.played_s, words)
     messages = assemble_messages(run, plan.instruction)
     request = {"grammar": plan.grammar, "max_tokens": show.max_tokens, "seed": run.seed + n}
     parser = LineParser(run.moods)

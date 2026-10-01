@@ -156,6 +156,23 @@ def script_size(run: Run) -> Optional[int]:
     return _size(run.rounds[-1].timings) if run.rounds else None
 
 
+def known_size(run: Run) -> Optional[int]:
+    """The script's size as the model server last reported it, stepping back over the rounds it reported none for.
+
+    A round with no model request (the Repair: both its lines are fixed) gets no size from the server. The size
+    before the next round is then the last one reported, from before the Repair, so the next round's share takes in
+    what the Repair added too (its instruction joins the next round's turn) and no tokens go uncounted. None when no
+    round has a size yet, or when a trim fell after the last reported size (the size no longer holds; the trim never
+    falls before a round without a model request since 2026-10-01, so only an older record has that).
+    """
+    for round_ in reversed(run.rounds):
+        if round_.timings:
+            return _size(round_.timings)
+        if round_.trims:
+            return None
+    return None
+
+
 def trim(run: Run, show: ShowConfig) -> List[int]:
     """Flag whole rounds `trimmed` when the script reaches show.trim_trigger of show.context_budget; return their
     numbers.
@@ -183,8 +200,9 @@ def trim(run: Run, show: ShowConfig) -> List[int]:
 def round_share(size_before: Optional[int], trimmed_tokens: int, timings: Optional[Dict[str, int]]) -> Optional[int]:
     """The tokens a round added to the script: its reported size less the size before it.
 
-    The size before it is the previous round's reported size, less the shares
-    of the rounds trimmed just before this one. None when either size is unknown.
+    The size before it is the last size the server reported (known_size: for the
+    round after a Repair, the size from before the Repair), less the shares of the
+    rounds trimmed just before this one. None when either size is unknown.
     """
     after = _size(timings)
     if size_before is None or after is None:
