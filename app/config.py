@@ -506,7 +506,7 @@ def get_personas_directory() -> Path:
 
 
 def get_bed_directory() -> Path:
-    """The static bed's folder, <project root>/Sounds/bed: its clips and bed.json (not tracked in git)."""
+    """The static bed's folder, <project root>/Sounds/bed: its clips, bed.json and CREDITS.md, shipped with the app."""
     return _PROJECT_ROOT / "Sounds" / "bed"
 
 

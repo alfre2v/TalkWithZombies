@@ -3,14 +3,20 @@
 A usable manifest gives the clips the disk holds, each with its gain; anything else — no manifest, a broken one,
 an entry with an unsafe name, a bad gain or no file — gives fewer clips or none, never an error. The story's choice
 (its bed.yaml) picks the clips that play and changes their gains by ear. Only a clip the manifest lists and the disk
-holds is served.
+holds is served. The shipped bed (Sounds/bed/ and the story's bed.yaml, both in the repo) must agree: every clip the
+story enables is on disk and in the manifest, every clip is CC0 or CC BY (the app is MIT), and CREDITS.md credits
+each one. Which clips the story chooses is not pinned.
 """
 
 import json
 import logging
 
+from pathlib import Path
+
 from app.show.bed import bed_clips, bed_play_list, clip_path
-from app.show.story import BedClip
+from app.show.story import BedClip, _load_bed
+
+REPO = Path(__file__).resolve().parent.parent
 
 
 def _write(folder, clips, files=None):
@@ -95,3 +101,31 @@ class TestClipPath:
         _write(tmp_path, [{"file": "1-hiss.mp3", "gain": 1.0}], files=["1-hiss.mp3", "2-unlisted.mp3"])
         for name in ("2-unlisted.mp3", "bed.json", "../1-hiss.mp3", "nope.mp3", ""):
             assert clip_path(tmp_path, name) is None, name
+
+
+class TestShippedBed:
+    """The bed that ships with the app: Sounds/bed/ and stories/lab-outbreak/bed.yaml, as committed."""
+
+    FOLDER = REPO / "Sounds" / "bed"
+
+    def _manifest(self):
+        return json.loads((self.FOLDER / "bed.json").read_text(encoding="utf-8"))["clips"]
+
+    def test_every_clip_the_story_enables_is_on_disk_and_in_the_manifest(self):
+        chosen = _load_bed("lab-outbreak", REPO / "stories" / "lab-outbreak" / "bed.yaml")
+        on_disk = bed_clips(self.FOLDER)
+        enabled = [c.file for c in chosen if c.enabled]
+        assert enabled, "the shipped story enables no clip of the static bed"
+        assert [c["file"] for c in bed_play_list(on_disk, chosen)] == enabled
+
+    def test_every_shipped_clip_may_be_redistributed_with_the_app(self):
+        clips = self._manifest()
+        barred = [c["file"] for c in clips if c["licence_class"] not in ("cc0", "cc-by")]
+        assert clips and not barred, f"clips under a licence the app cannot ship (only CC0 and CC BY): {barred}"
+
+    def test_credits_name_every_clip_and_carry_every_required_credit_line(self):
+        credits = (self.FOLDER / "CREDITS.md").read_text(encoding="utf-8")
+        for clip in self._manifest():
+            assert clip["page"] in credits, clip["file"]
+            if clip["licence_class"] == "cc-by":
+                assert clip["credit"] in credits, clip["file"]

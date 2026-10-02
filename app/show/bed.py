@@ -1,12 +1,13 @@
 """The static bed: the clips of radio static the show page plays quietly under the voices.
 
-The clips and their manifest live in ``Sounds/bed/`` (``get_bed_directory()``), outside git: zombie-radio's
-``tools/sounds/prepare_bed.py`` copies them there unchanged and writes ``bed.json``, which names each clip's file
-and the gain that brings it to a common level (measured on the mono mix the page plays) — facts about the files,
-never edited by hand. Which clips play is the story's decision (its ``bed.yaml``: each clip on or off, with a change
-of its level by ear); without one, every clip on disk plays. The start reply hands the page the clips that play and
-the bed's settings; the page fetches each clip from ``/api/show/bed/<file>``. A missing or broken manifest means no
-bed, and a clip the story names but the disk lacks is skipped; never a failed start: both are logged.
+The clips and their manifest ship with the app in ``Sounds/bed/`` (``get_bed_directory()``), with ``CREDITS.md``
+(only CC0 and CC BY clips: the app is MIT): zombie-radio's ``tools/sounds/prepare_bed.py`` copies them there
+unchanged and writes ``bed.json``, which names each clip's file and the gain that brings it to a common level
+(measured on the mono mix the page plays) — facts about the files, never edited by hand. Which clips play is the
+story's decision (its ``bed.yaml``: each clip on or off, with a change of its level by ear); without one, every clip
+on disk plays. The start reply hands the page the clips that play and the bed's settings; the page fetches each clip
+from ``/api/show/bed/<file>``. A missing or broken manifest means no bed, and a clip the story names but the disk
+lacks is skipped; never a failed start: both are logged.
 """
 
 import json

@@ -11,8 +11,8 @@ A story is a folder ``stories/<name>/`` holding:
 - ``agenda.yaml`` — what the cast want from a listener, one item per exchange; the first opens every contact;
 - ``beats.yaml`` (optional) — the receiver beats' fixed lines, said word for word by a cast member instead of written
   by the model; without it, the model writes the beats;
-- ``bed.yaml`` (optional) — which clips of the static bed (in ``Sounds/bed/``, outside git) play under the story,
-  each switched on or off, with a change of its level by ear; without it, every clip there plays.
+- ``bed.yaml`` (optional) — which clips of the static bed (in ``Sounds/bed/``, shipped with the app) play under the
+  story, each switched on or off, with a change of its level by ear; without it, every clip there plays.
 
 The body's placeholders are filled at render time: ``model_prefix`` from the settings, ``format_rules`` from the
 rule snippet the emotion switch picks, ``episode`` from the current episode.

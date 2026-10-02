@@ -46,7 +46,10 @@ browser as the show's clock. It does not try to stay compatible with
 upstream.
 
 TalkWithMe is released under the MIT License. The license and its
-copyright notice are kept unchanged in [LICENSE](LICENSE).
+copyright notice are kept unchanged in [LICENSE](LICENSE). The radio
+static the show plays (`Sounds/bed/`) is eight clips from
+[Freesound](https://freesound.org), under their own licences, CC0 and
+CC BY: see [`Sounds/bed/CREDITS.md`](Sounds/bed/CREDITS.md).
 
 ## Where things live
 

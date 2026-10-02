@@ -272,17 +272,21 @@ down around it.)
   radio's speaker, the hiss's sharp top taken off. **The F key flips it
   live**, for an A/B by ear without a restart; the setting decides how a
   run starts.
-- **The clips** are radio static from Freesound, kept outside git in
-  `Sounds/bed/` (beside `Personas/`, ignored by git): the clips as
-  downloaded, and `bed.json`, which lists them with **a gain each** that
+- **The clips** are radio static from Freesound, **shipped with the
+  app** in `Sounds/bed/`: 8 clips, chosen by ear one by one, only under
+  licences that allow it (CC0 and CC BY; the app is MIT), credited in
+  `Sounds/bed/CREDITS.md`. With them, `bed.json`, which lists them with
+  **a gain each** that
   brings every clip to the same average level (measured on the mono mix
   the page plays), so the shuffle never jumps in level. `bed.json` holds
   facts about the files, never edited by hand: it is written by
   zombie-radio's `tools/sounds/prepare_bed.py`, which copies there the
-  clips its list `tools/sounds/bed.yaml` names — its runbook-in-place is
+  clips its list `tools/sounds/bed.yaml` names (it refuses any clip that is
+  not CC0 or CC BY), and writes `CREDITS.md`; a change of the clips is
+  committed here through a pull request — its runbook-in-place is
   the sound-effects discussion,
   `/Users/alfredo/workspace/hackTNT_2026/zombie-radio-claude/docs/discussions/2026-10-01-sound-effects.md`,
-  §8.14 and §8.16. **No `Sounds/bed/bed.json`, no bed** — the show runs as
+  §8.14, §8.16 and §8.22. **No `Sounds/bed/bed.json`, no bed** — the show runs as
   before.
 - **Which clips play is the story's choice:**
   `stories/lab-outbreak/bed.yaml` lists the clips by file name, each
