@@ -39,53 +39,22 @@ place, and plays rounds one after another until you press **Stop**.
 
 The show reads its settings from the `show:` section of `settings.yaml`,
 in the folder the app runs from — this checkout's, or the installed
-client's, `~/TalkWithZombies-client/settings.yaml`. **A show needs no
-`show:` section at all:** every setting has a default, and the defaults
-are the demo's configuration. The four switches worth knowing:
+client's, `~/TalkWithZombies-client/settings.yaml` — once, when the app
+starts. **A show needs no `show:` section at all:** every setting has a
+default, and the defaults are the demo's configuration.
 
-| Setting | Default | What it does |
-|---|---|---|
-| `debug` | `false` | On: the debug line under each round, the model's debug files, and every chunk the voice said, in `runs/<run-id>/debug/` (see "The debug line") |
-| `seed` | none: a random one per run | A number: the model writes the same story every run |
-| `mood_voices` | `true` | Each line is spoken with its mood's reference clip; off, every line with `ref.wav` (see "The voice") |
-| `voice_seed` | `false` | On: every chunk is spoken with the run's seed — with `seed` set, the same voices every run too (see "The voice") |
-| `bed` | `true` | Radio static played quietly under the show, in the looks, from the clips in `Sounds/bed/`; off, none (see "The static bed") |
-
-The rest of the section — about 40 numbers for the pacing, the
-listener's turn and the contacts — has tuned defaults; they are listed,
-with what each does, in `app/config.py` (`ShowConfig`).
-
-**For a test show**, add what you need under `show:` and restart the app
-(the settings are read when it starts):
-
-```yaml
-show:
-  debug: true        # the debug line, and every chunk's audio kept
-  seed: 42           # optional: the same story every run
-  voice_seed: true   # optional, with seed: the same voices every run too
-```
-
-**Back to the demo:** delete those lines (or the whole `show:`
-section) and restart the app.
-
-To see what a settings file sets for the show:
-
-```bash
-# The show section of this checkout's settings (no output: no show section, the demo's defaults)
-grep -A5 '^show:' settings.yaml
-```
-
-For example, this checkout on 2026-09-30:
-
-```
-show:
-  seed: 42
-```
+**What to change to get something done** — a test show (`debug`, `seed`,
+`voice_seed`), a quieter static, more silences, a narrower filter, a
+longer window to answer, a 16k model server — **is in
+[`show-settings.md`](show-settings.md)**, recipe by recipe, with the
+address switches and the keyboard shortcuts. The complete list of the
+settings, with what each one does, is the comments of `ShowConfig` in
+`app/config.py`.
 
 `mood_voices`, `voice_seed` and the kept audio arrive with the fork's
-`tz-0.4` (alfre2v/TalkWithZombies#8); an older version ignores settings
-it does not know, without a word, so a `voice_seed: true` there does
-nothing.
+`tz-0.4` (alfre2v/TalkWithZombies#8), the static bed's settings with the
+release after `tz-0.5`; an older version ignores settings it does not
+know, without a word.
 
 ## Choosing a look
 
@@ -274,7 +243,9 @@ down around it.)
   factor, so the dip keeps its shape: × 0.5 (0.075 / 0.025) is −6 dB,
   half the amplitude; × 1/3 (0.05 / 0.017) about −9.5 dB, which sounds
   about half as loud. `bed_dip_s` and `bed_rise_s` are the seconds a
-  change takes.
+  change takes. Recipes for every knob of the static — the volumes, the
+  silences, the fading, the filter's bands — are in
+  [`show-settings.md`](show-settings.md).
 - **How loud, and when:** low while a round is said
   (`bed_volume_voice`, 0.05), higher while the page waits — for the next
   round, for you to press, for Whisper (`bed_volume_between`, 0.15). It

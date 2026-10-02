@@ -68,6 +68,28 @@ copyright notice are kept unchanged in [LICENSE](LICENSE).
   The app reads `ref.wav` again for every line it speaks, so a recast is
   heard from the next line.
 
+## The show page: keyboard shortcuts and settings
+
+The show plays at `/show` (a chooser of looks; `/show?design=old-radio`
+for the 1950 radio). On the page:
+
+| Key | What it does |
+|---|---|
+| **Space** (hold) | talk to the radio; release to send — only while the radio listens |
+| **M** | mute or unmute the static under the show (the voices are never muted) |
+| **F** | the static's AM filter on or off, live |
+
+- **What to change to get something done** — a test show, a quieter
+  static, a narrower filter, more time to answer, a smaller model
+  server: [`docs/runbooks/show-settings.md`](docs/runbooks/show-settings.md),
+  recipe by recipe, with the address switches (`&voice=off`, `&bed=on`,
+  `&mock=1`).
+- **How the page behaves** — the voice, the static, talking back, the
+  debug line, Stop and Resume:
+  [`docs/runbooks/show-page.md`](docs/runbooks/show-page.md).
+- **The show without a browser** — driving rounds from a script:
+  [`docs/runbooks/show-driver.md`](docs/runbooks/show-driver.md).
+
 The upstream README follows, unchanged.
 
 ---
