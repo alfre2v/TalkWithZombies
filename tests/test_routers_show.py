@@ -139,6 +139,9 @@ class TestStart:
         assert _start(client)["bed"] == {
             "clips": [{"file": "1-hiss.mp3", "gain": 1.5}, {"file": "2-crackle.mp3", "gain": 0.5}],
             "volume_voice": 0.05, "volume_between": 0.15, "dip_s": 0.5, "rise_s": 1.5, "off_in_contact": False,
+            "silences": True, "silence_every_s": [30.0, 120.0], "silence_s": [3.0, 15.0], "silence_fade_s": 1.0,
+            "filter": False, "filter_low_hz": 300.0, "filter_high_hz": 3000.0,
+            "fading_db": 3.0, "fading_every_s": [2.0, 6.0],
         }
 
     def test_the_static_bed_follows_the_settings(self, client, show_env, monkeypatch):

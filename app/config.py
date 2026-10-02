@@ -288,6 +288,21 @@ class ShowConfig(BaseModel):
     bed_dip_s: float = Field(default=0.5, ge=0)
     bed_rise_s: float = Field(default=1.5, ge=0)
     bed_off_in_contact: bool = False
+    # The bed's silences (bed_silences): after a random time in bed_silence_every_s (seconds, [min, max]) the bed
+    # fades out over bed_silence_fade_s and its clip pauses; after a random length in bed_silence_s it resumes where
+    # it stopped and fades back in. The AM filter (bed_filter, off: the F key flips it live on the page) keeps only
+    # bed_filter_low_hz to bed_filter_high_hz, the band of a small radio's speaker. The fading (QSB, the signal
+    # swelling and sinking): every random time in bed_fading_every_s the level glides to a new one within plus or
+    # minus bed_fading_db decibels; 0 turns it off.
+    bed_silences: bool = True
+    bed_silence_every_s: List[float] = Field(default_factory=lambda: [30.0, 120.0])
+    bed_silence_s: List[float] = Field(default_factory=lambda: [3.0, 15.0])
+    bed_silence_fade_s: float = Field(default=1.0, ge=0)
+    bed_filter: bool = False
+    bed_filter_low_hz: float = Field(default=300.0, gt=0, lt=20000)
+    bed_filter_high_hz: float = Field(default=3000.0, gt=0, lt=20000)
+    bed_fading_db: float = Field(default=3.0, ge=0, le=20)
+    bed_fading_every_s: List[float] = Field(default_factory=lambda: [2.0, 6.0])
     # Pacing, in rounds: an event every N free rounds (the gap), a tone word kept N rounds (the hold);
     # each drawn N +/- jitter, never below 1; 0 turns it off.
     event_every: int = Field(default=2, ge=0)
@@ -339,6 +354,18 @@ class ShowConfig(BaseModel):
     def _trim_target_below_trigger(self):
         if self.trim_target >= self.trim_trigger:
             raise ValueError("show.trim_target must be below show.trim_trigger")
+        return self
+
+    @model_validator(mode="after")
+    def _bed_ranges_are_sound(self):
+        """Check the static bed's ranges: each [min, max] in seconds, above 0 and in order; the filter's band in
+        order."""
+        for name in ("bed_silence_every_s", "bed_silence_s", "bed_fading_every_s"):
+            pair = getattr(self, name)
+            if len(pair) != 2 or not 0 < pair[0] <= pair[1]:
+                raise ValueError(f"show.{name} needs two numbers of seconds, [min, max], above 0 and in order")
+        if self.bed_filter_low_hz >= self.bed_filter_high_hz:
+            raise ValueError("show.bed_filter_low_hz must be below show.bed_filter_high_hz")
         return self
 
     @model_validator(mode="after")

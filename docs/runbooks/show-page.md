@@ -288,6 +288,19 @@ down around it.)
 - **The M key mutes it** (and unmutes it), with a short fade — for the
   presenter, if the room's speakers make it too much; nothing shows on
   the page. The voice is never muted by it.
+- **Silences, for the ear's rest** (`bed_silences`, on): after a random
+  30-120 s (`bed_silence_every_s`) the bed fades out over 1 s
+  (`bed_silence_fade_s`) and its clip pauses; after a random 3-15 s
+  (`bed_silence_s`) the same clip goes on where it stopped, fading back
+  in. Stop cancels a silence; Resume comes back with sound.
+- **The fading** (radio amateurs' QSB: the signal swelling and sinking):
+  every random 2-6 s (`bed_fading_every_s`) the level glides to a new one
+  within ±3 dB (`bed_fading_db`; 0 turns it off).
+- **The AM filter** (`bed_filter`, off): only 300-3,000 Hz
+  (`bed_filter_low_hz`, `bed_filter_high_hz`) — the band of a small
+  radio's speaker, the hiss's sharp top taken off. **The F key flips it
+  live**, for an A/B by ear without a restart; the setting decides how a
+  run starts.
 - **The clips** are radio static from Freesound, kept outside git in
   `Sounds/bed/` (beside `Personas/`, ignored by git): the clips as
   downloaded, and `bed.json`, which lists them with **a gain each** that
@@ -330,15 +343,19 @@ down around it.)
   every clip in `Sounds/bed/` plays.
 - **Which clip is playing:** with `debug: true`, the browser's console
   (Developer Tools) says what the bed does — each clip as it starts, with
-  its place in the shuffled pass and its gain, each new shuffle, and the
-  M key. The lines have this form (the file and its gain are clip
-  730109's, as `bed.json` gives them; a real run's order is its own
-  shuffle):
+  its place in the shuffled pass and its gain, each new shuffle, each
+  silence, and the M and F keys. For example, a check on 2026-10-02 (the
+  silences shortened to 3 s apart and 2 s long for the check; the F key
+  pressed twice):
 
   ```
   Show: bed shuffled: a new pass of 17 clips
   Show: bed clip 1 of 17: 730109-shortwave-radio-static-with-indistinguishable-foreign-chatte.mp3 (gain +9.4 dB)
-  Show: bed muted (M)
+  Show: bed silence: 2.0 s
+  Show: bed silence: 2.0 s
+  Show: bed silence: 2.0 s
+  Show: bed filter on, 300-3000 Hz (F)
+  Show: bed filter off (F)
   ```
 
   With debug off (the demo), it says nothing.

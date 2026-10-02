@@ -356,6 +356,15 @@ class ShowBed(BaseModel):
     dip_s: float
     rise_s: float
     off_in_contact: bool
+    silences: bool
+    silence_every_s: List[float]
+    silence_s: List[float]
+    silence_fade_s: float
+    filter: bool
+    filter_low_hz: float
+    filter_high_hz: float
+    fading_db: float
+    fading_every_s: List[float]
 
 
 class ShowStartResponse(BaseModel):

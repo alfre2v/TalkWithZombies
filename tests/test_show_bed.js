@@ -15,6 +15,9 @@
  *     stopped;
  *   - the clips: the next one when a clip ends, a new shuffle when the pass is used up, a failed clip skipped, the
  *     bed given up when every clip fails, a new run's clips;
+ *   - the silences (a fade out, the clip paused, the same clip back where it stopped after silence_s; cancelled by
+ *     Stop), the AM filter (the bed routed through the band or straight on; the F key flips it live), the fading
+ *     (a glide to a new level within plus or minus fading_db every fading_every_s), with fake timers and fixed dice;
  *   - the M key's mute, and the gauge never tapping the bed;
  *   - the plain page's scripts alone define no bed and keep their own functions.
  *
@@ -54,7 +57,36 @@ function paramStub(value) {
     };
 }
 
-/** An AudioContext stub: gain nodes and media element sources that record what they connect to. */
+/** A node's connect and disconnect, recording what it feeds now. */
+function connectable() {
+    return {
+        connected: [],
+        connect(n) { this.connected.push(n); return n; },
+        disconnect() { this.connected = []; },
+    };
+}
+
+/** Fake timers: setTimeout queues; fire(ms) runs the first timer set for ms milliseconds, pending() lists them. */
+function fakeTimers() {
+    const queue = [];
+    let id = 0;
+    return {
+        setTimeout(fn, ms) { queue.push({ id: ++id, fn, ms }); return id; },
+        clearTimeout(timer) {
+            const i = queue.findIndex((t) => t.id === timer);
+            if (i >= 0) queue.splice(i, 1);
+        },
+        fire(ms) {
+            const i = queue.findIndex((t) => Math.abs(t.ms - ms) < 1e-6);
+            assert.ok(i >= 0, `no timer of ${ms} ms among ${queue.map((t) => t.ms)}`);
+            const [timer] = queue.splice(i, 1);
+            timer.fn();
+        },
+        pending() { return queue.map((t) => t.ms).sort((a, b) => a - b); },
+    };
+}
+
+/** An AudioContext stub: gain nodes, filters and media element sources that record what they connect to. */
 function audioContextClass(made) {
     return class AudioContextStub {
         constructor() {
@@ -62,14 +94,20 @@ function audioContextClass(made) {
             this.currentTime = 10;
             this.destination = { name: "speakers" };
             this.gains = [];
+            this.filters = [];
             this.elementSources = [];
             this.bufferSources = 0;
             made.push(this);
         }
         resume() {}
         createGain() {
-            const node = { gain: paramStub(1), connected: [], connect(n) { this.connected.push(n); return n; } };
+            const node = { gain: paramStub(1), ...connectable() };
             this.gains.push(node);
+            return node;
+        }
+        createBiquadFilter() {
+            const node = { type: "lowpass", frequency: paramStub(350), Q: paramStub(1), ...connectable() };
+            this.filters.push(node);
             return node;
         }
         createMediaElementSource(element) {
@@ -122,6 +160,7 @@ function load({ withBed = true, withGauge = false } = {}) {
     const elements = {};
     const listeners = {};
     const logs = [];
+    const timers = fakeTimers();
     const sandbox = {
         console: { log: () => {}, error: () => {}, warn: () => {}, info: (message) => logs.push(message) },
         document: {
@@ -131,7 +170,8 @@ function load({ withBed = true, withGauge = false } = {}) {
         navigator: { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) } },
         AudioContext: audioContextClass(contexts),
         Audio: audioClass(audios),
-        TextDecoder, setTimeout, clearTimeout, AbortController, atob, btoa, Blob, performance,
+        setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
+        TextDecoder, AbortController, atob, btoa, Blob, performance,
     };
     vm.createContext(sandbox);
     const files = [...PAGE_SCRIPTS, ...(withGauge ? ["gauge.js"] : []), ...(withBed ? ["bed.js"] : [])];
@@ -142,10 +182,15 @@ function load({ withBed = true, withGauge = false } = {}) {
     const key = (code, extra = {}) => {
         for (const fn of listeners.keydown || []) fn({ code, repeat: false, preventDefault() {}, ...extra });
     };
-    return { sandbox, contexts, audios, get, key, logs };
+    if (withBed) get("bed").random = () => 0.5; // The dice land in the middle of every range
+    return { sandbox, contexts, audios, get, key, logs, timers };
 }
 
-const BED_SETTINGS = { volume_voice: 0.05, volume_between: 0.15, dip_s: 0.5, rise_s: 1.5, off_in_contact: false };
+const BED_SETTINGS = {
+    volume_voice: 0.05, volume_between: 0.15, dip_s: 0.5, rise_s: 1.5, off_in_contact: false,
+    silences: true, silence_every_s: [30, 120], silence_s: [3, 15], silence_fade_s: 1,
+    filter: false, filter_low_hz: 300, filter_high_hz: 3000, fading_db: 3, fading_every_s: [2, 6],
+};
 
 /** A run with a bed of these clips (all gain 1 unless given), as the start reply brings it. */
 function startRun(page, clips = ["1-a.mp3", "2-b.mp3", "3-c.mp3"], settings = {}, runId = "run-1", debug = false) {
@@ -157,9 +202,11 @@ function startRun(page, clips = ["1-a.mp3", "2-b.mp3", "3-c.mp3"], settings = {}
     };
 }
 
-/** The bed's three gains: the clip's, the bed's (its level) and the mute's. */
+/** The bed's stages: the clip's gain, the bed's level, the filter's halves, the fading, the gate and the mute. */
 function gains(page) {
-    return { clip: page.get("bed.clipGain"), layer: page.get("bed.layer"), sounds: page.get("bed.sounds") };
+    const at = (name) => page.get(`bed.${name}`);
+    return { clip: at("clipGain"), layer: at("layer"), highpass: at("highpass"), lowpass: at("lowpass"),
+             fading: at("fading"), gate: at("gate"), sounds: at("sounds") };
 }
 
 /* ==========================================================================
@@ -235,15 +282,19 @@ test("the first state of a run wires the bed: the element, its gain, the bed's g
         page.sandbox.setState("thinking");
 
         const ctx = page.contexts[0];
-        const { clip, layer, sounds } = gains(page);
+        const { clip, layer, fading, gate, sounds, highpass, lowpass } = gains(page);
         assert.equal(page.audios.length, 1);
         const audio = page.audios[0];
         assert.equal(ctx.elementSources.length, 1);
         assert.equal(ctx.elementSources[0].element, audio);
         assert.deepEqual(ctx.elementSources[0].connected, [clip]);
         assert.deepEqual(clip.connected, [layer]);
-        assert.deepEqual(layer.connected, [sounds]);
+        assert.deepEqual(layer.connected, [fading]); // The filter off: straight on to the fading
+        assert.deepEqual(fading.connected, [gate]);
+        assert.deepEqual(gate.connected, [sounds]);
         assert.deepEqual(sounds.connected, [ctx.destination]);
+        assert.deepEqual(highpass.connected, [lowpass]);
+        assert.deepEqual(lowpass.connected, [fading]);
         assert.equal(layer.channelCount, 1);
         assert.equal(layer.channelCountMode, "explicit");
         assert.equal(layer.channelInterpretation, "speakers");
@@ -395,6 +446,151 @@ test("a new run starts a new pass over its own clips", () => {
     assert.equal(page.audios.length, 1); // The same element, the same wiring
     assert.equal(audio.src, "/api/show/bed/9-z.mp3");
     assert.equal(audio.paused, false);
+});
+
+/* ==========================================================================
+   The second build: the silences, the AM filter, the fading
+   ========================================================================== */
+
+test("bedBetween and bedFadingTarget: a time in a range, a level within plus or minus some dB", () => {
+    const { sandbox } = load();
+    assert.equal(sandbox.bedBetween([30, 120], () => 0), 30);
+    assert.equal(sandbox.bedBetween([30, 120], () => 0.5), 75);
+    assert.equal(sandbox.bedFadingTarget(3, () => 0.5), 1);
+    assert.ok(Math.abs(sandbox.bedFadingTarget(3, () => 0) - 10 ** (-3 / 20)) < 1e-9);
+    assert.ok(Math.abs(sandbox.bedFadingTarget(3, () => 0.75) - 10 ** (1.5 / 20)) < 1e-9);
+});
+
+test("a silence: after silence_every_s the bed fades out, pauses, and after silence_s goes on where it stopped",
+    () => {
+        const page = load();
+        startRun(page, undefined, {}, "run-1", true);
+        page.sandbox.setState("thinking");
+        const audio = page.audios[0];
+        const clipSrc = audio.src;
+        const { gate } = gains(page);
+        assert.ok(page.timers.pending().includes(75000)); // 30-120 s, the dice at 0.5
+
+        page.timers.fire(75000);
+        assert.deepEqual(gate.gain.lastRamp(), ["ramp", 0, 10 + 1]); // Out over silence_fade_s
+        assert.equal(page.get("bed.silent"), true);
+        assert.equal(audio.paused, false); // Still sounding through the fade
+        assert.ok(page.logs.includes("Show: bed silence: 9.0 s")); // 3-15 s, the dice at 0.5
+
+        page.timers.fire(1000);
+        assert.equal(audio.paused, true);
+        page.sandbox.setState("on air"); // The show goes on through a silence: the level moves, nothing plays
+        assert.equal(audio.paused, true);
+
+        page.timers.fire(9000);
+        assert.equal(audio.paused, false);
+        assert.equal(audio.src, clipSrc); // The same clip, where it stopped
+        assert.deepEqual(gate.gain.lastRamp(), ["ramp", 1, 10 + 1]);
+        assert.equal(page.get("bed.silent"), false);
+        assert.ok(page.timers.pending().includes(75000)); // The next silence is set
+    });
+
+test("a clip that ends in a silence's fade loads the next, which waits for the silence's end", () => {
+    const page = load();
+    startRun(page);
+    page.sandbox.setState("thinking");
+    const audio = page.audios[0];
+    page.timers.fire(75000);
+    audio.fire("ended");
+    const next = audio.src;
+    assert.equal(audio.plays.length, 1);
+    page.timers.fire(1000);
+    page.timers.fire(9000);
+    assert.equal(audio.plays.at(-1), next);
+    assert.equal(audio.plays.length, 2);
+});
+
+test("Stop in a silence cancels it: Resume comes back with sound and a new silence set", () => {
+    const page = load();
+    startRun(page);
+    page.sandbox.setState("thinking");
+    const audio = page.audios[0];
+    page.timers.fire(75000);
+    page.timers.fire(1000);
+    page.sandbox.setState("stopped");
+    assert.deepEqual(page.timers.pending(), []);
+    assert.equal(gains(page).gate.gain.target(), 1);
+    assert.equal(page.get("bed.silent"), false);
+
+    page.sandbox.setState("thinking");
+    assert.equal(audio.paused, false);
+    assert.ok(page.timers.pending().includes(75000));
+});
+
+test("silences off: no silence is ever set", () => {
+    const page = load();
+    startRun(page, undefined, { silences: false });
+    page.sandbox.setState("thinking");
+    assert.ok(!page.timers.pending().includes(75000));
+});
+
+test("the AM filter: off, the bed goes straight on; the F key routes it through the band, and back", () => {
+    const page = load();
+    startRun(page, undefined, {}, "run-1", true);
+    page.sandbox.setState("thinking");
+    const { layer, highpass, lowpass, fading } = gains(page);
+    assert.deepEqual(layer.connected, [fading]);
+    assert.equal(highpass.type, "highpass");
+    assert.equal(lowpass.type, "lowpass");
+    assert.equal(highpass.frequency.value, 300);
+    assert.equal(lowpass.frequency.value, 3000);
+    assert.equal(highpass.Q.value, Math.SQRT1_2);
+
+    page.key("KeyF");
+    assert.deepEqual(layer.connected, [highpass]);
+    page.key("KeyF");
+    assert.deepEqual(layer.connected, [fading]);
+    assert.deepEqual(page.logs.slice(-2), ["Show: bed filter on, 300-3000 Hz (F)", "Show: bed filter off (F)"]);
+});
+
+test("the AM filter on in the settings: the run starts through the band, at the settings' edges", () => {
+    const page = load();
+    startRun(page, undefined, { filter: true, filter_low_hz: 400, filter_high_hz: 2500 });
+    page.sandbox.setState("thinking");
+    const { layer, highpass, lowpass } = gains(page);
+    assert.deepEqual(layer.connected, [highpass]);
+    assert.equal(highpass.frequency.value, 400);
+    assert.equal(lowpass.frequency.value, 2500);
+});
+
+test("the F key before the bed plays does nothing", () => {
+    const page = load();
+    page.key("KeyF");
+    startRun(page);
+    page.sandbox.setState("thinking");
+    assert.deepEqual(gains(page).layer.connected, [gains(page).fading]);
+});
+
+test("the fading: every fading_every_s the level glides to a new one within plus or minus fading_db", () => {
+    const page = load();
+    const dice = [0.5, 0.75]; // The glide's length (4 s of 2-6 s), then its level (+1.5 dB of +/-3 dB)
+    let i = 0;
+    page.get("bed").random = () => dice[i++ % dice.length];
+    startRun(page, undefined, { silences: false });
+    page.sandbox.setState("thinking");
+    const { fading } = gains(page);
+    const [, level, at] = fading.gain.lastRamp();
+    assert.ok(Math.abs(level - 10 ** (1.5 / 20)) < 1e-9);
+    assert.equal(at, 10 + 4);
+    assert.deepEqual(page.timers.pending(), [4000]);
+
+    page.timers.fire(4000);
+    assert.equal(fading.gain.calls.filter((c) => c[0] === "ramp").length, 2); // The next glide
+    page.sandbox.setState("stopped");
+    assert.deepEqual(page.timers.pending(), []);
+});
+
+test("the fading off (fading_db 0): the level holds", () => {
+    const page = load();
+    startRun(page, undefined, { silences: false, fading_db: 0 });
+    page.sandbox.setState("thinking");
+    assert.equal(gains(page).fading.gain.lastRamp(), null);
+    assert.deepEqual(page.timers.pending(), []);
 });
 
 /* ==========================================================================

@@ -176,8 +176,8 @@ def _bed(show: ShowConfig, story: Story) -> Optional[ShowBed]:
     if not clips:
         logger.info("No static bed: no clip of %s plays", app_config.get_bed_directory())
         return None
-    return ShowBed(clips=clips, volume_voice=show.bed_volume_voice, volume_between=show.bed_volume_between,
-                   dip_s=show.bed_dip_s, rise_s=show.bed_rise_s, off_in_contact=show.bed_off_in_contact)
+    return ShowBed(clips=clips, **{name[len("bed_"):]: value for name, value in show.model_dump().items()
+                                   if name.startswith("bed_")})
 
 
 @router.get("/bed/{name}")
