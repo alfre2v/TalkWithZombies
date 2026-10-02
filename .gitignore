@@ -8,6 +8,7 @@ personas.yaml.*
 !personas.yaml.example
 future*.md
 Personas/
+Sounds/
 chatrooms/
 chatrooms.yaml
 chatrooms.yaml.*

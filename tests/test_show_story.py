@@ -20,7 +20,7 @@ import app.config as app_config
 from app.config import Persona, PersonasConfig, ShowConfig
 from app.show.grammar import MOODS
 from app.services.persona_store import REFERENCE_CLIP
-from app.show.story import Story, StoryError, all_moods, load_story, render_cast_sheet, voice_map
+from app.show.story import BedClip, Story, StoryError, all_moods, load_story, render_cast_sheet, voice_map
 
 SHIPPED = Path(__file__).resolve().parent.parent / "stories"
 CAST = ["Daniel", "Moira", "Ralph", "Samantha"]
@@ -86,14 +86,18 @@ BEATS = ("repair:\n  after-breakdown:\n    - [Fixed!, Answer us.]\n  after-switc
          "    - Lost you. Off.\n")
 
 
+BED = ("clips:\n  - {file: 1-hiss.mp3, enabled: true}\n  - {file: 2-crackle.mp3, enabled: false}\n"
+       "  - {file: 3-sweep.mp3, gain_db: -3}\n")
+
+
 def _write_story(root, *, front=FRONT + DIRECTIONS,
                  body="{{ model_prefix }}\nWorld.\n\n{{ format_rules }}\n\n{{ episode }}\n",
-                 overtones=OVERTONES, events=EVENTS, agenda=AGENDA, beats=None, name="s"):
+                 overtones=OVERTONES, events=EVENTS, agenda=AGENDA, beats=None, bed=None, name="s"):
     folder = root / name
     folder.mkdir(parents=True)
     (folder / "cast_sheet.md").write_text(f"---\n{front}---\n{body}" if front is not None else body)
     for file, text in (("overtones.yaml", overtones), ("events.yaml", events), ("agenda.yaml", agenda),
-                       ("beats.yaml", beats)):
+                       ("beats.yaml", beats), ("bed.yaml", bed)):
         if text is not None:
             (folder / file).write_text(text)
     return root
@@ -249,6 +253,32 @@ class TestStoryErrors:
     def test_malformed_beats_fail(self, voices, tmp_path, beats, match):
         with pytest.raises(StoryError, match=match):
             load_story("s", _write_story(tmp_path, beats=beats))
+
+    def test_the_static_bed_is_optional_and_read_when_present(self, voices, tmp_path):
+        assert load_story("s", _write_story(tmp_path / "a")).bed is None
+        bed = load_story("s", _write_story(tmp_path / "b", bed=BED)).bed
+        assert bed == (BedClip(file="1-hiss.mp3", enabled=True, gain_db=0.0),
+                       BedClip(file="2-crackle.mp3", enabled=False, gain_db=0.0),
+                       BedClip(file="3-sweep.mp3", enabled=True, gain_db=-3.0))
+        assert load_story("s", _write_story(tmp_path / "c", bed="clips: []\n")).bed == ()
+
+    @pytest.mark.parametrize("bed, match", [
+        ("clip:\n  - {file: 1-hiss.mp3}\n", "needs 'clips'"),
+        ("clips: 1-hiss.mp3\n", "needs 'clips'"),
+        ("clips:\n  - 1-hiss.mp3\n", "needs a file"),
+        ("clips:\n  - {enabled: true}\n", "needs a file"),
+        ("clips:\n  - {file: 1-hiss.mp3, enable: false}\n", "does not know enable"),
+        ("clips:\n  - {file: ../1-hiss.mp3}\n", "not a clip's plain file name"),
+        ("clips:\n  - {file: 1-hiss.txt}\n", "not a clip's plain file name"),
+        ("clips:\n  - {file: 1-hiss.mp3, enabled: maybe}\n", "enabled true or false"),
+        ("clips:\n  - {file: 1-hiss.mp3, gain_db: loud}\n", "gain_db a number"),
+        ("clips:\n  - {file: 1-hiss.mp3, gain_db: true}\n", "gain_db a number"),
+        ("clips:\n  - {file: 1-hiss.mp3, gain_db: -41}\n", "gain_db a number"),
+        ("clips:\n  - {file: 1-hiss.mp3}\n  - {file: 1-hiss.mp3, enabled: false}\n", "twice"),
+    ])
+    def test_a_malformed_static_bed_fails(self, voices, tmp_path, bed, match):
+        with pytest.raises(StoryError, match=match):
+            load_story("s", _write_story(tmp_path, bed=bed))
 
     @pytest.mark.parametrize("agenda", [None, "agenda: []\n", "agenda:\n  - Only one.\n",
                                         "agenda:\n  - Twice.\n  - Twice.\n"])

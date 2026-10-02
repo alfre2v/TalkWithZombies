@@ -342,13 +342,30 @@ class ShowStartRequest(BaseModel):
     story: Optional[str] = None
 
 
+class ShowBedClip(BaseModel):
+    """One clip of the static bed: its file in /api/show/bed/, and the gain that brings it to the common level."""
+    file: str
+    gain: float
+
+
+class ShowBed(BaseModel):
+    """The static bed as the page plays it: its clips, and the show's bed_* settings without their prefix."""
+    clips: List[ShowBedClip]
+    volume_voice: float
+    volume_between: float
+    dip_s: float
+    rise_s: float
+    off_in_contact: bool
+
+
 class ShowStartResponse(BaseModel):
     """The run just opened: its id, story, cast and seed, and the show settings the page needs.
 
     listen_window_s and press_cap_s time the listener's turn; debug turns on
     the page's debug line; voices maps each mood to the reference clip its
     lines are spoken with (empty: every line uses ref.wav); voice_seed says
-    whether the page sends the run's seed with each chunk of the voice.
+    whether the page sends the run's seed with each chunk of the voice; bed
+    is the static bed (None when show.bed is off or no clip is on disk).
     """
     run_id: str
     story: str
@@ -361,6 +378,7 @@ class ShowStartResponse(BaseModel):
     debug: bool
     voices: Dict[str, str] = Field(default_factory=dict)
     voice_seed: bool = False
+    bed: Optional[ShowBed] = None
 
 
 class ShowRoundRequest(BaseModel):

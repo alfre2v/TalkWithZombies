@@ -49,6 +49,7 @@ are the demo's configuration. The four switches worth knowing:
 | `seed` | none: a random one per run | A number: the model writes the same story every run |
 | `mood_voices` | `true` | Each line is spoken with its mood's reference clip; off, every line with `ref.wav` (see "The voice") |
 | `voice_seed` | `false` | On: every chunk is spoken with the run's seed — with `seed` set, the same voices every run too (see "The voice") |
+| `bed` | `true` | Radio static played quietly under the show, in the looks, from the clips in `Sounds/bed/`; off, none (see "The static bed") |
 
 The rest of the section — about 40 numbers for the pacing, the
 listener's turn and the contacts — has tuned defaults; they are listed,
@@ -253,6 +254,108 @@ the defaults, all in `settings.yaml` under `show:`.
   characters a second, and reports that as played seconds. Useful to
   watch the director without the TTS, or while it is down.
 
+## The static bed
+
+Under the voices, the looks play **radio static**, quietly: a few clips
+of shortwave hiss, tuning sweeps and distant stations, one after another
+in a shuffled order — the receiver's own noise, always there. (A *bed*,
+in sound production, is a quiet layer under the foreground, moved up and
+down around it.)
+
+- **Where:** in the looks (`?design=old-radio`,
+  `?design=amateur-radio-transmitter`). The plain page stays silent, the
+  working page, unless you ask: add `&bed=on` to its address
+  (<http://127.0.0.1:8010/show?design=plain&bed=on>). Not with `&mock=1`.
+- **How loud, and when:** low while a round is said
+  (`bed_volume_voice`, 0.05), higher while the page waits — for the next
+  round, for you to press, for Whisper (`bed_volume_between`, 0.15). It
+  dips in `bed_dip_s` (0.5 s) and rises in `bed_rise_s` (1.5 s), never
+  jumps. **Silent while you hold to talk** (at once, so the microphone
+  does not hear it), back when you let go. With `bed_off_in_contact:
+  true`, also silent while the RECEIVER sign is lit.
+- **Start, Stop, Resume:** it rises from silence at Start; Stop pauses
+  it at once, and Resume picks the same clip up where it stopped. The
+  show has no end of its own — it runs until Stop.
+- **The M key mutes it** (and unmutes it), with a short fade — for the
+  presenter, if the room's speakers make it too much; nothing shows on
+  the page. The voice is never muted by it.
+- **The clips** are radio static from Freesound, kept outside git in
+  `Sounds/bed/` (beside `Personas/`, ignored by git): the clips as
+  downloaded, and `bed.json`, which lists them with **a gain each** that
+  brings every clip to the same average level (measured on the mono mix
+  the page plays), so the shuffle never jumps in level. `bed.json` holds
+  facts about the files, never edited by hand: it is written by
+  zombie-radio's `tools/sounds/prepare_bed.py`, which copies there the
+  clips its list `tools/sounds/bed.yaml` names — its runbook-in-place is
+  the sound-effects discussion,
+  `/Users/alfredo/workspace/hackTNT_2026/zombie-radio-claude/docs/discussions/2026-10-01-sound-effects.md`,
+  §8.14 and §8.16. **No `Sounds/bed/bed.json`, no bed** — the show runs as
+  before.
+- **Which clips play is the story's choice:**
+  `stories/lab-outbreak/bed.yaml` lists the clips by file name, each
+  `enabled: true` or `false`, with `gain_db` — a change of its level by
+  ear, in dB, added to the measured gain: **0 changes nothing** (the
+  shipped file sets it on every clip), `-3` is a little quieter, `-6`
+  half the amplitude, `+6` twice it:
+
+  ```yaml
+  clips:
+    # Shortwave Radio static with indistinguishable foreign chatter and static (CC BY 4.0, 172 s)
+    - file: 730109-shortwave-radio-static-with-indistinguishable-foreign-chatte.mp3
+      enabled: true
+      gain_db: 0
+    # morse static.wav (CC BY 4.0, 5 s)
+    - file: 34418-morse-static.mp3
+      enabled: false
+      gain_db: 0
+  ```
+
+  **The story is read at every Start:** change a line, press Start (or
+  reload the page and Start), and the new list plays — no restart. A clip
+  enabled there but missing from `Sounds/bed/` is skipped (the app's log
+  says so); a misspelled key or a bad value refuses the start with the
+  line at fault ("bed.yaml does not know enable …"); without the file,
+  every clip in `Sounds/bed/` plays.
+- **Which clip is playing:** with `debug: true`, the browser's console
+  (Developer Tools) says what the bed does — each clip as it starts, with
+  its place in the shuffled pass and its gain, each new shuffle, and the
+  M key. The lines have this form (the file and its gain are clip
+  730109's, as `bed.json` gives them; a real run's order is its own
+  shuffle):
+
+  ```
+  Show: bed shuffled: a new pass of 17 clips
+  Show: bed clip 1 of 17: 730109-shortwave-radio-static-with-indistinguishable-foreign-chatte.mp3 (gain +9.4 dB)
+  Show: bed muted (M)
+  ```
+
+  With debug off (the demo), it says nothing.
+- **Mono, in the browser:** the clips are not changed; the page mixes
+  each stereo clip down to one channel, (left + right) / 2, as it plays —
+  a radio's speaker.
+- **The gauge** (the magic eye, the meters) follows the voices only; the
+  static never moves it.
+- **Each clip is streamed** by an `<audio>` element from
+  `/api/show/bed/<file>`, never decoded whole: 24 minutes of static
+  would take about half a gigabyte of memory decoded.
+
+To see the bed the app would give a run:
+
+```bash
+# The static bed in a start reply: how many clips, its settings, and the first clip (opens a run in runs/)
+curl -s -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8010/api/show/start | python3 -c "import json,sys; b=json.load(sys.stdin)['bed']; print(len(b['clips']), 'clips', {k: v for k, v in b.items() if k != 'clips'}); print(b['clips'][0])"
+```
+
+For example, this checkout on 2026-10-01 (17 clips prepared):
+
+```
+17 clips {'volume_voice': 0.05, 'volume_between': 0.15, 'dip_s': 0.5, 'rise_s': 1.5, 'off_in_contact': False}
+{'file': '11859-analog-noise-arped-radio-static.mp3', 'gain': 0.7453}
+```
+
+`null` instead means `bed: false`, no clip in `Sounds/bed/`, or none of
+them enabled by the story's `bed.yaml`.
+
 ## Talk back
 
 - **The microphone** is asked for once, when you press Start (the
@@ -417,6 +520,13 @@ python3 scripts/replay_chunk.py runs/2026-09-30T18-51-36/debug/audio/r001-l1-c1-
   asked for again.
 - **Nothing happens on Start** — the app is not serving, or the browser
   console (Developer Tools) shows why.
+- **No static under the show** — the plain page without `&bed=on`;
+  `bed: false`; no `Sounds/bed/bed.json` (the start reply's `bed` is
+  `null`: run zombie-radio's `tools/sounds/prepare_bed.py --write`); every
+  clip `enabled: false` in the story's `bed.yaml`; the M key pressed; or
+  `&voice=off` (no voice, no bed). The browser console
+  says when a clip would not load ("the static bed could not play", or
+  "no clip of the static bed would load" when none would).
 - **The talk button never lights up** — the microphone was refused or
   is missing: allow it in the browser's site settings and reload (a
   reload starts a new run); the windows still count down, and each

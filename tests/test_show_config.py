@@ -30,6 +30,8 @@ class TestShowConfig:
         assert show.emotion_tags is True
         assert show.debug is False
         assert (show.mood_voices, show.voice_seed) == (True, False)
+        assert (show.bed, show.bed_volume_voice, show.bed_volume_between) == (True, 0.05, 0.15)
+        assert (show.bed_dip_s, show.bed_rise_s, show.bed_off_in_contact) == (0.5, 1.5, False)
         assert (show.event_every, show.event_jitter, show.tone_hold, show.tone_jitter) == (2, 1, 3, 1)
         assert show.event_report is True
         assert (show.interaction_min_s, show.interaction_max_s) == (60.0, 180.0)
@@ -124,6 +126,14 @@ class TestShowConfig:
         ("recollection_every", -1),
         ("restatement_contacts", 0),
         ("voice_seed", "sometimes"),
+        ("bed", "sometimes"),
+        ("bed_volume_voice", -0.1),
+        ("bed_volume_voice", 1.5),
+        ("bed_volume_between", -0.1),
+        ("bed_volume_between", 1.5),
+        ("bed_dip_s", -1),
+        ("bed_rise_s", -1),
+        ("bed_off_in_contact", "sometimes"),
         ("trim_trigger", 0),
         ("trim_trigger", 1.1),
         ("trim_target", 0),

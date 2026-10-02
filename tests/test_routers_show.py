@@ -87,6 +87,25 @@ def _summary(events):
     return sse_events_by_type(events, "round")[0]
 
 
+def _bed_folder(root, clips, story_bed=None):
+    """A static bed in the test's project root: each clip a small file, and bed.json listing them with their gains.
+
+    The story's choice is the test's own, never the shipped one: story_bed is the text of the run's copy of
+    lab-outbreak/bed.yaml, or None to remove it (every clip on disk plays)."""
+    choice = root / "stories" / "lab-outbreak" / "bed.yaml"
+    if story_bed is None:
+        choice.unlink(missing_ok=True)
+    else:
+        choice.write_text(story_bed, encoding="utf-8")
+    folder = root / "Sounds" / "bed"
+    folder.mkdir(parents=True, exist_ok=True)
+    for name in clips:
+        (folder / name).write_bytes(b"ID3 not really an mp3 " + name.encode())
+    entries = [{"file": name, "gain": gain, "seconds": 10.0} for name, gain in clips.items()]
+    (folder / "bed.json").write_text(json.dumps({"loudness_dbfs": -20, "clips": entries}), encoding="utf-8")
+    return folder
+
+
 class TestStart:
     def test_opens_a_run_of_the_configured_story(self, client, show_env):
         body = _start(client)
@@ -113,6 +132,56 @@ class TestStart:
 
         monkeypatch.setattr(app_config.get_settings(), "show", ShowConfig(seed=42, voice_seed=True))
         assert _start(client)["voice_seed"] is True
+
+    def test_gives_the_page_the_static_bed_its_clips_and_settings(self, client, show_env):
+        _bed_folder(show_env, {"1-hiss.mp3": 1.5, "2-crackle.mp3": 0.5})
+
+        assert _start(client)["bed"] == {
+            "clips": [{"file": "1-hiss.mp3", "gain": 1.5}, {"file": "2-crackle.mp3", "gain": 0.5}],
+            "volume_voice": 0.05, "volume_between": 0.15, "dip_s": 0.5, "rise_s": 1.5, "off_in_contact": False,
+        }
+
+    def test_the_static_bed_follows_the_settings(self, client, show_env, monkeypatch):
+        _bed_folder(show_env, {"1-hiss.mp3": 1.0})
+        monkeypatch.setattr(app_config.get_settings(), "show",
+                            ShowConfig(seed=42, bed_volume_voice=0.1, bed_volume_between=0.3, bed_dip_s=0.2,
+                                       bed_rise_s=2.0, bed_off_in_contact=True))
+        bed = _start(client)["bed"]
+        assert (bed["volume_voice"], bed["volume_between"], bed["dip_s"], bed["rise_s"]) == (0.1, 0.3, 0.2, 2.0)
+        assert bed["off_in_contact"] is True
+
+        monkeypatch.setattr(app_config.get_settings(), "show", ShowConfig(seed=42, bed=False))
+        assert _start(client)["bed"] is None
+
+    def test_the_storys_bed_yaml_chooses_the_clips_and_changes_their_gains(self, client, show_env):
+        _bed_folder(show_env, {"1-hiss.mp3": 2.0, "2-crackle.mp3": 0.5, "3-sweep.mp3": 1.0},
+                    story_bed="clips:\n  - {file: 3-sweep.mp3}\n  - {file: 2-crackle.mp3, enabled: false}\n"
+                              "  - {file: 1-hiss.mp3, gain_db: -6}\n  - {file: 9-not-there.mp3}\n")
+
+        assert _start(client)["bed"]["clips"] == [{"file": "3-sweep.mp3", "gain": 1.0},
+                                                  {"file": "1-hiss.mp3", "gain": 1.0024}]
+
+    def test_the_storys_bed_yaml_is_read_at_every_start(self, client, show_env):
+        _bed_folder(show_env, {"1-hiss.mp3": 1.0}, story_bed="clips:\n  - {file: 1-hiss.mp3}\n")
+        assert len(_start(client)["bed"]["clips"]) == 1
+
+        (show_env / "stories" / "lab-outbreak" / "bed.yaml").write_text(
+            "clips:\n  - {file: 1-hiss.mp3, enabled: false}\n", encoding="utf-8")
+        assert _start(client)["bed"] is None
+
+    def test_a_malformed_bed_yaml_fails_the_start_like_any_story_file(self, client, show_env):
+        _bed_folder(show_env, {"1-hiss.mp3": 1.0}, story_bed="clips:\n  - {file: 1-hiss.mp3, enable: false}\n")
+
+        resp = client.post("/api/show/start", json={})
+        assert resp.status_code == 422
+        assert "bed.yaml does not know enable" in resp.json()["detail"]
+
+    def test_no_static_bed_without_clips(self, client, show_env):
+        (show_env / "stories" / "lab-outbreak" / "bed.yaml").unlink(missing_ok=True)
+        assert _start(client)["bed"] is None
+
+        _bed_folder(show_env, {})
+        assert _start(client)["bed"] is None
 
     def test_gives_the_page_the_voice_of_each_mood_unless_the_switch_is_off(self, client, show_env, monkeypatch):
         # The run's copy of the story gets a made-up mapping, so the test does not depend on the shipped one.
@@ -181,13 +250,42 @@ class TestPage:
             assert client.get(asset).status_code == 200
 
 
+class TestBedClips:
+    def test_serves_a_clip_the_manifest_lists(self, client, show_env):
+        folder = _bed_folder(show_env, {"1-hiss.mp3": 1.0})
+
+        resp = client.get("/api/show/bed/1-hiss.mp3")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "audio/mpeg"
+        assert resp.content == (folder / "1-hiss.mp3").read_bytes()
+
+    def test_serves_a_range_of_a_clip_for_the_audio_element(self, client, show_env):
+        folder = _bed_folder(show_env, {"1-hiss.mp3": 1.0})
+
+        resp = client.get("/api/show/bed/1-hiss.mp3", headers={"Range": "bytes=0-3"})
+        assert resp.status_code == 206
+        assert resp.content == (folder / "1-hiss.mp3").read_bytes()[:4]
+
+    def test_serves_nothing_the_manifest_does_not_list(self, client, show_env):
+        folder = _bed_folder(show_env, {"1-hiss.mp3": 1.0})
+        (folder / "2-unlisted.mp3").write_bytes(b"ID3")
+        (show_env / "secret.mp3").write_bytes(b"ID3")
+
+        for name in ("2-unlisted.mp3", "bed.json", "nope.mp3", "..%2F..%2Fsecret.mp3", ".hidden.mp3"):
+            assert client.get(f"/api/show/bed/{name}").status_code == 404, name
+
+    def test_no_clip_without_a_bed(self, client, show_env):
+        assert client.get("/api/show/bed/1-hiss.mp3").status_code == 404
+
+
 REPO = Path(__file__).resolve().parent.parent
 DESIGNS = sorted(p.name for p in (REPO / "static" / "show" / "designs").iterdir() if (p / "design.css").is_file())
 
 
-def _plain_page():
-    """templates/show.html as served: Jinja drops the file's final newline."""
-    return (REPO / "templates" / "show.html").read_text(encoding="utf-8").rstrip("\n")
+def _plain_page(bed=False):
+    """templates/show.html as served, rendered by the router's own templates (its one switch: the static bed's
+    script, ?bed=on); Jinja drops the file's final newline."""
+    return show_router._templates.env.get_template("show.html").render(bed=bed).rstrip("\n")
 
 
 class TestDesigns:
@@ -196,6 +294,15 @@ class TestDesigns:
 
     def test_plain_serves_the_plain_page_unchanged(self, client):
         assert client.get("/show?design=plain").text.rstrip("\n") == _plain_page()
+
+    def test_the_plain_page_has_no_static_bed_unless_asked(self, client):
+        assert "/static/show/bed.js" not in client.get("/show?design=plain").text
+        assert "/static/show/bed.js" not in client.get("/show?design=plain&bed=off").text
+
+        resp = client.get("/show?design=plain&bed=on")
+        assert resp.text.rstrip("\n") == _plain_page(bed=True)
+        assert resp.text.index("/static/show/show.js") < resp.text.index("/static/show/bed.js")
+        assert client.get("/static/show/bed.js").status_code == 200
 
     @pytest.mark.parametrize("name", ["nope", "../templates", "..%2Ftemplates", "Old-Radio", "old_radio", "-", ""])
     def test_an_unknown_or_unsafe_design_serves_the_plain_page(self, client, name):
@@ -210,6 +317,7 @@ class TestDesigns:
 
         assert resp.status_code == 200
         for asset in ("/static/show/show.css", "/static/show/show.js", "/static/show/gauge.js",
+                      "/static/show/bed.js",
                       f"/static/show/designs/{name}/design.css", f"/static/show/designs/{name}/design.js"):
             assert asset in resp.text
             assert client.get(asset).status_code == 200
@@ -221,6 +329,7 @@ class TestDesigns:
 
         assert "/static/show/designs/mock.js" in resp.text
         assert client.get("/static/show/designs/mock.js").status_code == 200
+        assert "/static/show/bed.js" not in resp.text
 
     def test_without_a_design_the_chooser_offers_every_design_then_the_plain_page(self, client, show_env):
         resp = client.get("/show")

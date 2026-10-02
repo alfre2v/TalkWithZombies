@@ -274,6 +274,18 @@ class ShowConfig(BaseModel):
     # On, every chunk of the voice is asked for with the run's seed (fitted into the seed range the engine advertises),
     # so a run replayed with the same seed is said the same way; off, none is sent and the engine picks one per chunk.
     voice_seed: bool = False
+    # The static bed: radio static played quietly under the show by the designed pages (the plain page only with
+    # ?bed=on), from the clips in Sounds/bed/ (bed.json, written by zombie-radio's tools/sounds/prepare_bed.py), in
+    # a shuffled order. Its level is bed_volume_voice while a round is said and bed_volume_between while the page
+    # waits (for the next round, for the listener to press, for Whisper); it dips over bed_dip_s and rises over
+    # bed_rise_s, and is silent while push-to-talk is held. With bed_off_in_contact, also silent while the receiver
+    # is on (from the Repair to the Breakdown or the Switch-off). No clips, no bed.
+    bed: bool = True
+    bed_volume_voice: float = Field(default=0.05, ge=0, le=1)
+    bed_volume_between: float = Field(default=0.15, ge=0, le=1)
+    bed_dip_s: float = Field(default=0.5, ge=0)
+    bed_rise_s: float = Field(default=1.5, ge=0)
+    bed_off_in_contact: bool = False
     # Pacing, in rounds: an event every N free rounds (the gap), a tone word kept N rounds (the hold);
     # each drawn N +/- jitter, never below 1; 0 turns it off.
     event_every: int = Field(default=2, ge=0)
@@ -462,6 +474,11 @@ def get_personas_directory() -> Path:
         return _PROJECT_ROOT / "Personas"
     path = Path(configured).expanduser()
     return path if path.is_absolute() else _PROJECT_ROOT / path
+
+
+def get_bed_directory() -> Path:
+    """The static bed's folder, <project root>/Sounds/bed: its clips and bed.json (not tracked in git)."""
+    return _PROJECT_ROOT / "Sounds" / "bed"
 
 
 def load_personas() -> PersonasConfig:

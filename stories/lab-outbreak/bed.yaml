@@ -1,0 +1,79 @@
+# The static bed: which clips of Sounds/bed/ play under this story — radio static, played quietly under the voices
+# by the looks (the fork's docs/runbooks/show-page.md, "The static bed"). The clips live outside git, in Sounds/bed/,
+# put there with Sounds/bed/bed.json (what is on disk, each clip's length and measured gain) by zombie-radio's
+# tools/sounds/prepare_bed.py; this file only chooses. Each clip:
+#   file     its file there
+#   enabled  true or false (optional; true when left out)
+#   gain_db  a change of its level by ear, in dB, added to the measured gain (optional; 0 when left out). 0 changes
+#            nothing; -3 is a little quieter, -6 half the amplitude, +6 twice it
+# Read at every Start: change a line, press Start, and the new list plays. A clip enabled here but missing there is
+# skipped (the app's log says so); without this file, every clip there plays.
+clips:
+  # analog_noise_arped_radio_static.wav (Sampling+ 1.0, 12 s)
+  - file: 11859-analog-noise-arped-radio-static.mp3
+    enabled: true
+    gain_db: 0
+  # Handheld radio music and static (CC BY 4.0, 42 s)
+  - file: 719588-handheld-radio-music-and-static.mp3
+    enabled: true
+    gain_db: 0
+  # radio11.wav (CC BY 4.0, 14 s)
+  - file: 615189-radio11.mp3
+    enabled: true
+    gain_db: 0
+  # Shortwave Radio static with indistinguishable foreign chatter and static (CC BY 4.0, 172 s)
+  - file: 730109-shortwave-radio-static-with-indistinguishable-foreign-chatte.mp3
+    enabled: true
+    gain_db: 0
+  # radio_static_01.flac (CC0 1.0, 85 s)
+  - file: 625095-radio-static-01.mp3
+    enabled: true
+    gain_db: 0
+  # morse static.wav (CC BY 4.0, 5 s)
+  - file: 34418-morse-static.mp3
+    enabled: true
+    gain_db: 0
+  # Full radio sweep.wav (CC0 1.0, 297 s)
+  - file: 396902-full-radio-sweep.mp3
+    enabled: true
+    gain_db: 0
+  # Vintage Radio Tuning 5.WAV (CC0 1.0, 111 s)
+  - file: 652596-vintage-radio-tuning-5.mp3
+    enabled: true
+    gain_db: 0
+  # CS3B_beacon.wav (CC BY-NC 4.0, 12 s)
+  - file: 30302-cs3b-beacon.mp3
+    enabled: true
+    gain_db: 0
+  # harsh analog fm radio flips (CC0 1.0, 21 s)
+  - file: 722884-harsh-analog-fm-radio-flips.mp3
+    enabled: true
+    gain_db: 0
+  # radio tuning fm.mp3 (CC0 1.0, 165 s)
+  - file: 557532-radio-tuning-fm.mp3
+    enabled: true
+    gain_db: 0
+  # Radio Music - A MakeNoise Morphagene Reel (CC0 1.0, 156 s)
+  - file: 624412-radio-music-a-makenoise-morphagene-reel.mp3
+    enabled: true
+    gain_db: 0
+  # S06Russian.wav (CC BY 3.0, 110 s)
+  - file: 255775-s06russian.mp3
+    enabled: true
+    gain_db: 0
+  # Radio transmission morse code @4606.2kHz Poland (CC0 1.0, 76 s)
+  - file: 343740-radio-transmission-morse-code-4606-2khz-poland.mp3
+    enabled: true
+    gain_db: 0
+  # Radio — Generative Sound by Glorb (CC0 1.0, 120 s)
+  - file: 855480-radio-generative-sound-by-glorb.mp3
+    enabled: true
+    gain_db: 0
+  # Dial-up_sound.mp3.flac (CC0 1.0, 19 s)
+  - file: 658932-dial-up-sound-mp3.mp3
+    enabled: true
+    gain_db: 0
+  # The Sound of dial-up Internet (CC0 1.0, 29 s)
+  - file: 546450-the-sound-of-dial-up-internet.mp3
+    enabled: true
+    gain_db: 0
