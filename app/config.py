@@ -274,6 +274,35 @@ class ShowConfig(BaseModel):
     # On, every chunk of the voice is asked for with the run's seed (fitted into the seed range the engine advertises),
     # so a run replayed with the same seed is said the same way; off, none is sent and the engine picks one per chunk.
     voice_seed: bool = False
+    # The static bed: radio static played quietly under the show by the designed pages (the plain page only with
+    # ?bed=on), from the clips in Sounds/bed/ (bed.json, written by zombie-radio's tools/sounds/prepare_bed.py), in
+    # a shuffled order. Its level is bed_volume_voice while a round is said and bed_volume_between while the page
+    # waits (for the next round, for the listener to press, for Whisper); it dips over bed_dip_s and rises over
+    # bed_rise_s, and is silent while push-to-talk is held. With bed_off_in_contact, also silent while the receiver
+    # is on (from the Repair to the Breakdown or the Switch-off). No clips, no bed.
+    # bed_volume_voice and bed_volume_between are the volume controls. They are plain multipliers on the sound's
+    # amplitude (not decibels). bed_dip_s and bed_rise_s are the seconds a change takes.
+    bed: bool = True
+    bed_volume_voice: float = Field(default=0.05, ge=0, le=1)
+    bed_volume_between: float = Field(default=0.15, ge=0, le=1)
+    bed_dip_s: float = Field(default=0.5, ge=0)
+    bed_rise_s: float = Field(default=1.5, ge=0)
+    bed_off_in_contact: bool = False
+    # The bed's silences (bed_silences): after a random time in bed_silence_every_s (seconds, [min, max]) the bed
+    # fades out over bed_silence_fade_s and its clip pauses; after a random length in bed_silence_s it resumes where
+    # it stopped and fades back in. The AM filter (bed_filter, off: the F key flips it live on the page) keeps only
+    # bed_filter_low_hz to bed_filter_high_hz, the band of a small radio's speaker. The fading (QSB, the signal
+    # swelling and sinking): every random time in bed_fading_every_s the level glides to a new one within plus or
+    # minus bed_fading_db decibels; 0 turns it off.
+    bed_silences: bool = True
+    bed_silence_every_s: List[float] = Field(default_factory=lambda: [30.0, 120.0])
+    bed_silence_s: List[float] = Field(default_factory=lambda: [3.0, 15.0])
+    bed_silence_fade_s: float = Field(default=1.0, ge=0)
+    bed_filter: bool = False
+    bed_filter_low_hz: float = Field(default=300.0, gt=0, lt=20000)
+    bed_filter_high_hz: float = Field(default=3000.0, gt=0, lt=20000)
+    bed_fading_db: float = Field(default=3.0, ge=0, le=20)
+    bed_fading_every_s: List[float] = Field(default_factory=lambda: [2.0, 6.0])
     # Pacing, in rounds: an event every N free rounds (the gap), a tone word kept N rounds (the hold);
     # each drawn N +/- jitter, never below 1; 0 turns it off.
     event_every: int = Field(default=2, ge=0)
@@ -325,6 +354,18 @@ class ShowConfig(BaseModel):
     def _trim_target_below_trigger(self):
         if self.trim_target >= self.trim_trigger:
             raise ValueError("show.trim_target must be below show.trim_trigger")
+        return self
+
+    @model_validator(mode="after")
+    def _bed_ranges_are_sound(self):
+        """Check the static bed's ranges: each [min, max] in seconds, above 0 and in order; the filter's band in
+        order."""
+        for name in ("bed_silence_every_s", "bed_silence_s", "bed_fading_every_s"):
+            pair = getattr(self, name)
+            if len(pair) != 2 or not 0 < pair[0] <= pair[1]:
+                raise ValueError(f"show.{name} needs two numbers of seconds, [min, max], above 0 and in order")
+        if self.bed_filter_low_hz >= self.bed_filter_high_hz:
+            raise ValueError("show.bed_filter_low_hz must be below show.bed_filter_high_hz")
         return self
 
     @model_validator(mode="after")
@@ -462,6 +503,11 @@ def get_personas_directory() -> Path:
         return _PROJECT_ROOT / "Personas"
     path = Path(configured).expanduser()
     return path if path.is_absolute() else _PROJECT_ROOT / path
+
+
+def get_bed_directory() -> Path:
+    """The static bed's folder, <project root>/Sounds/bed: its clips, bed.json and CREDITS.md, shipped with the app."""
+    return _PROJECT_ROOT / "Sounds" / "bed"
 
 
 def load_personas() -> PersonasConfig:

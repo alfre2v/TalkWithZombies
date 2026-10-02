@@ -30,6 +30,12 @@ class TestShowConfig:
         assert show.emotion_tags is True
         assert show.debug is False
         assert (show.mood_voices, show.voice_seed) == (True, False)
+        assert (show.bed, show.bed_volume_voice, show.bed_volume_between) == (True, 0.05, 0.15)
+        assert (show.bed_dip_s, show.bed_rise_s, show.bed_off_in_contact) == (0.5, 1.5, False)
+        assert (show.bed_silences, show.bed_silence_every_s, show.bed_silence_s) == (True, [30.0, 120.0], [3.0, 15.0])
+        assert show.bed_silence_fade_s == 1.0
+        assert (show.bed_filter, show.bed_filter_low_hz, show.bed_filter_high_hz) == (False, 300.0, 3000.0)
+        assert (show.bed_fading_db, show.bed_fading_every_s) == (3.0, [2.0, 6.0])
         assert (show.event_every, show.event_jitter, show.tone_hold, show.tone_jitter) == (2, 1, 3, 1)
         assert show.event_report is True
         assert (show.interaction_min_s, show.interaction_max_s) == (60.0, 180.0)
@@ -101,6 +107,20 @@ class TestShowConfig:
         with pytest.raises(ValidationError, match="free_lines"):
             ShowConfig(free_lines=lines, free_line_weights=weights)
 
+    @pytest.mark.parametrize("field", ["bed_silence_every_s", "bed_silence_s", "bed_fading_every_s"])
+    @pytest.mark.parametrize("pair", [[], [5.0], [1.0, 2.0, 3.0], [0, 10], [-1, 10], [20, 10]])
+    def test_unsound_bed_ranges_rejected(self, field, pair):
+        with pytest.raises(ValidationError, match=field):
+            ShowConfig(**{field: pair})
+
+    def test_a_bed_range_of_one_value_is_fine(self):
+        assert ShowConfig(bed_silence_s=[5, 5]).bed_silence_s == [5.0, 5.0]
+
+    @pytest.mark.parametrize("low, high", [(3000, 3000), (3000, 300)])
+    def test_the_bed_filters_band_out_of_order_rejected(self, low, high):
+        with pytest.raises(ValidationError, match="bed_filter_low_hz"):
+            ShowConfig(bed_filter_low_hz=low, bed_filter_high_hz=high)
+
     @pytest.mark.parametrize("field,value", [
         ("story", ""),
         ("max_tokens", 0),
@@ -124,6 +144,21 @@ class TestShowConfig:
         ("recollection_every", -1),
         ("restatement_contacts", 0),
         ("voice_seed", "sometimes"),
+        ("bed", "sometimes"),
+        ("bed_volume_voice", -0.1),
+        ("bed_volume_voice", 1.5),
+        ("bed_volume_between", -0.1),
+        ("bed_volume_between", 1.5),
+        ("bed_dip_s", -1),
+        ("bed_rise_s", -1),
+        ("bed_off_in_contact", "sometimes"),
+        ("bed_silences", "sometimes"),
+        ("bed_silence_fade_s", -1),
+        ("bed_filter", "sometimes"),
+        ("bed_filter_low_hz", 0),
+        ("bed_filter_high_hz", 20000),
+        ("bed_fading_db", -1),
+        ("bed_fading_db", 21),
         ("trim_trigger", 0),
         ("trim_trigger", 1.1),
         ("trim_target", 0),

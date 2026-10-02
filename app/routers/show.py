@@ -32,6 +32,10 @@ only of fixed lines does not ask the model.
 With show.debug on, each round also leaves its debug files
 (app/show/debug.py), failed rounds included, and a recorded round keeps
 them even when the client leaves while they are being written.
+The start reply also brings the static bed (app/show/bed.py): the clips of
+Sounds/bed/bed.json found on disk that the story's bed.yaml enables (all of
+them without one) and the bed's settings; GET /api/show/bed/<file> serves a
+listed clip to the page.
 """
 
 import asyncio
@@ -46,15 +50,16 @@ from typing import AsyncIterator, List, Optional, Tuple
 
 import yaml
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 from app import config as app_config
 from app.config import ShowConfig
-from app.models import (ShowListenRequest, ShowListenResponse, ShowRoundRequest, ShowStartRequest,
+from app.models import (ShowBed, ShowListenRequest, ShowListenResponse, ShowRoundRequest, ShowStartRequest,
                         ShowStartResponse)
 from app.services.llm import server_context, stream_round
 from app.services.stt_client import transcribe_for_show
+from app.show.bed import bed_clips, bed_play_list, clip_path
 from app.show.debug import write_round
 from app.show.director import LISTENS, plan_round
 from app.show.listen import usable
@@ -99,7 +104,7 @@ def _story_title() -> str:
 
 
 @page_router.get("/show", response_class=HTMLResponse)
-async def show_page(request: Request, design: Optional[str] = None, mock: bool = False):
+async def show_page(request: Request, design: Optional[str] = None, mock: bool = False, bed: Optional[str] = None):
     """Serve the show page, which opens a run and plays its rounds.
 
     Without ?design, the chooser (templates/show_choose.html): a card per design, with a live miniature of it, and one
@@ -108,6 +113,7 @@ async def show_page(request: Request, design: Optional[str] = None, mock: bool =
     recorded stretch of a show fills the page, for looking at a design without running one). With ?design=plain, or
     any other name, the plain page, unchanged; with ?mock=1 as well, the plain look filled with that recorded stretch
     (the chooser's preview of the plain page), served from the design template with no design on top.
+    The static bed's script comes with every design, and with the plain page only when ?bed=on; never with ?mock=1.
     """
     if design is None:
         return _templates.TemplateResponse(request, "show_choose.html", {
@@ -118,7 +124,7 @@ async def show_page(request: Request, design: Optional[str] = None, mock: bool =
     if mock:
         return _templates.TemplateResponse(request, "show_design.html",
                                            {"design": None, "design_js": False, "mock": True})
-    return _templates.TemplateResponse(request, "show.html")
+    return _templates.TemplateResponse(request, "show.html", {"bed": bed == "on"})
 
 
 def context_problem(show: ShowConfig, n_ctx: Optional[int]) -> Optional[str]:
@@ -158,7 +164,29 @@ async def start(req: ShowStartRequest):
                              cast=list(story.cast), operator=story.operator, seed=seed,
                              listen_window_s=show.listen_window_s, press_cap_s=show.press_cap_s,
                              debug=show.debug, voices=voice_map(story) if show.mood_voices else {},
-                             voice_seed=show.voice_seed)
+                             voice_seed=show.voice_seed, bed=_bed(show, story))
+
+
+def _bed(show: ShowConfig, story: Story) -> Optional[ShowBed]:
+    """The static bed for the start reply: the clips that play (on disk, and enabled by the story's bed.yaml if it has
+    one) and the bed's settings; None when off or no clip plays."""
+    if not show.bed:
+        return None
+    clips = bed_play_list(bed_clips(app_config.get_bed_directory()), story.bed)
+    if not clips:
+        logger.info("No static bed: no clip of %s plays", app_config.get_bed_directory())
+        return None
+    return ShowBed(clips=clips, **{name[len("bed_"):]: value for name, value in show.model_dump().items()
+                                   if name.startswith("bed_")})
+
+
+@router.get("/bed/{name}")
+async def bed_clip(name: str):
+    """Serve one clip of the static bed: only a file that Sounds/bed/bed.json lists and the disk holds."""
+    path = clip_path(app_config.get_bed_directory(), name)
+    if path is None:
+        raise HTTPException(status_code=404, detail=f"No clip {name!r} in the static bed")
+    return FileResponse(path)
 
 
 def _load(run_id: str) -> Tuple[Run, Story]:

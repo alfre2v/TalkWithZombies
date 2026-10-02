@@ -10,7 +10,9 @@ A story is a folder ``stories/<name>/`` holding:
 - ``events.yaml`` — the events, filed by overtone, then by theme;
 - ``agenda.yaml`` — what the cast want from a listener, one item per exchange; the first opens every contact;
 - ``beats.yaml`` (optional) — the receiver beats' fixed lines, said word for word by a cast member instead of written
-  by the model; without it, the model writes the beats.
+  by the model; without it, the model writes the beats;
+- ``bed.yaml`` (optional) — which clips of the static bed (in ``Sounds/bed/``, shipped with the app) play under the
+  story, each switched on or off, with a change of its level by ear; without it, every clip there plays.
 
 The body's placeholders are filled at render time: ``model_prefix`` from the settings, ``format_rules`` from the
 rule snippet the emotion switch picks, ``episode`` from the current episode.
@@ -27,6 +29,7 @@ from jinja2 import Environment, StrictUndefined
 from app import config as app_config
 from app.config import ShowConfig
 from app.services.persona_store import REFERENCE_CLIP, parse_frontmatter
+from app.show.bed import CLIP_NAME
 from app.show.grammar import MOODS
 
 _RULES_DIR = Path(__file__).resolve().parent / "rules"
@@ -73,11 +76,20 @@ class Beats:
 
 
 @dataclass(frozen=True)
+class BedClip:
+    """One clip of the story's static bed (bed.yaml): its file in Sounds/bed/, whether it plays, and a change of its
+    level by ear, in dB, added to the gain measured for it (Sounds/bed/bed.json)."""
+    file: str
+    enabled: bool = True
+    gain_db: float = 0.0
+
+
+@dataclass(frozen=True)
 class Story:
     """A loaded story.
 
     events and tones hold every event and every tone word, flattened; event_pools and overtones hold them filed
-    by overtone and theme.
+    by overtone and theme. bed is the static bed's clips as bed.yaml lists them, or None without the file.
     """
     name: str
     title: str
@@ -94,6 +106,7 @@ class Story:
     orientation: str = ""
     directions: Dict[str, str] = field(default_factory=dict)
     beats: Optional[Beats] = None
+    bed: Optional[Tuple[BedClip, ...]] = None
 
 
 def load_story(name: str, root: Optional[Path] = None) -> Story:
@@ -137,7 +150,7 @@ def load_story(name: str, root: Optional[Path] = None) -> Story:
                  overtones=overtones, kinds=kinds, weights=weights, event_pools=pools,
                  agenda=_load_agenda(name, folder / "agenda.yaml"), orientation=orientation.strip(),
                  directions={beat: text.strip() for beat, text in directions.items()},
-                 beats=_load_beats(name, folder / "beats.yaml"))
+                 beats=_load_beats(name, folder / "beats.yaml"), bed=_load_bed(name, folder / "bed.yaml"))
 
 
 def _read_yaml(name: str, path: Path) -> dict:
@@ -285,6 +298,47 @@ def _load_beats(name: str, path: Path) -> Optional[Beats]:
                  breakdown=texts(data.get("breakdown"), "breakdown"),
                  switch_off_nobody_answered=texts(switch_off.get("nobody-answered"), "switch-off: nobody-answered"),
                  switch_off_voice_lost=texts(switch_off.get("voice-lost"), "switch-off: voice-lost"))
+
+
+_BED_KEYS = {"file", "enabled", "gain_db"}
+_BED_GAIN_DB = 40  # a change by ear is kept within plus or minus this
+
+
+def _load_bed(name: str, path: Path) -> Optional[Tuple[BedClip, ...]]:
+    """Read bed.yaml, if the story has one: 'clips', a list of {file, enabled, gain_db}. file is a clip's plain name
+    in Sounds/bed/, named once; enabled (true or false, default true) and gain_db (a number of dB, default 0) are
+    optional; any other key fails, so a misspelled one is never ignored. None without the file."""
+    if not path.is_file():
+        return None
+    data = _read_yaml(name, path)
+
+    def fail(what: str):
+        raise StoryError(f"story {name!r}: bed.yaml {what}")
+
+    entries = data.get("clips")
+    if not isinstance(entries, list):
+        fail("needs 'clips', a list of {file, enabled, gain_db}")
+    clips = []
+    for entry in entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get("file"), str):
+            fail(f"needs a file for each clip: {entry!r}")
+        file = entry["file"]
+        unknown = sorted(set(entry) - _BED_KEYS)
+        if unknown:
+            fail(f"does not know {', '.join(map(str, unknown))} (for {file}): only file, enabled, gain_db")
+        if not CLIP_NAME.fullmatch(file):
+            fail(f"names {file!r}, not a clip's plain file name (e.g. 730109-shortwave-radio-static.mp3)")
+        enabled = entry.get("enabled", True)
+        if not isinstance(enabled, bool):
+            fail(f"needs enabled true or false for {file}")
+        gain_db = entry.get("gain_db", 0)
+        if isinstance(gain_db, bool) or not isinstance(gain_db, (int, float)) or abs(gain_db) > _BED_GAIN_DB:
+            fail(f"needs gain_db a number of dB within -{_BED_GAIN_DB} and {_BED_GAIN_DB} for {file}")
+        clips.append(BedClip(file=file, enabled=enabled, gain_db=float(gain_db)))
+    files = [c.file for c in clips]
+    if len(set(files)) != len(files):
+        fail(f"names a clip twice: {sorted({f for f in files if files.count(f) > 1})}")
+    return tuple(clips)
 
 
 def _voices(raw, moods: Tuple[str, ...], fail) -> Dict[str, str]:

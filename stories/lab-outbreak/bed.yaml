@@ -1,0 +1,46 @@
+# The static bed: which clips of Sounds/bed/ play under this story — radio static, played quietly under the voices
+# by the looks (the fork's docs/runbooks/show-page.md, "The static bed"). The clips ship with the app in Sounds/bed/,
+# with Sounds/bed/bed.json (what is on disk, each clip's length and measured gain) and CREDITS.md, all written by
+# zombie-radio's tools/sounds/prepare_bed.py; this file only chooses. The eight were chosen by the owner by ear, one by
+# one, on 2026-10-02 (zombie-radio's sound-effects discussion, §8.22). Each clip:
+#   file     its file there
+#   enabled  true or false (optional; true when left out)
+#   gain_db  a change of its level by ear, in dB, added to the measured gain (optional; 0 when left out). 0 changes
+#            nothing; -3 is a little quieter, -6 half the amplitude, +6 twice it
+# Read when a run opens: change a line, reload the show page and press Start, and the new run plays the new list,
+# with no restart of the app (Resume continues the same run, with its list). A clip enabled here but missing there
+# is skipped (the app's log says so); without this file, every clip there plays.
+clips:
+  # Handheld radio music and static (CC BY 4.0, 42 s)
+  - file: 719588-handheld-radio-music-and-static.mp3
+    enabled: true
+    gain_db: 0
+  # Shortwave Radio static with indistinguishable foreign chatter and static (CC BY 4.0, 172 s)
+  - file: 730109-shortwave-radio-static-with-indistinguishable-foreign-chatte.mp3
+    enabled: true
+    gain_db: 0
+  # radio_static_01.flac (CC0 1.0, 85 s)
+  - file: 625095-radio-static-01.mp3
+    enabled: true
+    gain_db: 0
+  # Vintage Radio Tuning 5.WAV (CC0 1.0, 111 s)
+  - file: 652596-vintage-radio-tuning-5.mp3
+    enabled: true
+    gain_db: 0
+  # radio tuning fm.mp3 (CC0 1.0, 165 s)
+  - file: 557532-radio-tuning-fm.mp3
+    enabled: true
+    gain_db: 0
+  # Radio Music - A MakeNoise Morphagene Reel (CC0 1.0, 156 s)
+  - file: 624412-radio-music-a-makenoise-morphagene-reel.mp3
+    enabled: true
+    gain_db: 0
+  # S06Russian.wav (CC BY 3.0, 110 s)
+  - file: 255775-s06russian.mp3
+    enabled: true
+    gain_db: 0
+  # Radio transmission morse code @4606.2kHz Poland (CC0 1.0, 76 s)
+  # Lowered by ear, the owner (2026-10-02): "it annoys my ears, but it is the real thing, so we keep it"
+  - file: 343740-radio-transmission-morse-code-4606-2khz-poland.mp3
+    enabled: true
+    gain_db: -6
