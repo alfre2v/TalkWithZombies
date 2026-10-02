@@ -6,8 +6,9 @@
 #   enabled  true or false (optional; true when left out)
 #   gain_db  a change of its level by ear, in dB, added to the measured gain (optional; 0 when left out). 0 changes
 #            nothing; -3 is a little quieter, -6 half the amplitude, +6 twice it
-# Read at every Start: change a line, press Start, and the new list plays. A clip enabled here but missing there is
-# skipped (the app's log says so); without this file, every clip there plays.
+# Read when a run opens: change a line, reload the show page and press Start, and the new run plays the new list,
+# with no restart of the app (Resume continues the same run, with its list). A clip enabled here but missing there
+# is skipped (the app's log says so); without this file, every clip there plays.
 clips:
   # analog_noise_arped_radio_static.wav (Sampling+ 1.0, 12 s)
   - file: 11859-analog-noise-arped-radio-static.mp3

@@ -266,6 +266,15 @@ down around it.)
   `?design=amateur-radio-transmitter`). The plain page stays silent, the
   working page, unless you ask: add `&bed=on` to its address
   (<http://127.0.0.1:8010/show?design=plain&bed=on>). Not with `&mock=1`.
+- **The volume:** `bed_volume_voice` and `bed_volume_between` are plain
+  multipliers on the sound's amplitude, not decibels: 0 is silence, 1 the
+  clips' common level (every clip first brought to the same average level
+  by its own gain). In dB, 20 × log₁₀(value): 0.15 is −16.5 dB, 0.05 is
+  −26 dB. To make the whole bed quieter, multiply both by the same
+  factor, so the dip keeps its shape: × 0.5 (0.075 / 0.025) is −6 dB,
+  half the amplitude; × 1/3 (0.05 / 0.017) about −9.5 dB, which sounds
+  about half as loud. `bed_dip_s` and `bed_rise_s` are the seconds a
+  change takes.
 - **How loud, and when:** low while a round is said
   (`bed_volume_voice`, 0.05), higher while the page waits — for the next
   round, for you to press, for Whisper (`bed_volume_between`, 0.15). It
@@ -310,8 +319,11 @@ down around it.)
       gain_db: 0
   ```
 
-  **The story is read at every Start:** change a line, press Start (or
-  reload the page and Start), and the new list plays — no restart. A clip
+  **The story is read when a run opens:** change a line, **reload the
+  show page and press Start**, and the new run plays the new list — no
+  restart of the app, unlike the settings (`settings.yaml` is read once,
+  when the app starts). Start shows only on a fresh page; Resume
+  continues the same run, with the list it opened with. A clip
   enabled there but missing from `Sounds/bed/` is skipped (the app's log
   says so); a misspelled key or a bad value refuses the start with the
   line at fault ("bed.yaml does not know enable …"); without the file,

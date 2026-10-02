@@ -280,6 +280,8 @@ class ShowConfig(BaseModel):
     # waits (for the next round, for the listener to press, for Whisper); it dips over bed_dip_s and rises over
     # bed_rise_s, and is silent while push-to-talk is held. With bed_off_in_contact, also silent while the receiver
     # is on (from the Repair to the Breakdown or the Switch-off). No clips, no bed.
+    # bed_volume_voice and bed_volume_between are the volume controls. They are plain multipliers on the sound's
+    # amplitude (not decibels). bed_dip_s and bed_rise_s are the seconds a change takes.
     bed: bool = True
     bed_volume_voice: float = Field(default=0.05, ge=0, le=1)
     bed_volume_between: float = Field(default=0.15, ge=0, le=1)
