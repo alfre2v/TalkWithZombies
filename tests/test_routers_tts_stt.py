@@ -188,6 +188,56 @@ class TestTTSProxy:
         assert resp.json()["reference"] == "ref.wav"
         assert seen["audio"] == b"RIFF-ref"
 
+    def _reference_format(self, monkeypatch, fmt):
+        """Set show.reference_format for the request."""
+        monkeypatch.setattr(app_config.get_settings(), "show", ShowConfig(reference_format=fmt))
+
+    def test_with_ogg_the_compressed_copy_of_the_default_clip_is_sent(self, client, monkeypatch, tmp_path):
+        _persona_cache(monkeypatch, PersonasConfig(personas=[self._tts_capable_persona(tmp_path)]))
+        (tmp_path / "luna.ogg").write_bytes(b"OggS-ref")
+        self._reference_format(monkeypatch, "ogg")
+        seen = self._fake_synthesize(monkeypatch)
+
+        resp = client.post("/api/tts", json={"text": "hello", "persona_name": "Luna"})
+
+        assert resp.json()["reference"] == "ref.wav"
+        assert seen == {"reference_text": "a reference transcript", "audio": b"OggS-ref"}
+
+    def test_with_ogg_a_named_clip_s_copy_is_sent_with_the_clip_s_transcript(self, client, monkeypatch, tmp_path):
+        _persona_cache(monkeypatch, PersonasConfig(personas=[self._tts_capable_persona(tmp_path)]))
+        (tmp_path / "ref-fear.wav").write_bytes(b"RIFF-fear")
+        (tmp_path / "ref-fear.ogg").write_bytes(b"OggS-fear")
+        (tmp_path / "ref-fear.txt").write_text("a fearful transcript", encoding="utf-8")
+        self._reference_format(monkeypatch, "ogg")
+        seen = self._fake_synthesize(monkeypatch)
+
+        resp = client.post("/api/tts", json={"text": "hello", "persona_name": "Luna", "reference": "ref-fear.wav"})
+
+        assert resp.json()["reference"] == "ref-fear.wav"
+        assert seen == {"reference_text": "a fearful transcript", "audio": b"OggS-fear"}
+
+    def test_with_ogg_a_clip_without_its_copy_is_sent_as_its_wav(self, client, monkeypatch, tmp_path):
+        _persona_cache(monkeypatch, PersonasConfig(personas=[self._tts_capable_persona(tmp_path)]))
+        (tmp_path / "ref-fear.wav").write_bytes(b"RIFF-fear")
+        (tmp_path / "ref-fear.txt").write_text("a fearful transcript", encoding="utf-8")
+        self._reference_format(monkeypatch, "ogg")
+        seen = self._fake_synthesize(monkeypatch)
+
+        resp = client.post("/api/tts", json={"text": "hello", "persona_name": "Luna", "reference": "ref-fear.wav"})
+
+        assert resp.status_code == 200
+        assert seen["audio"] == b"RIFF-fear"
+
+    def test_with_wav_the_copy_beside_the_clip_is_not_sent(self, client, monkeypatch, tmp_path):
+        _persona_cache(monkeypatch, PersonasConfig(personas=[self._tts_capable_persona(tmp_path)]))
+        (tmp_path / "luna.ogg").write_bytes(b"OggS-ref")
+        self._reference_format(monkeypatch, "wav")
+        seen = self._fake_synthesize(monkeypatch)
+
+        client.post("/api/tts", json={"text": "hello", "persona_name": "Luna"})
+
+        assert seen["audio"] == b"RIFF-ref"
+
     RUN = "2026-09-30T19-02-11"
 
     def _engine(self, monkeypatch):

@@ -149,6 +149,7 @@ async def tts_proxy(req: TTSRequest):
     if clip:
         audio_path, transcript_path = str(clip[0]), str(clip[1])
         used = req.reference
+    audio_path = str(persona_store.reference_file(Path(audio_path), get_settings().show.reference_format))
     audio_b64 = encode_reference_audio(audio_path)
     transcript = read_transcript(transcript_path)
 

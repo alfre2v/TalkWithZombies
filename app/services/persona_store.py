@@ -449,6 +449,15 @@ def reference_clip(persona_dir: Path, name: Optional[str]) -> Optional[Tuple[Pat
     return (audio, transcript) if audio.is_file() and transcript.is_file() else None
 
 
+def reference_file(audio: Path, fmt: str) -> Path:
+    """The file to send for a reference clip: its copy in fmt beside it (ref-fear.ogg for ref-fear.wav) when fmt is
+    not wav and the copy exists, else the clip itself. The copy shares the clip's transcript."""
+    if fmt == "wav":
+        return audio
+    copy = audio.with_suffix(f".{fmt}")
+    return copy if copy.is_file() else audio
+
+
 def remove_reference_audio_file(persona_dir: Path) -> bool:
     """Delete the persona's ref.wav if present. Returns True if removed."""
     path = persona_dir / REFERENCE_AUDIO_FILENAME

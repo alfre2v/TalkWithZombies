@@ -287,6 +287,20 @@ class TestGeneralConfigBounds:
         assert cfg.global_system_prompt == ""
 
 
+class TestShowConfigReferenceFormat:
+    def test_defaults_to_wav(self):
+        assert app_config.ShowConfig().reference_format == "wav"
+
+    @pytest.mark.parametrize("value", ["wav", "ogg"])
+    def test_accepts_wav_and_ogg(self, value):
+        assert app_config.ShowConfig(reference_format=value).reference_format == value
+
+    @pytest.mark.parametrize("value", ["mp3", "OGG", ".ogg", ""])
+    def test_rejects_any_other_format(self, value):
+        with pytest.raises(ValidationError):
+            app_config.ShowConfig(reference_format=value)
+
+
 class TestGeneralConfigEnablePersonaMemories:
     """general.enable_persona_memories is a STRICT boolean (docs/
     feature_persona_memory.md): pydantic's lax coercion would silently turn

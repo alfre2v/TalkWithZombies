@@ -65,6 +65,38 @@ show:
 Check: the debug line appears under each round; with the browser's console
 open (Developer Tools), the bed names each clip it plays.
 
+## The voice's reference clips, compressed
+
+Every line the voice says is sent with its character's reference clip. The
+clips are WAVs of about 450-650 KB; their Opus copies are about 8 times
+smaller, which matters on a slow uplink (a crowded venue's Wi-Fi):
+
+```yaml
+show:
+  reference_format: ogg   # send each clip's compressed copy (ref-fear.ogg beside ref-fear.wav); wav sends the originals
+```
+
+**First, make the copies** — from zombie-radio's clone, with its tool, which
+writes an `.ogg` beside every `ref.wav` and `ref-<word>.wav` of the cast and
+never touches the WAVs
+(`/Users/alfredo/workspace/hackTNT_2026/zombie-radio-claude/tools/voices/compress_voices.py`):
+
+```bash
+# From zombie-radio's clone: an Opus copy (48 kbps) beside every reference clip of the cast
+uv run python tools/voices/compress_voices.py
+```
+
+A clip without its copy is sent as its WAV, so a missing copy never breaks a
+line. The copies share the clips' transcripts and names: the story still says
+`ref-fear.wav`.
+
+**Back to the originals, even during a show:** `reference_format: wav` (or
+delete the line) and restart the app; the copies can stay on disk.
+
+Check: with `debug: true` too, each voice chunk's record in
+`runs/<run-id>/debug/audio/` names the file sent (`"clip"`) — it ends in
+`.ogg`.
+
 ## The static bed
 
 The radio static under the show, in the looks (`?design=old-radio`,

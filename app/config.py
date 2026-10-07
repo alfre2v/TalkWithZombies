@@ -13,7 +13,7 @@ the two stock example personas when no Personas directory exists yet.
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import yaml
 from pydantic import BaseModel, Field, model_validator
@@ -274,6 +274,10 @@ class ShowConfig(BaseModel):
     # On, every chunk of the voice is asked for with the run's seed (fitted into the seed range the engine advertises),
     # so a run replayed with the same seed is said the same way; off, none is sent and the engine picks one per chunk.
     voice_seed: bool = False
+    # The reference clip sent to the voice: wav, the clip itself, or ogg, its compressed copy beside it (ref-fear.ogg
+    # beside ref-fear.wav, written by zombie-radio's tools/voices/compress_voices.py). A clip without the copy is sent
+    # as its .wav, so a missing copy never breaks a line; switching back to wav is this one line.
+    reference_format: Literal["wav", "ogg"] = "wav"
     # The static bed: radio static played quietly under the show by the designed pages (the plain page only with
     # ?bed=on), from the clips in Sounds/bed/ (bed.json, written by zombie-radio's tools/sounds/prepare_bed.py), in
     # a shuffled order. Its level is bed_volume_voice while a round is said and bed_volume_between while the page
