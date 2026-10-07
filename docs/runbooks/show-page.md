@@ -360,6 +360,33 @@ For example, this checkout on 2026-10-01 (17 clips prepared):
 `null` instead means `bed: false`, no clip in `Sounds/bed/`, or none of
 them enabled by the story's `bed.yaml`.
 
+## The ambience
+
+The world outside the lab, heard through the broadcast, wherever the static
+plays (the looks; the plain page with `&bed=on`): the dead moaning, gunfire
+and explosions, distant screams, a storm. Thirty-one clips, generated with
+Stable Audio 3 Small-SFX and chosen by ear, ship with the app in
+`Sounds/ambience/` (CC0, credited in its `CREDITS.md`); the story's
+`ambience.yaml` chooses which play.
+
+- **Textures and spots:** a texture (long, continuous: the moaning, the
+  warfare, the storm) plays after another, shuffled; a spot (a shriek, an
+  explosion, a scream, a laugh) comes after a random wait of 20-60 s, never
+  the same one twice in a row.
+- **Its level follows the show** as the static's does — lower under a line,
+  higher between rounds, silent while you hold to talk, paused on Stop — but
+  it goes on while the RECEIVER sign is lit: the world outside does not stop
+  for a call. Its silences (the textures only; a spot can break one) and its
+  fading run on timers of their own, never in step with the static's.
+- **Inside the broadcast:** it goes through the static's AM filter, at the
+  same band; **the F key flips both**.
+- **The A key mutes it** (and unmutes it), with a short fade; the M key mutes
+  the static only.
+
+Its settings (`ambience_*`): [`show-settings.md`](show-settings.md), "The
+ambience". With the debug line on, the browser's console names each texture,
+spot, silence, and the A and F keys.
+
 ## Talk back
 
 - **The microphone** is asked for once, when you press Start (the

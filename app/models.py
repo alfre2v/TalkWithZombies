@@ -367,6 +367,36 @@ class ShowBed(BaseModel):
     fading_every_s: List[float]
 
 
+class ShowAmbienceClip(BaseModel):
+    """One clip of the ambience: its file in /api/show/ambience/, its gain to the common level, and its kind: a
+    texture (long, continuous) or a spot (short, a single event)."""
+    file: str
+    gain: float
+    kind: str
+
+
+class ShowAmbience(BaseModel):
+    """The ambience as the page plays it: its clips, the show's ambience_* settings without their prefix, and the
+    static bed's AM filter (its switch and band), which it goes through too."""
+    clips: List[ShowAmbienceClip]
+    volume_voice: float
+    volume_between: float
+    dip_s: float
+    rise_s: float
+    silences: bool
+    silence_every_s: List[float]
+    silence_s: List[float]
+    silence_fade_s: float
+    fading_db: float
+    fading_every_s: List[float]
+    spots: bool
+    spot_every_s: List[float]
+    spot_volume: float
+    filter: bool
+    filter_low_hz: float
+    filter_high_hz: float
+
+
 class ShowStartResponse(BaseModel):
     """The run just opened: its id, story, cast and seed, and the show settings the page needs.
 
@@ -374,7 +404,9 @@ class ShowStartResponse(BaseModel):
     the page's debug line; voices maps each mood to the reference clip its
     lines are spoken with (empty: every line uses ref.wav); voice_seed says
     whether the page sends the run's seed with each chunk of the voice; bed
-    is the static bed (None when show.bed is off or no clip is on disk).
+    is the static bed (None when show.bed is off or no clip is on disk);
+    ambience the world outside (None when show.ambience is off or no clip
+    plays).
     """
     run_id: str
     story: str
@@ -388,6 +420,7 @@ class ShowStartResponse(BaseModel):
     voices: Dict[str, str] = Field(default_factory=dict)
     voice_seed: bool = False
     bed: Optional[ShowBed] = None
+    ambience: Optional[ShowAmbience] = None
 
 
 class ShowRoundRequest(BaseModel):
