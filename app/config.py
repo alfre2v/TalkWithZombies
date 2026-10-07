@@ -307,6 +307,29 @@ class ShowConfig(BaseModel):
     bed_filter_high_hz: float = Field(default=3000.0, gt=0, lt=20000)
     bed_fading_db: float = Field(default=3.0, ge=0, le=20)
     bed_fading_every_s: List[float] = Field(default_factory=lambda: [2.0, 6.0])
+    # The ambience: the world outside the lab, heard through the broadcast (the dead, the fighting, the people, the
+    # weather), from the clips in Sounds/ambience/ (ambience.json, written by zombie-radio's
+    # tools/sounds/prepare_ambience.py), chosen by the story's ambience.yaml. Its textures (long, continuous) play one
+    # after another in a shuffled order; its spots (short, single events), with ambience_spots, one at a time, a
+    # random wait in ambience_spot_every_s apart, at ambience_spot_volume times the textures' level. Its level is
+    # ambience_volume_voice while a round is said and ambience_volume_between while the page waits; silent while
+    # push-to-talk is held; it goes on while the receiver is on. Its own silences and fading, as the bed's
+    # (ambience_silence_*, ambience_fading_*), on timers of their own, never in step with the bed's. It goes through
+    # the bed's AM filter, at the bed's band (the F key flips both); the A key mutes it. No clips, no ambience.
+    ambience: bool = True
+    ambience_volume_voice: float = Field(default=0.12, ge=0, le=1)
+    ambience_volume_between: float = Field(default=0.3, ge=0, le=1)
+    ambience_dip_s: float = Field(default=0.8, ge=0)
+    ambience_rise_s: float = Field(default=2.5, ge=0)
+    ambience_silences: bool = True
+    ambience_silence_every_s: List[float] = Field(default_factory=lambda: [45.0, 150.0])
+    ambience_silence_s: List[float] = Field(default_factory=lambda: [5.0, 20.0])
+    ambience_silence_fade_s: float = Field(default=2.0, ge=0)
+    ambience_fading_db: float = Field(default=4.0, ge=0, le=20)
+    ambience_fading_every_s: List[float] = Field(default_factory=lambda: [5.0, 15.0])
+    ambience_spots: bool = True
+    ambience_spot_every_s: List[float] = Field(default_factory=lambda: [20.0, 60.0])
+    ambience_spot_volume: float = Field(default=1.0, ge=0, le=4)
     # Pacing, in rounds: an event every N free rounds (the gap), a tone word kept N rounds (the hold);
     # each drawn N +/- jitter, never below 1; 0 turns it off.
     event_every: int = Field(default=2, ge=0)
@@ -512,6 +535,12 @@ def get_personas_directory() -> Path:
 def get_bed_directory() -> Path:
     """The static bed's folder, <project root>/Sounds/bed: its clips, bed.json and CREDITS.md, shipped with the app."""
     return _PROJECT_ROOT / "Sounds" / "bed"
+
+
+def get_ambience_directory() -> Path:
+    """The ambience's folder, <project root>/Sounds/ambience: its clips, ambience.json and CREDITS.md, shipped with
+    the app."""
+    return _PROJECT_ROOT / "Sounds" / "ambience"
 
 
 def load_personas() -> PersonasConfig:

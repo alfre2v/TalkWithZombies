@@ -1,0 +1,140 @@
+# The ambience: which clips of Sounds/ambience/ play under this story — the world outside the lab, heard through the
+# broadcast: the dead, the fighting, the people, the weather. The clips ship with the app in Sounds/ambience/, with
+# Sounds/ambience/ambience.json (what is on disk: each clip's kind, length and measured gain) and CREDITS.md, all
+# written by zombie-radio's tools/sounds/prepare_ambience.py; this file only chooses. The 31 were generated with
+# Stable Audio 3 Small-SFX and chosen by the owner by ear on 2026-10-07 (zombie-radio's TODO, Task 13). A texture
+# (long, continuous) plays one after another; a spot (short, a single event) now and then, on top. Each clip:
+#   file     its file there
+#   enabled  true or false (optional; true when left out)
+#   gain_db  a change of its level by ear, in dB, added to the measured gain (optional; 0 when left out). 0 changes
+#            nothing; -3 is a little quieter, -6 half the amplitude, +6 twice it
+# Read when a run opens: change a line, reload the show page and press Start, and the new run plays the new list,
+# with no restart of the app. A clip enabled here but missing there is skipped (the app's log says so); without this
+# file, every clip there plays.
+clips:
+  # Textures
+  # A large crowd of zombies moaning far away at night, low and continuous (25 s)
+  - file: dead-crowd-far-1.mp3
+    enabled: true
+    gain_db: 0
+  # A huge horde of the undead murmuring and groaning in the distance, a steady low drone (25 s)
+  - file: dead-horde-murmur-1.mp3
+    enabled: true
+    gain_db: 0
+  # A few zombies slowly moaning just outside a concrete wall, muffled, continuous (25 s)
+  - file: dead-few-close-1.mp3
+    enabled: true
+    gain_db: 0
+  # A restless crowd of zombies outside, groans rising and falling, agitated, steady (25 s)
+  - file: dead-restless-1.mp3
+    enabled: true
+    gain_db: 0
+  # Slow heavy fists banging on a metal door, muffled moans behind it, continuous (25 s)
+  - file: dead-banging-door-1.mp3
+    enabled: true
+    gain_db: 0
+  # A crowd of zombies moaning, slowly getting louder as they come closer (25 s)
+  - file: dead-swelling-1.mp3
+    enabled: true
+    gain_db: 0
+  # A car alarm wailing far away in an empty city, continuous (25 s)
+  - file: car-alarm-far-1.mp3
+    enabled: true
+    gain_db: 0
+  # Dogs barking far away in a deserted city at night, continuous (25 s)
+  - file: dogs-far-1.mp3
+    enabled: true
+    gain_db: 0
+  # A distant crowd of people panicking and screaming, muffled by distance, continuous (25 s)
+  - file: crowd-panic-far-1.mp3
+    enabled: true
+    gain_db: 0
+  # A heavy thunderstorm, loud thunder claps and pouring rain, continuous (25 s)
+  - file: thunderstorm-1.mp3
+    enabled: true
+    gain_db: 0
+  # A heavy thunderstorm, loud thunder claps and pouring rain, continuous (25 s)
+  - file: thunderstorm-2.mp3
+    enabled: true
+    gain_db: 0
+  # A heavy thunderstorm, loud thunder claps and pouring rain, continuous (25 s)
+  - file: thunderstorm-3.mp3
+    enabled: true
+    gain_db: 0
+  # A continuous gunfight outside, repeated machine gun bursts and many gunshots, warfare (20 s)
+  - file: warfare-1.mp3
+    enabled: true
+    gain_db: 0
+  # A continuous gunfight outside, repeated machine gun bursts and many gunshots, warfare (20 s)
+  - file: warfare-3.mp3
+    enabled: true
+    gain_db: 0
+  # A continuous gunfight outside, repeated machine gun bursts and many gunshots, warfare (20 s)
+  - file: warfare-4.mp3
+    enabled: true
+    gain_db: 0
+  # A continuous gunfight outside, repeated machine gun bursts and many gunshots, warfare (20 s)
+  - file: warfare-5.mp3
+    enabled: true
+    gain_db: 0
+  # Spots
+  # A single long low zombie moan outside, close (5 s)
+  - file: dead-moan-long-1.mp3
+    enabled: true
+    gain_db: 0
+  # A frantic zombie shriek in the distance (3 s)
+  - file: dead-shriek-1.mp3
+    enabled: true
+    gain_db: 0
+  # A group of zombies screaming frantically far away (4 s)
+  - file: dead-screams-group-1.mp3
+    enabled: true
+    gain_db: 0
+  # A guttural zombie growl right outside a window (3 s)
+  - file: dead-growl-1.mp3
+    enabled: true
+    gain_db: 0
+  # A wet gurgling groan of a zombie, close (3 s)
+  - file: dead-gurgle-1.mp3
+    enabled: true
+    gain_db: 0
+  # A single inhuman howl far away in the night (4 s)
+  - file: dead-howl-far-1.mp3
+    enabled: true
+    gain_db: 0
+  # Zombies snarling and snapping their teeth outside a door (3 s)
+  - file: dead-snarling-1.mp3
+    enabled: true
+    gain_db: 0
+  # A burst of machine gun fire in the distance (3 s)
+  - file: gun-burst-far-1.mp3
+    enabled: true
+    gain_db: 0
+  # A few single gunshots far away, echoing between buildings (4 s)
+  - file: gun-shots-far-1.mp3
+    enabled: true
+    gain_db: 0
+  # A woman screaming in terror in the distance (3 s)
+  - file: scream-woman-far-1.mp3
+    enabled: true
+    gain_db: 0
+  # A man screaming in pain far away (3 s)
+  - file: scream-man-far-1.mp3
+    enabled: true
+    gain_db: 0
+  # Hysterical laughter echoing in the distance at night (5 s)
+  - file: laughter-far-1.mp3
+    enabled: true
+    gain_db: 0
+  # A person laughing hysterically just outside a window, muffled (4 s)
+  - file: laughter-close-1.mp3
+    enabled: true
+    gain_db: 0
+  # A loud explosion outside, a powerful boom and rumbling debris (5 s)
+  - file: explosion-4.mp3
+    enabled: true
+    gain_db: 0
+  # A loud explosion outside, a powerful boom and rumbling debris (5 s)
+  - file: explosion-5.mp3
+    enabled: true
+    gain_db: 0

@@ -35,7 +35,10 @@ them even when the client leaves while they are being written.
 The start reply also brings the static bed (app/show/bed.py): the clips of
 Sounds/bed/bed.json found on disk that the story's bed.yaml enables (all of
 them without one) and the bed's settings; GET /api/show/bed/<file> serves a
-listed clip to the page.
+listed clip to the page. And the ambience, the world outside the lab, the same
+way: the clips of Sounds/ambience/ambience.json that the story's
+ambience.yaml enables, each with its kind (texture or spot), its settings and
+the bed's AM filter; GET /api/show/ambience/<file> serves a listed clip.
 """
 
 import asyncio
@@ -55,11 +58,11 @@ from fastapi.templating import Jinja2Templates
 
 from app import config as app_config
 from app.config import ShowConfig
-from app.models import (ShowBed, ShowListenRequest, ShowListenResponse, ShowRoundRequest, ShowStartRequest,
+from app.models import (ShowAmbience, ShowBed, ShowListenRequest, ShowListenResponse, ShowRoundRequest, ShowStartRequest,
                         ShowStartResponse)
 from app.services.llm import server_context, stream_round
 from app.services.stt_client import transcribe_for_show
-from app.show.bed import bed_clips, bed_play_list, clip_path
+from app.show.bed import AMBIENCE_MANIFEST, bed_clips, bed_play_list, clip_path
 from app.show.debug import write_round
 from app.show.director import LISTENS, plan_round
 from app.show.listen import usable
@@ -164,7 +167,8 @@ async def start(req: ShowStartRequest):
                              cast=list(story.cast), operator=story.operator, seed=seed,
                              listen_window_s=show.listen_window_s, press_cap_s=show.press_cap_s,
                              debug=show.debug, voices=voice_map(story) if show.mood_voices else {},
-                             voice_seed=show.voice_seed, bed=_bed(show, story))
+                             voice_seed=show.voice_seed, bed=_bed(show, story),
+                             ambience=_ambience(show, story))
 
 
 def _bed(show: ShowConfig, story: Story) -> Optional[ShowBed]:
@@ -178,6 +182,33 @@ def _bed(show: ShowConfig, story: Story) -> Optional[ShowBed]:
         return None
     return ShowBed(clips=clips, **{name[len("bed_"):]: value for name, value in show.model_dump().items()
                                    if name.startswith("bed_")})
+
+
+def _ambience(show: ShowConfig, story: Story) -> Optional[ShowAmbience]:
+    """The ambience for the start reply: the clips that play (on disk with a kind, and enabled by the story's
+    ambience.yaml if it has one), its settings, and the bed's AM filter; None when off or no clip plays."""
+    if not show.ambience:
+        return None
+    folder = app_config.get_ambience_directory()
+    on_disk = [c for c in bed_clips(folder, AMBIENCE_MANIFEST, "The ambience") if "kind" in c]
+    clips = bed_play_list(on_disk, story.ambience, "The ambience",
+                          "Sounds/ambience/ambience.json (prepare it with zombie-radio's tools/sounds/prepare_ambience.py)")
+    if not clips:
+        logger.info("No ambience: no clip of %s plays", folder)
+        return None
+    settings = {name[len("ambience_"):]: value for name, value in show.model_dump().items()
+                if name.startswith("ambience_")}
+    return ShowAmbience(clips=clips, filter=show.bed_filter, filter_low_hz=show.bed_filter_low_hz,
+                        filter_high_hz=show.bed_filter_high_hz, **settings)
+
+
+@router.get("/ambience/{name}")
+async def ambience_clip(name: str):
+    """Serve one clip of the ambience: only a file that Sounds/ambience/ambience.json lists and the disk holds."""
+    path = clip_path(app_config.get_ambience_directory(), name, AMBIENCE_MANIFEST)
+    if path is None:
+        raise HTTPException(status_code=404, detail=f"No clip {name!r} in the ambience")
+    return FileResponse(path)
 
 
 @router.get("/bed/{name}")

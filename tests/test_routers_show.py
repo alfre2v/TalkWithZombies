@@ -106,6 +106,24 @@ def _bed_folder(root, clips, story_bed=None):
     return folder
 
 
+def _ambience_folder(root, clips, story_ambience=None):
+    """An ambience in the test's project root: each clip (file: (gain, kind)) a small file, and ambience.json listing
+    them. The story's choice is the test's own: story_ambience is the text of the run's copy of
+    lab-outbreak/ambience.yaml, or None to remove it (every clip on disk plays)."""
+    choice = root / "stories" / "lab-outbreak" / "ambience.yaml"
+    if story_ambience is None:
+        choice.unlink(missing_ok=True)
+    else:
+        choice.write_text(story_ambience, encoding="utf-8")
+    folder = root / "Sounds" / "ambience"
+    folder.mkdir(parents=True, exist_ok=True)
+    for name in clips:
+        (folder / name).write_bytes(b"ID3 not really an mp3 " + name.encode())
+    entries = [{"file": name, "gain": gain, "kind": kind, "seconds": 10.0} for name, (gain, kind) in clips.items()]
+    (folder / "ambience.json").write_text(json.dumps({"loudness_dbfs": -20, "clips": entries}), encoding="utf-8")
+    return folder
+
+
 class TestStart:
     def test_opens_a_run_of_the_configured_story(self, client, show_env):
         body = _start(client)
@@ -178,6 +196,42 @@ class TestStart:
         resp = client.post("/api/show/start", json={})
         assert resp.status_code == 422
         assert "bed.yaml does not know enable" in resp.json()["detail"]
+
+    def test_gives_the_page_the_ambience_its_clips_settings_and_the_beds_filter(self, client, show_env):
+        _ambience_folder(show_env, {"dead-1.mp3": (1.5, "texture"), "gun-1.mp3": (0.5, "spot")})
+
+        assert _start(client)["ambience"] == {
+            "clips": [{"file": "dead-1.mp3", "gain": 1.5, "kind": "texture"},
+                      {"file": "gun-1.mp3", "gain": 0.5, "kind": "spot"}],
+            "volume_voice": 0.12, "volume_between": 0.3, "dip_s": 0.8, "rise_s": 2.5,
+            "silences": True, "silence_every_s": [45.0, 150.0], "silence_s": [5.0, 20.0], "silence_fade_s": 2.0,
+            "fading_db": 4.0, "fading_every_s": [5.0, 15.0],
+            "spots": True, "spot_every_s": [20.0, 60.0], "spot_volume": 1.0,
+            "filter": False, "filter_low_hz": 300.0, "filter_high_hz": 3000.0,
+        }
+
+    def test_the_ambience_follows_the_settings_and_the_beds_filter(self, client, show_env, monkeypatch):
+        _ambience_folder(show_env, {"dead-1.mp3": (1.0, "texture")})
+        monkeypatch.setattr(app_config.get_settings(), "show",
+                            ShowConfig(seed=42, ambience_volume_voice=0.02, ambience_spot_every_s=[5.0, 9.0],
+                                       bed_filter=True, bed_filter_low_hz=400.0, bed_filter_high_hz=2000.0))
+        ambience = _start(client)["ambience"]
+        assert (ambience["volume_voice"], ambience["spot_every_s"]) == (0.02, [5.0, 9.0])
+        assert (ambience["filter"], ambience["filter_low_hz"], ambience["filter_high_hz"]) == (True, 400.0, 2000.0)
+
+        monkeypatch.setattr(app_config.get_settings(), "show", ShowConfig(seed=42, ambience=False))
+        assert _start(client)["ambience"] is None
+
+    def test_the_storys_ambience_yaml_chooses_the_clips(self, client, show_env):
+        _ambience_folder(show_env, {"dead-1.mp3": (2.0, "texture"), "gun-1.mp3": (1.0, "spot")},
+                         story_ambience="clips:\n  - {file: gun-1.mp3, gain_db: -6}\n"
+                                        "  - {file: dead-1.mp3, enabled: false}\n")
+
+        assert _start(client)["ambience"]["clips"] == [{"file": "gun-1.mp3", "gain": 0.5012, "kind": "spot"}]
+
+    def test_no_ambience_without_clips(self, client, show_env):
+        (show_env / "stories" / "lab-outbreak" / "ambience.yaml").unlink(missing_ok=True)
+        assert _start(client)["ambience"] is None
 
     def test_no_static_bed_without_clips(self, client, show_env):
         (show_env / "stories" / "lab-outbreak" / "bed.yaml").unlink(missing_ok=True)
@@ -280,6 +334,17 @@ class TestBedClips:
     def test_no_clip_without_a_bed(self, client, show_env):
         assert client.get("/api/show/bed/1-hiss.mp3").status_code == 404
 
+    def test_serves_an_ambience_clip_the_manifest_lists_and_nothing_else(self, client, show_env):
+        folder = _ambience_folder(show_env, {"dead-1.mp3": (1.0, "texture")})
+        (folder / "2-unlisted.mp3").write_bytes(b"ID3")
+
+        resp = client.get("/api/show/ambience/dead-1.mp3")
+        assert resp.status_code == 200
+        assert resp.content == (folder / "dead-1.mp3").read_bytes()
+        for name in ("2-unlisted.mp3", "ambience.json", "nope.mp3", "..%2F..%2Fsecret.mp3"):
+            assert client.get(f"/api/show/ambience/{name}").status_code == 404, name
+        assert client.get("/api/show/bed/dead-1.mp3").status_code == 404
+
 
 REPO = Path(__file__).resolve().parent.parent
 DESIGNS = sorted(p.name for p in (REPO / "static" / "show" / "designs").iterdir() if (p / "design.css").is_file())
@@ -306,6 +371,15 @@ class TestDesigns:
         assert resp.text.rstrip("\n") == _plain_page(bed=True)
         assert resp.text.index("/static/show/show.js") < resp.text.index("/static/show/bed.js")
         assert client.get("/static/show/bed.js").status_code == 200
+
+    def test_the_ambience_comes_where_the_bed_comes_and_after_it(self, client):
+        assert "/static/show/ambience.js" not in client.get("/show?design=plain").text
+        assert "/static/show/ambience.js" not in client.get("/show?design=old-radio&mock=1").text
+
+        for url in ("/show?design=plain&bed=on", "/show?design=old-radio"):
+            text = client.get(url).text
+            assert text.index("/static/show/bed.js") < text.index("/static/show/ambience.js"), url
+        assert client.get("/static/show/ambience.js").status_code == 200
 
     @pytest.mark.parametrize("name", ["nope", "../templates", "..%2Ftemplates", "Old-Radio", "old_radio", "-", ""])
     def test_an_unknown_or_unsafe_design_serves_the_plain_page(self, client, name):

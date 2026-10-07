@@ -246,6 +246,64 @@ the page and press Start — no restart.
 With `debug: true`, the browser's console names each clip as it starts, with
 its file name — the name to look for in `bed.yaml`.
 
+## The ambience
+
+The world outside the lab, under the show in the looks (and on the plain page
+with `&bed=on`): the dead moaning, gunfire and explosions, screams, a storm.
+**Textures** (long, continuous) play one after another; **spots** (short,
+single events) come now and then, on top. It goes through the static's AM
+filter (the F key flips both) and has its own volumes, silences and fading,
+never in step with the static's. The clips ship with the app in
+`Sounds/ambience/`; which of them play is the story's
+`stories/lab-outbreak/ambience.yaml`.
+
+### Make the ambience quieter (or louder)
+
+Its volumes are plain multipliers, like the static's: the default is
+`ambience_volume_between` 0.3 and `ambience_volume_voice` 0.12 (under a
+line) — twice the static's level between rounds, more than twice under a
+line. The clips are measured to the same average level as the static's, but a
+low moan or a distant rumble sounds much quieter than a hiss of the same
+energy, and the hiss masks it: at the static's own volumes (0.15 and 0.05) the
+ambience was barely heard (the owner's ear, 2026-10-07). Change both by the
+same factor to keep the dip's shape; for example half the amplitude:
+
+```yaml
+show:
+  ambience_volume_between: 0.15
+  ambience_volume_voice: 0.06
+```
+
+### More spots, fewer, or louder
+
+A spot comes after a random wait in `ambience_spot_every_s` (20-60 s), at
+`ambience_spot_volume` times a texture's level (1.0):
+
+```yaml
+show:
+  ambience_spot_every_s: [10, 30]   # twice as often
+  ambience_spot_volume: 1.5         # a little louder than the textures
+```
+
+`ambience_spots: false` keeps the textures alone.
+
+### One clip louder, quieter, or off
+
+In the story's `ambience.yaml`, a clip's `gain_db` (`-6` half the amplitude,
+`+6` twice) or `enabled: false`. Read when a run opens: reload the show page
+and press Start, no restart.
+
+### No ambience at all
+
+For the whole show:
+
+```yaml
+show:
+  ambience: false
+```
+
+Live, for a moment: **the A key** mutes and unmutes it (the static goes on).
+
 ## The listener's turn
 
 **More time to start talking** after the radio calls (the countdown before the
@@ -338,7 +396,8 @@ On the show page:
 |---|---|---|
 | **Space** (hold) | talk to the radio; release to send — the same as holding the Hold to talk button | only while the radio listens (the button lit) |
 | **M** | mute or unmute the static bed, with a short fade; the voices are never muted | the looks, or the plain page with `&bed=on` |
-| **F** | the static's AM filter on or off, live — for an A/B by ear | the same, once the static plays |
+| **F** | the AM filter on or off, live — for an A/B by ear; the static and the ambience together | the same, once the static plays |
+| **A** | mute or unmute the ambience (the world outside), with a short fade; the static goes on | the same, once the ambience plays |
 
-M and F ignore a key held down (no repeat) and a key pressed with Cmd, Ctrl or
+M, F and A ignore a key held down (no repeat) and a key pressed with Cmd, Ctrl or
 Alt, so the browser's own shortcuts are left alone.

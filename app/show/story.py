@@ -89,7 +89,8 @@ class Story:
     """A loaded story.
 
     events and tones hold every event and every tone word, flattened; event_pools and overtones hold them filed
-    by overtone and theme. bed is the static bed's clips as bed.yaml lists them, or None without the file.
+    by overtone and theme. bed is the static bed's clips as bed.yaml lists them, or None without the file;
+    ambience is the ambience's clips as ambience.yaml lists them, or None without it.
     """
     name: str
     title: str
@@ -107,6 +108,7 @@ class Story:
     directions: Dict[str, str] = field(default_factory=dict)
     beats: Optional[Beats] = None
     bed: Optional[Tuple[BedClip, ...]] = None
+    ambience: Optional[Tuple[BedClip, ...]] = None
 
 
 def load_story(name: str, root: Optional[Path] = None) -> Story:
@@ -150,7 +152,8 @@ def load_story(name: str, root: Optional[Path] = None) -> Story:
                  overtones=overtones, kinds=kinds, weights=weights, event_pools=pools,
                  agenda=_load_agenda(name, folder / "agenda.yaml"), orientation=orientation.strip(),
                  directions={beat: text.strip() for beat, text in directions.items()},
-                 beats=_load_beats(name, folder / "beats.yaml"), bed=_load_bed(name, folder / "bed.yaml"))
+                 beats=_load_beats(name, folder / "beats.yaml"), bed=_load_bed(name, folder / "bed.yaml"),
+                 ambience=_load_bed(name, folder / "ambience.yaml"))
 
 
 def _read_yaml(name: str, path: Path) -> dict:
@@ -305,15 +308,16 @@ _BED_GAIN_DB = 40  # a change by ear is kept within plus or minus this
 
 
 def _load_bed(name: str, path: Path) -> Optional[Tuple[BedClip, ...]]:
-    """Read bed.yaml, if the story has one: 'clips', a list of {file, enabled, gain_db}. file is a clip's plain name
-    in Sounds/bed/, named once; enabled (true or false, default true) and gain_db (a number of dB, default 0) are
-    optional; any other key fails, so a misspelled one is never ignored. None without the file."""
+    """Read bed.yaml (or ambience.yaml, the same shape), if the story has it: 'clips', a list of {file, enabled,
+    gain_db}. file is a clip's plain name in Sounds/bed/ (Sounds/ambience/), named once; enabled (true or false,
+    default true) and gain_db (a number of dB, default 0) are optional; any other key fails, so a misspelled one is
+    never ignored. None without the file."""
     if not path.is_file():
         return None
     data = _read_yaml(name, path)
 
     def fail(what: str):
-        raise StoryError(f"story {name!r}: bed.yaml {what}")
+        raise StoryError(f"story {name!r}: {path.name} {what}")
 
     entries = data.get("clips")
     if not isinstance(entries, list):

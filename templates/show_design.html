@@ -48,6 +48,7 @@
     <script src="/static/show/show.js"></script>
     {% if design %}<script src="/static/show/gauge.js"></script>{% endif %}
     {% if design and not mock %}<script src="/static/show/bed.js"></script>{% endif %}
+    {% if design and not mock %}<script src="/static/show/ambience.js"></script>{% endif %}
     {% if design_js %}<script src="/static/show/designs/{{ design }}/design.js"></script>{% endif %}
     {% if mock %}<script src="/static/show/designs/mock.js"></script>{% endif %}
 </body>
