@@ -135,8 +135,9 @@ function debugLine(summary, times, runId) {
     parts.push(
         `speakers ${summary.speakers.join(", ")}`,
         `event ${summary.event || "—"}`,
-        `tone ${summary.tone || "—"}`,
     );
+    if (summary.cue) parts.push(`cue ${summary.cue.file}`);
+    parts.push(`tone ${summary.tone || "—"}`);
     if (summary.slot) parts.push(summary.slot);
     if (summary.agenda) {
         const asks = summary.agenda.length > 40 ? `${summary.agenda.slice(0, 40).trimEnd()}…` : summary.agenda;
@@ -238,7 +239,7 @@ async function playRound(signal, heard) {
     const round = {
         summary: null, lines: [], started, firstLineS: null, seconds: null, element: addRoundElement(),
         firstSoundS: show.voice ? null : undefined, playedS: show.voice ? 0 : undefined, debugElement: null,
-        lastStarted: null, voices: [],
+        lastStarted: null, voices: [], cue: null,
     };
     show.current = round;
     let mood = null;
@@ -271,6 +272,8 @@ async function playRound(signal, heard) {
                 } else {
                     lightSpeaker(event.persona);
                 }
+            } else if (event.type === "cue") {
+                round.cue = event; // A sound cue: ambience.js plays it as the round's first line is heard
             } else if (event.type === "round") {
                 round.summary = event;
             } else if (event.type === "error") {

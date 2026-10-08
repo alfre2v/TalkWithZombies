@@ -17,6 +17,10 @@
  *   - the silences on the textures only, a spot still heard in one;
  *   - the keys: A mutes the ambience alone, M the static alone; F flips the AM filter of both, the ambience
  *     following the bed, at the bed's band.
+ *   - the sound cues: a round's cue played once, as its first line is heard — a spot at once, cutting one under
+ *     way, the random spot's timer set again from its end; a texture in place of the current one, ending a silence,
+ *     out of the shuffle's pass, the shuffle going on after it; nothing switched on by a cue (spots off, the A key's
+ *     mute), an unknown clip ignored.
  *
  * How it works: as test_show_bed.js — the page's scripts, bed.js and ambience.js evaluated in a fresh vm.Context,
  * with stubs for the AudioContext, its nodes and the <audio> element, recording connections and automation.
@@ -447,4 +451,84 @@ test("the AM filter on in the settings: the run starts through the band", () => 
     page.sandbox.setState("thinking");
     const s = stages(page);
     assert.deepEqual(s.layer.connected, [s.highpass]);
+});
+
+/* ==========================================================================
+   The sound cues
+   ========================================================================== */
+
+/** The round now playing, bringing a cue as show.js keeps it from the round's "cue" event. */
+function cueRound(page, file, kind) {
+    page.get("show").current = { cue: { type: "cue", file, kind } };
+}
+
+test("a cued spot plays once, as the round's first line is heard, cutting a spot under way", () => {
+    const page = load();
+    startRun(page, { withBed: false });
+    page.sandbox.setState("thinking");
+    const s = stages(page);
+    page.timers.fire(40000); // A random spot: the dice at 0.5 pick the first
+    assert.deepEqual(s.spot.plays, ["/api/show/ambience/shriek-1.mp3"]);
+
+    cueRound(page, "boom-1.mp3", "spot");
+    page.sandbox.setState("thinking");
+    assert.equal(s.spot.plays.length, 1); // Not before the line is heard
+    page.sandbox.setState("on air");
+    assert.deepEqual(s.spot.plays, ["/api/show/ambience/shriek-1.mp3", "/api/show/ambience/boom-1.mp3"]);
+    assert.equal(s.spotGain.gain.target(), 2 * 1.5);
+    assert.ok(!page.timers.pending().includes(40000)); // The random spot's timer reset: set again when the cue ends
+
+    page.sandbox.setState("thinking");
+    page.sandbox.setState("on air");
+    assert.equal(s.spot.plays.length, 2); // Once a round
+    s.spot.fire("ended");
+    assert.ok(page.timers.pending().includes(40000));
+});
+
+test("a cued texture takes the current one's place to its end, ending a silence; the shuffle goes on after it", () => {
+    const page = load();
+    startRun(page, { withBed: false });
+    page.sandbox.setState("thinking");
+    const s = stages(page);
+    assert.equal(s.texture.src, "/api/show/ambience/dead-1.mp3");
+    page.timers.fire(97500); // A silence: the textures fade out, then the texture pauses
+    page.timers.fire(2000);
+    assert.equal(page.get("amb.silent"), true);
+    assert.ok(page.timers.pending().includes(12500));
+
+    cueRound(page, "warfare-1.mp3", "texture");
+    page.sandbox.setState("on air");
+    assert.equal(page.get("amb.silent"), false);
+    assert.equal(s.gate.gain.target(), 1);
+    assert.equal(s.texture.src, "/api/show/ambience/warfare-1.mp3");
+    assert.equal(s.texture.plays.at(-1), "/api/show/ambience/warfare-1.mp3");
+    assert.ok(!page.timers.pending().includes(12500)); // The silence's end cancelled
+    assert.ok(page.timers.pending().includes(97500)); // The next silence set from now
+    assert.deepEqual([...page.get("amb.order")], []); // Out of this pass of the shuffle
+
+    s.texture.fire("ended");
+    assert.notEqual(s.texture.src, "/api/show/ambience/warfare-1.mp3"); // A new pass, never the same across the seam
+    assert.equal(s.texture.src, "/api/show/ambience/dead-1.mp3");
+});
+
+test("a cue switches nothing on: no spot with spots off, the A key's mute holds, an unknown clip is ignored", () => {
+    const page = load();
+    startRun(page, { withBed: false, settings: { spots: false } });
+    page.sandbox.setState("thinking");
+    const s = stages(page);
+    cueRound(page, "boom-1.mp3", "spot");
+    page.sandbox.setState("on air");
+    assert.equal(s.spot.plays.length, 0);
+
+    page.key("KeyA");
+    page.sandbox.setState("thinking");
+    cueRound(page, "warfare-1.mp3", "texture");
+    page.sandbox.setState("on air");
+    assert.equal(s.texture.src, "/api/show/ambience/warfare-1.mp3");
+    assert.equal(s.mute.gain.target(), 0);
+
+    page.sandbox.setState("thinking");
+    cueRound(page, "nope.mp3", "texture");
+    page.sandbox.setState("on air");
+    assert.equal(s.texture.src, "/api/show/ambience/warfare-1.mp3");
 });

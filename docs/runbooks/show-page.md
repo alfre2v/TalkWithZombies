@@ -383,9 +383,15 @@ Stable Audio 3 Small-SFX and chosen by ear, ship with the app in
 - **The A key mutes it** (and unmutes it), with a short fade; the M key mutes
   the static only.
 
-Its settings (`ambience_*`): [`show-settings.md`](show-settings.md), "The
-ambience". With the debug line on, the browser's console names each texture,
-spot, silence, and the A and F keys.
+- **Sound cues:** when a round's event names a sound the story's
+  `ambience.yaml` gives keywords to (an explosion, gunfire, a scream, thunder,
+  a car alarm, barking dogs…), that clip plays as the event is read aloud — a
+  spot at once, a texture in place of the current one, to its end. The app's
+  log says "the event cues …", the round's summary and record keep it.
+
+Its settings (`ambience_*`) and the keywords: [`show-settings.md`](show-settings.md),
+"The ambience". With the debug line on, the browser's console names each
+texture, spot, silence, cue, and the A and F keys.
 
 ## Talk back
 

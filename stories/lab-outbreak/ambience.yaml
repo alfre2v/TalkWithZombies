@@ -8,6 +8,12 @@
 #   enabled  true or false (optional; true when left out)
 #   gain_db  a change of its level by ear, in dB, added to the measured gain (optional; 0 when left out). 0 changes
 #            nothing; -3 is a little quieter, -6 half the amplitude, +6 twice it
+#   keywords the words or phrases of an event that cue the clip (optional; none when left out): a sound cue. When a
+#            free round's event says one (a whole word or phrase, any case), the clip plays as the event is read —
+#            a spot at once, a texture in place of the current one, to its end; several clips matched, one at
+#            random. Keep them precise: a loose word plays a sound where it does not belong ("blast" also means a
+#            blast door; "the moaning stops" names a moan). The dead's own sounds have none: every event naming
+#            them is about something else. List each form (explosion, explosions, explodes): no word stems
 # Read when a run opens: change a line, reload the show page and press Start, and the new run plays the new list,
 # with no restart of the app. A clip enabled here but missing there is skipped (the app's log says so); without this
 # file, every clip there plays.
@@ -21,6 +27,7 @@ clips:
   - file: dead-horde-murmur-1.mp3
     enabled: true
     gain_db: 0
+    keywords: [horde, hordes]
   # A few zombies slowly moaning just outside a concrete wall, muffled, continuous (25 s)
   - file: dead-few-close-1.mp3
     enabled: true
@@ -33,55 +40,68 @@ clips:
   - file: dead-banging-door-1.mp3
     enabled: true
     gain_db: 0
+    keywords: [banging, pounding, hammering on the door, fists]
   # A crowd of zombies moaning, slowly getting louder as they come closer (25 s)
   - file: dead-swelling-1.mp3
     enabled: true
     gain_db: 0
+    keywords: [getting louder, growing louder, closer and closer]
   # A car alarm wailing far away in an empty city, continuous (25 s)
   - file: car-alarm-far-1.mp3
     enabled: true
     gain_db: 0
+    keywords: [car alarm, car alarms]
   # Dogs barking far away in a deserted city at night, continuous (25 s)
   - file: dogs-far-1.mp3
     enabled: true
     gain_db: 0
+    keywords: [barking, barks, dogs bark, dog barks]
   # A distant crowd of people panicking and screaming, muffled by distance, continuous (25 s)
   - file: crowd-panic-far-1.mp3
     enabled: true
     gain_db: 0
+    keywords: [panic, panicking, stampede, riot, rioting]
   # A heavy thunderstorm, loud thunder claps and pouring rain, continuous (25 s)
   - file: thunderstorm-1.mp3
     enabled: true
     gain_db: 0
+    keywords: [thunder, thunderstorm, thunderclap, lightning strikes, lightning strike]
   # A heavy thunderstorm, loud thunder claps and pouring rain, continuous (25 s)
   - file: thunderstorm-2.mp3
     enabled: true
     gain_db: 0
+    keywords: [thunder, thunderstorm, thunderclap, lightning strikes, lightning strike]
   # A heavy thunderstorm, loud thunder claps and pouring rain, continuous (25 s)
   - file: thunderstorm-3.mp3
     enabled: true
     gain_db: 0
+    keywords: [thunder, thunderstorm, thunderclap, lightning strikes, lightning strike]
   # A continuous gunfight outside, repeated machine gun bursts and many gunshots, warfare (20 s)
   - file: warfare-1.mp3
     enabled: true
     gain_db: 0
+    keywords: [gunfire, gunfight, firefight, shootout, gun battle]
   # A continuous gunfight outside, repeated machine gun bursts and many gunshots, warfare (20 s)
   - file: warfare-3.mp3
     enabled: true
     gain_db: 0
+    keywords: [gunfire, gunfight, firefight, shootout, gun battle]
   # A continuous gunfight outside, repeated machine gun bursts and many gunshots, warfare (20 s)
   - file: warfare-4.mp3
     enabled: true
     gain_db: 0
+    keywords: [gunfire, gunfight, firefight, shootout, gun battle]
   # A continuous gunfight outside, repeated machine gun bursts and many gunshots, warfare (20 s)
   - file: warfare-5.mp3
     enabled: true
     gain_db: 0
+    keywords: [gunfire, gunfight, firefight, shootout, gun battle]
   # Spots
   # A single long low zombie moan outside, close (5 s)
   - file: dead-moan-long-1.mp3
     enabled: true
     gain_db: 0
+    keywords: [a long moan, a single moan]
   # A frantic zombie shriek in the distance (3 s)
   - file: dead-shriek-1.mp3
     enabled: true
@@ -94,6 +114,7 @@ clips:
   - file: dead-growl-1.mp3
     enabled: true
     gain_db: 0
+    keywords: [growl, growls, growling]
   # A wet gurgling groan of a zombie, close (3 s)
   - file: dead-gurgle-1.mp3
     enabled: true
@@ -106,35 +127,44 @@ clips:
   - file: dead-snarling-1.mp3
     enabled: true
     gain_db: 0
+    keywords: [snarl, snarls, snarling]
   # A burst of machine gun fire in the distance (3 s)
   - file: gun-burst-far-1.mp3
     enabled: true
     gain_db: 0
+    keywords: [machine gun, machine-gun, machine guns, automatic fire, chain gun, burst of gunfire]
   # A few single gunshots far away, echoing between buildings (4 s)
   - file: gun-shots-far-1.mp3
     enabled: true
     gain_db: 0
+    keywords: [gunshot, gunshots, rifle shot, rifle shots, a shot rings out, shots ring out, sniper]
   # A woman screaming in terror in the distance (3 s)
   - file: scream-woman-far-1.mp3
     enabled: true
     gain_db: 0
+    keywords: [scream, screams, screaming, screamed]
   # A man screaming in pain far away (3 s)
   - file: scream-man-far-1.mp3
     enabled: true
     gain_db: 0
+    keywords: [scream, screams, screaming, screamed]
   # Hysterical laughter echoing in the distance at night (5 s)
   - file: laughter-far-1.mp3
     enabled: true
     gain_db: 0
+    keywords: [laughter, hysterical, hysterically, cackle, cackles, cackling]
   # A person laughing hysterically just outside a window, muffled (4 s)
   - file: laughter-close-1.mp3
     enabled: true
     gain_db: 0
+    keywords: [laughter, hysterical, hysterically, cackle, cackles, cackling]
   # A loud explosion outside, a powerful boom and rumbling debris (5 s)
   - file: explosion-4.mp3
     enabled: true
     gain_db: 0
+    keywords: [explosion, explosions, explodes, exploded, exploding, detonation, detonates]
   # A loud explosion outside, a powerful boom and rumbling debris (5 s)
   - file: explosion-5.mp3
     enabled: true
     gain_db: 0
+    keywords: [explosion, explosions, explodes, exploded, exploding, detonation, detonates]
