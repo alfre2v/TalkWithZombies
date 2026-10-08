@@ -201,8 +201,8 @@ class TestStart:
         _ambience_folder(show_env, {"dead-1.mp3": (1.5, "texture"), "gun-1.mp3": (0.5, "spot")})
 
         assert _start(client)["ambience"] == {
-            "clips": [{"file": "dead-1.mp3", "gain": 1.5, "kind": "texture"},
-                      {"file": "gun-1.mp3", "gain": 0.5, "kind": "spot"}],
+            "clips": [{"file": "dead-1.mp3", "gain": 1.5, "kind": "texture", "cue_only": False},
+                      {"file": "gun-1.mp3", "gain": 0.5, "kind": "spot", "cue_only": False}],
             "volume_voice": 0.12, "volume_between": 0.3, "dip_s": 0.8, "rise_s": 2.5,
             "silences": True, "silence_every_s": [45.0, 150.0], "silence_s": [5.0, 20.0], "silence_fade_s": 2.0,
             "fading_db": 4.0, "fading_every_s": [5.0, 15.0],
@@ -227,7 +227,17 @@ class TestStart:
                          story_ambience="clips:\n  - {file: gun-1.mp3, gain_db: -6}\n"
                                         "  - {file: dead-1.mp3, enabled: false}\n")
 
-        assert _start(client)["ambience"]["clips"] == [{"file": "gun-1.mp3", "gain": 0.5012, "kind": "spot"}]
+        assert _start(client)["ambience"]["clips"] == [{"file": "gun-1.mp3", "gain": 0.5012, "kind": "spot",
+                                                        "cue_only": False}]
+
+    def test_a_clip_the_story_makes_cue_only_comes_marked(self, client, show_env):
+        _ambience_folder(show_env, {"dead-1.mp3": (1.0, "texture"), "heli-1.mp3": (1.0, "spot")},
+                         story_ambience="clips:\n  - {file: dead-1.mp3}\n"
+                                        "  - {file: heli-1.mp3, keywords: [helicopter], cue_only: true}\n")
+
+        clips = _start(client)["ambience"]["clips"]
+
+        assert [(c["file"], c["cue_only"]) for c in clips] == [("dead-1.mp3", False), ("heli-1.mp3", True)]
 
     def test_no_ambience_without_clips(self, client, show_env):
         (show_env / "stories" / "lab-outbreak" / "ambience.yaml").unlink(missing_ok=True)

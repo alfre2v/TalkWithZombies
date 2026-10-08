@@ -95,6 +95,39 @@ class TestStoryAmbience:
 
         assert [c.keywords for c in clips] == [("explosion", "lightning strikes", "dead's"), ()]
 
+    def test_cue_only_kept_false_by_default(self, tmp_path):
+        path = tmp_path / "ambience.yaml"
+        path.write_text("clips:\n  - {file: heli-1.mp3, keywords: [helicopter], cue_only: true}\n"
+                        "  - {file: dead-1.mp3}\n", encoding="utf-8")
+
+        clips = _load_bed("lab-outbreak", path, keywords=True)
+
+        assert [c.cue_only for c in clips] == [True, False]
+
+    def test_cue_only_must_be_true_or_false_and_needs_keywords(self, tmp_path):
+        path = tmp_path / "ambience.yaml"
+        for entry, why in (("{file: heli-1.mp3, keywords: [helicopter], cue_only: yes please}", "needs cue_only true or false"),
+                           ("{file: heli-1.mp3, cue_only: true}", "cue_only without keywords"),
+                           ("{file: heli-1.mp3, keywords: [], cue_only: true}", "cue_only without keywords")):
+            path.write_text(f"clips:\n  - {entry}\n", encoding="utf-8")
+            try:
+                _load_bed("lab-outbreak", path, keywords=True)
+            except Exception as exc:  # StoryError
+                assert why in str(exc), (entry, str(exc))
+            else:
+                raise AssertionError(f"{entry} must fail")
+
+    def test_cue_only_only_in_the_ambience(self, tmp_path):
+        path = tmp_path / "bed.yaml"
+        path.write_text("clips:\n  - {file: static-1.mp3, cue_only: false}\n", encoding="utf-8")
+
+        try:
+            _load_bed("lab-outbreak", path)
+        except Exception as exc:  # StoryError
+            assert "bed.yaml does not know cue_only" in str(exc)
+        else:
+            raise AssertionError("cue_only in bed.yaml must fail")
+
     def test_keywords_only_in_the_ambience(self, tmp_path):
         path = tmp_path / "bed.yaml"
         path.write_text("clips:\n  - {file: static-1.mp3, keywords: [static]}\n", encoding="utf-8")

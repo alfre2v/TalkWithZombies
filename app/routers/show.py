@@ -191,7 +191,8 @@ def _bed(show: ShowConfig, story: Story) -> Optional[ShowBed]:
 
 def _ambience(show: ShowConfig, story: Story) -> Optional[ShowAmbience]:
     """The ambience for the start reply: the clips that play (on disk with a kind, and enabled by the story's
-    ambience.yaml if it has one), its settings, and the bed's AM filter; None when off or no clip plays."""
+    ambience.yaml if it has one), each marked cue_only when the story says so, its settings, and the bed's AM
+    filter; None when off or no clip plays."""
     if not show.ambience:
         return None
     folder = app_config.get_ambience_directory()
@@ -201,6 +202,8 @@ def _ambience(show: ShowConfig, story: Story) -> Optional[ShowAmbience]:
     if not clips:
         logger.info("No ambience: no clip of %s plays", folder)
         return None
+    cue_only = {clip.file for clip in story.ambience or () if clip.cue_only}
+    clips = [{**clip, "cue_only": clip["file"] in cue_only} for clip in clips]
     settings = {name[len("ambience_"):]: value for name, value in show.model_dump().items()
                 if name.startswith("ambience_")}
     return ShowAmbience(clips=clips, filter=show.bed_filter, filter_low_hz=show.bed_filter_low_hz,

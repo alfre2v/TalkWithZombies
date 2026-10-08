@@ -14,6 +14,9 @@
 #            random. Keep them precise: a loose word plays a sound where it does not belong ("blast" also means a
 #            blast door; "the moaning stops" names a moan). The dead's own sounds have none: every event naming
 #            them is about something else. List each form (explosion, explosions, explodes): no word stems
+#   cue_only true or false (optional; false when left out): true, the clip plays only when an event cues it —
+#            never in the shuffle of the textures or among the random spots. For a sound that belongs to its event
+#            (a helicopter, a train horn), not to the general ambience. A cue-only clip needs keywords
 # Read when a run opens: change a line, reload the show page and press Start, and the new run plays the new list,
 # with no restart of the app. A clip enabled here but missing there is skipped (the app's log says so); without this
 # file, every clip there plays.

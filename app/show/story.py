@@ -79,11 +79,13 @@ class Beats:
 class BedClip:
     """One clip of the story's static bed (bed.yaml): its file in Sounds/bed/, whether it plays, and a change of its
     level by ear, in dB, added to the gain measured for it (Sounds/bed/bed.json). For the ambience (ambience.yaml),
-    also the words of an event that cue it (lowercase; empty when nothing cues it)."""
+    also the words of an event that cue it (lowercase; empty when nothing cues it), and whether it plays only when
+    cued (cue_only: never in the random rotation)."""
     file: str
     enabled: bool = True
     gain_db: float = 0.0
     keywords: Tuple[str, ...] = ()
+    cue_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -315,7 +317,8 @@ def _load_bed(name: str, path: Path, keywords: bool = False) -> Optional[Tuple[B
     gain_db}. file is a clip's plain name in Sounds/bed/ (Sounds/ambience/), named once; enabled (true or false,
     default true) and gain_db (a number of dB, default 0) are optional; any other key fails, so a misspelled one is
     never ignored. With keywords (ambience.yaml), a clip may also have keywords: a list of words or phrases that cue
-    it when an event says one (kept in lowercase). None without the file."""
+    it when an event says one (kept in lowercase), and cue_only (true or false, default false): it plays only when
+    cued, so a cue-only clip needs keywords. None without the file."""
     if not path.is_file():
         return None
     data = _read_yaml(name, path)
@@ -323,7 +326,7 @@ def _load_bed(name: str, path: Path, keywords: bool = False) -> Optional[Tuple[B
     def fail(what: str):
         raise StoryError(f"story {name!r}: {path.name} {what}")
 
-    allowed = _BED_KEYS | {"keywords"} if keywords else _BED_KEYS
+    allowed = _BED_KEYS | {"keywords", "cue_only"} if keywords else _BED_KEYS
     entries = data.get("clips")
     if not isinstance(entries, list):
         fail("needs 'clips', a list of {file, enabled, gain_db}")
@@ -350,7 +353,12 @@ def _load_bed(name: str, path: Path, keywords: bool = False) -> Optional[Tuple[B
         bad = [w for w in words if not _KEYWORD.fullmatch(w)]
         if bad:
             fail(f"needs keywords of letters only (a phrase joined by spaces, hyphens or apostrophes) for {file}: {bad}")
-        clips.append(BedClip(file=file, enabled=enabled, gain_db=float(gain_db), keywords=words))
+        cue_only = entry.get("cue_only", False)
+        if not isinstance(cue_only, bool):
+            fail(f"needs cue_only true or false for {file}")
+        if cue_only and not words:
+            fail(f"makes {file} cue_only without keywords: no event could ever play it")
+        clips.append(BedClip(file=file, enabled=enabled, gain_db=float(gain_db), keywords=words, cue_only=cue_only))
     files = [c.file for c in clips]
     if len(set(files)) != len(files):
         fail(f"names a clip twice: {sorted({f for f in files if files.count(f) > 1})}")

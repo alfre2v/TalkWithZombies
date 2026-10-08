@@ -368,11 +368,13 @@ class ShowBed(BaseModel):
 
 
 class ShowAmbienceClip(BaseModel):
-    """One clip of the ambience: its file in /api/show/ambience/, its gain to the common level, and its kind: a
-    texture (long, continuous) or a spot (short, a single event)."""
+    """One clip of the ambience: its file in /api/show/ambience/, its gain to the common level, its kind: a
+    texture (long, continuous) or a spot (short, a single event), and whether it plays only when an event cues it
+    (cue_only: never in the random rotation)."""
     file: str
     gain: float
     kind: str
+    cue_only: bool = False
 
 
 class ShowAmbience(BaseModel):

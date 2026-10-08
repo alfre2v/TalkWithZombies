@@ -312,7 +312,23 @@ clips:
 
 Keep them precise — a loose word plays a sound where it does not belong
 ("blast" is also a blast door; "the moaning stops" names a moan) — and list
-each form: "explosion" does not match "explosions". A cue switches nothing on:
+each form: "explosion" does not match "explosions".
+
+A sound that belongs to its event — a helicopter, a train horn — and should
+never pass by at random gets `cue_only: true` (it needs keywords): it is left
+out of the textures' shuffle and the random spots, and plays only when an
+event cues it.
+
+```yaml
+clips:
+  - file: helicopter-1.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [helicopter, helicopters]
+    cue_only: true
+```
+
+A cue switches nothing on:
 with `ambience: false`, `ambience_spots: false`, a clip off, or the A key's
 mute, it is not heard. Read when a run opens: reload the page and press Start.
 

@@ -20,7 +20,8 @@
  *   - the sound cues: a round's cue played once, as its first line is heard — a spot at once, cutting one under
  *     way, the random spot's timer set again from its end; a texture in place of the current one, ending a silence,
  *     out of the shuffle's pass, the shuffle going on after it; nothing switched on by a cue (spots off, the A key's
- *     mute), an unknown clip ignored.
+ *     mute), an unknown clip ignored;
+ *   - cue-only clips: never in the shuffle or the random spots, played when cued.
  *
  * How it works: as test_show_bed.js — the page's scripts, bed.js and ambience.js evaluated in a fresh vm.Context,
  * with stubs for the AudioContext, its nodes and the <audio> element, recording connections and automation.
@@ -531,4 +532,49 @@ test("a cue switches nothing on: no spot with spots off, the A key's mute holds,
     cueRound(page, "nope.mp3", "texture");
     page.sandbox.setState("on air");
     assert.equal(s.texture.src, "/api/show/ambience/warfare-1.mp3");
+});
+
+/* ==========================================================================
+   Cue-only clips
+   ========================================================================== */
+
+test("ambRotation: the clips of a kind in the random rotation, all but the cue-only ones", () => {
+    const page = load();
+    const clips = [{ file: "a.mp3", kind: "spot" }, { file: "b.mp3", kind: "spot", cue_only: true },
+                   { file: "c.mp3", kind: "texture", cue_only: false }];
+    assert.deepEqual(page.sandbox.ambRotation(clips, "spot").map((c) => c.file), ["a.mp3"]);
+    assert.deepEqual(page.sandbox.ambRotation(clips, "texture").map((c) => c.file), ["c.mp3"]);
+});
+
+test("a cue-only spot never comes at random, and plays on its cue", () => {
+    const page = load();
+    const clips = CLIPS.map((c) => (c.file === "boom-1.mp3" ? { ...c, cue_only: true } : c));
+    startRun(page, { withBed: false, clips });
+    page.sandbox.setState("thinking");
+    const s = stages(page);
+    for (let i = 0; i < 3; i++) {
+        page.timers.fire(40000);
+        s.spot.fire("ended");
+    }
+    assert.deepEqual([...new Set(s.spot.plays)], ["/api/show/ambience/shriek-1.mp3"]);
+
+    cueRound(page, "boom-1.mp3", "spot");
+    page.sandbox.setState("on air");
+    assert.equal(s.spot.plays.at(-1), "/api/show/ambience/boom-1.mp3");
+});
+
+test("a cue-only texture never comes in the shuffle, plays on its cue to its end, then the shuffle goes on", () => {
+    const page = load();
+    const clips = CLIPS.map((c) => (c.file === "warfare-1.mp3" ? { ...c, cue_only: true } : c));
+    startRun(page, { withBed: false, clips });
+    page.sandbox.setState("thinking");
+    const s = stages(page);
+    for (let i = 0; i < 3; i++) s.texture.fire("ended");
+    assert.deepEqual([...new Set(s.texture.plays)], ["/api/show/ambience/dead-1.mp3"]);
+
+    cueRound(page, "warfare-1.mp3", "texture");
+    page.sandbox.setState("on air");
+    assert.equal(s.texture.src, "/api/show/ambience/warfare-1.mp3");
+    s.texture.fire("ended");
+    assert.equal(s.texture.src, "/api/show/ambience/dead-1.mp3");
 });
