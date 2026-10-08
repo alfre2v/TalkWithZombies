@@ -59,7 +59,7 @@ class Round(BaseModel):
     "switch-off"; "invitation", "answer" and "static" come from older records and are kept loadable. overtone is
     the round's overtone, agenda the item an exchange asked, slot what filled a free round's event slot besides
     an event ("aftermath" or "recollection"), recollects the n of the Repair that opened the contact an
-    aftermath or a recollection talked about.
+    aftermath or a recollection talked about; cue the ambience clip the round's event cued (a sound cue).
     """
     n: int
     kind: Literal["orientation", "free", "repair", "exchange", "last-exchange", "re-call", "breakdown",
@@ -84,6 +84,7 @@ class Round(BaseModel):
     agenda: Optional[str] = None
     slot: Optional[str] = None
     recollects: Optional[int] = None
+    cue: Optional[str] = None
 
 
 class Run(BaseModel):

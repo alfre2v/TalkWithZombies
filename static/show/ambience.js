@@ -27,6 +27,14 @@
  * one radio — the F key flips both, the ambience following the bed. The A key mutes and unmutes the ambience alone;
  * the M key mutes the static only. With the run's debug on, the console says what the ambience does.
  *
+ * Sound cues: a round whose event names a sound (a keyword of a clip, in the story's ambience.yaml) brings a cue
+ * (show.current.cue, from the round's "cue" event: a file and its kind), played once, when the round's first line is
+ * heard (the page goes "on air"): a spot at once, cutting a spot under way, the next random spot set from its end; a
+ * texture in place of the current one, to its end, ending a silence under way and setting the next one from now,
+ * then the shuffle goes on. A cue switches nothing on: no spot when the run has spots off, nothing heard when the A
+ * key has muted the ambience. A clip the story makes cue_only plays only when cued: never in the shuffle or the
+ * random spots.
+ *
  * A classic script sharing globals, like the page's own.
  */
 
@@ -55,6 +63,7 @@ const amb = {
     order: [],          // the textures still to play in this pass, by index among the textures
     current: null,      // the texture loaded now, by index
     lastSpot: null,     // the spot heard last, by index among the spots
+    cued: null,         // the round whose cue has been played, so it plays once
     failures: 0,        // textures that failed to load in a row: when every one has, the textures give up
     gaveUp: false,
     playing: false,
@@ -82,6 +91,11 @@ function ambLevel(state, settings) {
 /** The clips of a kind, by their place among the run's clips. */
 function ambOfKind(clips, kind) {
     return clips.filter((clip) => clip.kind === kind);
+}
+
+/** The clips of a kind in the random rotation (the shuffle, the random spots): all but the cue-only ones. */
+function ambRotation(clips, kind) {
+    return ambOfKind(clips, kind).filter((clip) => !clip.cue_only);
 }
 
 /** A random spot, by index among n, never last (the spot heard last) when there is another. */
@@ -175,6 +189,7 @@ function ambFollow() {
         amb.order = [];
         amb.current = null;
         amb.lastSpot = null;
+        amb.cued = null;
         amb.failures = 0;
         amb.gaveUp = false;
         amb.filterOn = Boolean(settings.filter);
@@ -188,13 +203,18 @@ function ambFollow() {
     }
     if (!amb.playing) {
         amb.playing = true;
-        if (ambOfKind(settings.clips, "texture").length && !amb.gaveUp) {
+        if (ambRotation(settings.clips, "texture").length && !amb.gaveUp) {
             if (amb.current === null) ambNext();
             else ambPlay();
             ambScheduleSilence();
         }
         ambScheduleSpot();
         ambFade();
+    }
+    const round = show.current;
+    if (show.state === "on air" && round && round.cue && amb.cued !== round) {
+        amb.cued = round;
+        ambCue(round.cue);
     }
 }
 
@@ -207,15 +227,23 @@ function ambLog(message) {
 
 /** Load the next texture of the order (a new shuffle when it is used up), and play it if the ambience is playing. */
 function ambNext() {
-    const textures = ambOfKind(show.run.ambience.clips, "texture");
+    const textures = ambRotation(show.run.ambience.clips, "texture");
     if (!textures.length) return;
     if (!amb.order.length) {
         amb.order = bedShuffle(textures.length, amb.current, amb.random);
         ambLog(`shuffled: a new pass of ${textures.length} textures`);
     }
-    amb.current = amb.order.shift();
-    const clip = textures[amb.current];
-    ambLog(`texture ${textures.length - amb.order.length} of ${textures.length}: ${clip.file}`);
+    const index = amb.order.shift();
+    ambLoad(textures[index], index, `texture ${textures.length - amb.order.length} of ${textures.length}`);
+}
+
+/**
+ * Load a texture, fading in, and play it if the ambience is playing. index is its place in the rotation (null for a
+ * cue-only texture, which leaves the shuffle's place as it is); what says why, in the console.
+ */
+function ambLoad(clip, index, what) {
+    if (index !== null) amb.current = index;
+    ambLog(`${what}: ${clip.file}`);
     amb.texture.src = `/api/show/ambience/${encodeURIComponent(clip.file)}`;
     amb.textureGain.gain.cancelScheduledValues(amb.ctx.currentTime);
     amb.textureGain.gain.setValueAtTime(0, amb.ctx.currentTime);
@@ -233,8 +261,10 @@ function ambPlay() {
 
 /** A texture could not be loaded: the next one, unless every texture has failed in a row. */
 function ambFailed() {
+    const textures = ambRotation(show.run.ambience.clips, "texture").length;
+    if (!textures) return; // A cue-only texture failed, with no rotation to go on to: the textures stay silent
     amb.failures += 1;
-    if (amb.failures >= ambOfKind(show.run.ambience.clips, "texture").length) {
+    if (amb.failures >= textures) {
         console.warn("Show: no texture of the ambience would load; the textures are off for this run");
         amb.gaveUp = true;
         amb.texture.pause();
@@ -250,7 +280,7 @@ function ambScheduleSpot() {
     const settings = show.run && show.run.ambience;
     globalThis.clearTimeout(amb.spotTimer);
     amb.spotTimer = null;
-    if (!amb.playing || !settings || !settings.spots || !ambOfKind(settings.clips, "spot").length) return;
+    if (!amb.playing || !settings || !settings.spots || !ambRotation(settings.clips, "spot").length) return;
     amb.spotTimer = globalThis.setTimeout(ambSpot, bedBetween(settings.spot_every_s, amb.random) * 1000);
 }
 
@@ -259,10 +289,17 @@ function ambSpot() {
     amb.spotTimer = null;
     if (!amb.playing) return;
     const settings = show.run.ambience;
-    const spots = ambOfKind(settings.clips, "spot");
+    const spots = ambRotation(settings.clips, "spot");
     amb.lastSpot = ambPickSpot(spots.length, amb.lastSpot, amb.random);
-    const clip = spots[amb.lastSpot];
-    ambLog(`spot: ${clip.file}`);
+    ambPlaySpot(spots[amb.lastSpot], "spot");
+}
+
+/** Play a spot at its gain times spot_volume, cutting one under way; the next random spot is set when it ends. */
+function ambPlaySpot(clip, what) {
+    const settings = show.run.ambience;
+    globalThis.clearTimeout(amb.spotTimer);
+    amb.spotTimer = null;
+    ambLog(`${what}: ${clip.file}`);
     amb.spot.src = `/api/show/ambience/${encodeURIComponent(clip.file)}`;
     ambRamp(amb.spotGain.gain, clip.gain * settings.spot_volume, AMB.spotFadeS);
     const played = amb.spot.play();
@@ -272,6 +309,35 @@ function ambSpot() {
             ambScheduleSpot();
         });
     }
+}
+
+/* The sound cues: the round's event named a sound. */
+
+/**
+ * Play a cue: a spot at once (when the run has spots), or a texture in place of the current one, to its end. Any
+ * clip of the run can be cued, cue-only or not; one in the rotation also takes its place there (the spot heard last;
+ * out of the shuffle's pass).
+ */
+function ambCue(cue) {
+    const settings = show.run.ambience;
+    const clip = ambOfKind(settings.clips, cue.kind).find((c) => c.file === cue.file);
+    if (!clip) return;
+    const index = ambRotation(settings.clips, cue.kind).indexOf(clip);
+    if (cue.kind === "spot") {
+        if (!settings.spots) return;
+        if (index >= 0) amb.lastSpot = index;
+        ambPlaySpot(clip, "cue, spot");
+        return;
+    }
+    if (amb.gaveUp) return;
+    if (amb.silent) {
+        globalThis.clearTimeout(amb.silenceTimer);
+        amb.silent = false;
+        ambRamp(amb.gate.gain, 1, AMB.clipFadeS);
+    }
+    if (settings.silences) ambScheduleSilence();
+    if (index >= 0) amb.order = amb.order.filter((i) => i !== index);
+    ambLoad(clip, index >= 0 ? index : null, "cue, texture");
 }
 
 /** Pause the ambience at once, keeping the texture's place; no silence or spot due; the next level rises from 0. */

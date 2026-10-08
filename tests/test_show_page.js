@@ -38,7 +38,9 @@
  *     and the microphone is closed after each; the round request's body;
  *   - the listener's caption: Whisper's words in three bands of confidence,
  *     the whole text when there are no words, "(nothing heard)", and the
- *     filter's verdict added when the next summary says it was silence.
+ *     filter's verdict added when the next summary says it was silence;
+ *   - a round's sound cue: its "cue" event kept on the round (ambience.js
+ *     plays it).
  *
  * How it works: the show's scripts are browser globals (classic scripts,
  * like upstream's), so each test evaluates sse.js + player.js + mic.js +
@@ -109,6 +111,18 @@ function responseOf(chunks) {
 
 const DONE = 'data: {"type": "done", "persona": "Moira", "text": "Over."}';
 const COMPLETE = 'data: {"type": "complete"}';
+
+/** A page element stub, enough for a round's elements with the voice off. */
+function pageElement() {
+    return {
+        textContent: "", hidden: false, disabled: false, children: [], dataset: {}, style: {},
+        classList: { add() {}, remove() {}, toggle() {} }, setAttribute() {},
+        appendChild(child) { this.children.push(child); return child; },
+        append(...children) { this.children.push(...children); },
+        prepend(...children) { this.children.unshift(...children); },
+        querySelector() { return null; }, querySelectorAll() { return []; }, scrollIntoView() {}, remove() {},
+    };
+}
 
 /* ==========================================================================
    The stream splitter
@@ -182,6 +196,19 @@ test("debugLine: a free round with its event, tone, trim and timings", () => {
 
     assert.equal(line, "round 14 · free · speakers Moira, Ralph · event A pipe bursts. · tone wry"
         + " · trimmed rounds 3, 4, 5 · first line 0.8 s · round 1.9 s · run 2026-09-25T20-00-00");
+});
+
+test("debugLine: a cued round names its cue after the event", () => {
+    const { sandbox } = loadShow();
+    const summary = {
+        n: 7, kind: "free", speakers: ["Daniel", "Moira"], event: "An explosion rattles the windows.", tone: "grim",
+        cue: { file: "explosion-4.mp3", kind: "spot" }, heard: null, trimmed: [], dropped: [],
+    };
+
+    const line = sandbox.debugLine(summary, { firstLineS: 0.5, seconds: 2 }, "2026-10-07T18-40-00");
+
+    assert.equal(line, "round 7 · free · speakers Daniel, Moira · event An explosion rattles the windows."
+        + " · cue explosion-4.mp3 · tone grim · first line 0.5 s · round 2.0 s · run 2026-10-07T18-40-00");
 });
 
 test("debugLine: a re-call without event or tone; what was heard, words or silence", () => {
@@ -806,4 +833,30 @@ test("the RECEIVER sign: a last line that starts before its summary arrives is f
     call.summary = { listens: true };
     sandbox.receiverCue(call);
     assert.equal(lit(), true);
+});
+
+/* ==========================================================================
+   The sound cue
+   ========================================================================== */
+
+test("a round's cue event is kept on the round, for ambience.js to play as the first line is heard", async () => {
+    const elements = {};
+    const document = {
+        addEventListener: () => {}, getElementById: (id) => (elements[id] ||= pageElement()),
+        createElement: pageElement, createTextNode: (text) => ({ text }),
+    };
+    const reply = [
+        'data: {"type": "cue", "file": "boom-1.mp3", "kind": "spot"}',
+        'data: {"type": "start", "persona": "Moira", "mood": "afraid"}',
+        DONE,
+        'data: {"type": "round", "n": 2, "kind": "free", "event": "An explosion.", "listens": false, "receiver": false}',
+        COMPLETE,
+    ].map((line) => `${line}\n\n`);
+    const { sandbox } = loadShow({ document, fetch: async () => ({ ok: true, ...responseOf(reply) }) });
+    vm.runInContext('show.voice = false; show.run = { run_id: "run-1", debug: false };', sandbox);
+
+    const round = await sandbox.playRound(new AbortController().signal);
+
+    assert.deepEqual(plain(round.cue), { type: "cue", file: "boom-1.mp3", kind: "spot" });
+    assert.equal(round.lines.length, 1);
 });

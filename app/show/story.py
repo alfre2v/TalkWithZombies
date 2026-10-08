@@ -78,10 +78,14 @@ class Beats:
 @dataclass(frozen=True)
 class BedClip:
     """One clip of the story's static bed (bed.yaml): its file in Sounds/bed/, whether it plays, and a change of its
-    level by ear, in dB, added to the gain measured for it (Sounds/bed/bed.json)."""
+    level by ear, in dB, added to the gain measured for it (Sounds/bed/bed.json). For the ambience (ambience.yaml),
+    also the words of an event that cue it (lowercase; empty when nothing cues it), and whether it plays only when
+    cued (cue_only: never in the random rotation)."""
     file: str
     enabled: bool = True
     gain_db: float = 0.0
+    keywords: Tuple[str, ...] = ()
+    cue_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -153,7 +157,7 @@ def load_story(name: str, root: Optional[Path] = None) -> Story:
                  agenda=_load_agenda(name, folder / "agenda.yaml"), orientation=orientation.strip(),
                  directions={beat: text.strip() for beat, text in directions.items()},
                  beats=_load_beats(name, folder / "beats.yaml"), bed=_load_bed(name, folder / "bed.yaml"),
-                 ambience=_load_bed(name, folder / "ambience.yaml"))
+                 ambience=_load_bed(name, folder / "ambience.yaml", keywords=True))
 
 
 def _read_yaml(name: str, path: Path) -> dict:
@@ -305,13 +309,16 @@ def _load_beats(name: str, path: Path) -> Optional[Beats]:
 
 _BED_KEYS = {"file", "enabled", "gain_db"}
 _BED_GAIN_DB = 40  # a change by ear is kept within plus or minus this
+_KEYWORD = re.compile(r"[a-z]+(?:['\- ][a-z]+)*")  # a word or a phrase: letters, joined by an apostrophe, hyphen or space
 
 
-def _load_bed(name: str, path: Path) -> Optional[Tuple[BedClip, ...]]:
+def _load_bed(name: str, path: Path, keywords: bool = False) -> Optional[Tuple[BedClip, ...]]:
     """Read bed.yaml (or ambience.yaml, the same shape), if the story has it: 'clips', a list of {file, enabled,
     gain_db}. file is a clip's plain name in Sounds/bed/ (Sounds/ambience/), named once; enabled (true or false,
     default true) and gain_db (a number of dB, default 0) are optional; any other key fails, so a misspelled one is
-    never ignored. None without the file."""
+    never ignored. With keywords (ambience.yaml), a clip may also have keywords: a list of words or phrases that cue
+    it when an event says one (kept in lowercase), and cue_only (true or false, default false): it plays only when
+    cued, so a cue-only clip needs keywords. None without the file."""
     if not path.is_file():
         return None
     data = _read_yaml(name, path)
@@ -319,6 +326,7 @@ def _load_bed(name: str, path: Path) -> Optional[Tuple[BedClip, ...]]:
     def fail(what: str):
         raise StoryError(f"story {name!r}: {path.name} {what}")
 
+    allowed = _BED_KEYS | {"keywords", "cue_only"} if keywords else _BED_KEYS
     entries = data.get("clips")
     if not isinstance(entries, list):
         fail("needs 'clips', a list of {file, enabled, gain_db}")
@@ -327,9 +335,9 @@ def _load_bed(name: str, path: Path) -> Optional[Tuple[BedClip, ...]]:
         if not isinstance(entry, dict) or not isinstance(entry.get("file"), str):
             fail(f"needs a file for each clip: {entry!r}")
         file = entry["file"]
-        unknown = sorted(set(entry) - _BED_KEYS)
+        unknown = sorted(set(entry) - allowed)
         if unknown:
-            fail(f"does not know {', '.join(map(str, unknown))} (for {file}): only file, enabled, gain_db")
+            fail(f"does not know {', '.join(map(str, unknown))} (for {file}): only {', '.join(sorted(allowed))}")
         if not CLIP_NAME.fullmatch(file):
             fail(f"names {file!r}, not a clip's plain file name (e.g. 730109-shortwave-radio-static.mp3)")
         enabled = entry.get("enabled", True)
@@ -338,7 +346,19 @@ def _load_bed(name: str, path: Path) -> Optional[Tuple[BedClip, ...]]:
         gain_db = entry.get("gain_db", 0)
         if isinstance(gain_db, bool) or not isinstance(gain_db, (int, float)) or abs(gain_db) > _BED_GAIN_DB:
             fail(f"needs gain_db a number of dB within -{_BED_GAIN_DB} and {_BED_GAIN_DB} for {file}")
-        clips.append(BedClip(file=file, enabled=enabled, gain_db=float(gain_db)))
+        words = entry.get("keywords", [])
+        if not isinstance(words, list) or not all(isinstance(w, str) for w in words):
+            fail(f"needs keywords a list of words or phrases for {file}")
+        words = tuple(" ".join(w.lower().split()) for w in words)
+        bad = [w for w in words if not _KEYWORD.fullmatch(w)]
+        if bad:
+            fail(f"needs keywords of letters only (a phrase joined by spaces, hyphens or apostrophes) for {file}: {bad}")
+        cue_only = entry.get("cue_only", False)
+        if not isinstance(cue_only, bool):
+            fail(f"needs cue_only true or false for {file}")
+        if cue_only and not words:
+            fail(f"makes {file} cue_only without keywords: no event could ever play it")
+        clips.append(BedClip(file=file, enabled=enabled, gain_db=float(gain_db), keywords=words, cue_only=cue_only))
     files = [c.file for c in clips]
     if len(set(files)) != len(files):
         fail(f"names a clip twice: {sorted({f for f in files if files.count(f) > 1})}")

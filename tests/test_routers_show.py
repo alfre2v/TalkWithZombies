@@ -201,8 +201,8 @@ class TestStart:
         _ambience_folder(show_env, {"dead-1.mp3": (1.5, "texture"), "gun-1.mp3": (0.5, "spot")})
 
         assert _start(client)["ambience"] == {
-            "clips": [{"file": "dead-1.mp3", "gain": 1.5, "kind": "texture"},
-                      {"file": "gun-1.mp3", "gain": 0.5, "kind": "spot"}],
+            "clips": [{"file": "dead-1.mp3", "gain": 1.5, "kind": "texture", "cue_only": False},
+                      {"file": "gun-1.mp3", "gain": 0.5, "kind": "spot", "cue_only": False}],
             "volume_voice": 0.12, "volume_between": 0.3, "dip_s": 0.8, "rise_s": 2.5,
             "silences": True, "silence_every_s": [45.0, 150.0], "silence_s": [5.0, 20.0], "silence_fade_s": 2.0,
             "fading_db": 4.0, "fading_every_s": [5.0, 15.0],
@@ -227,7 +227,17 @@ class TestStart:
                          story_ambience="clips:\n  - {file: gun-1.mp3, gain_db: -6}\n"
                                         "  - {file: dead-1.mp3, enabled: false}\n")
 
-        assert _start(client)["ambience"]["clips"] == [{"file": "gun-1.mp3", "gain": 0.5012, "kind": "spot"}]
+        assert _start(client)["ambience"]["clips"] == [{"file": "gun-1.mp3", "gain": 0.5012, "kind": "spot",
+                                                        "cue_only": False}]
+
+    def test_a_clip_the_story_makes_cue_only_comes_marked(self, client, show_env):
+        _ambience_folder(show_env, {"dead-1.mp3": (1.0, "texture"), "heli-1.mp3": (1.0, "spot")},
+                         story_ambience="clips:\n  - {file: dead-1.mp3}\n"
+                                        "  - {file: heli-1.mp3, keywords: [helicopter], cue_only: true}\n")
+
+        clips = _start(client)["ambience"]["clips"]
+
+        assert [(c["file"], c["cue_only"]) for c in clips] == [("dead-1.mp3", False), ("heli-1.mp3", True)]
 
     def test_no_ambience_without_clips(self, client, show_env):
         (show_env / "stories" / "lab-outbreak" / "ambience.yaml").unlink(missing_ok=True)
@@ -592,6 +602,82 @@ class TestFixedLines:
         assert breakdown.kind == "breakdown" and breakdown.lines[0].fixed
         assert fake_model[-1]["messages"][-1]["content"].startswith(
             'Something happens that the listeners cannot see, and Samantha has just told them on air: "')
+
+
+def _event_word(client):
+    """The longest word of the event the second round of a seed-42 run reads (a free round with an event)."""
+    run_id = _start(client)["run_id"]
+    _round(client, run_id)
+    event = _summary(_round(client, run_id, played_s=5))["event"]
+    assert event, "the second round of a seed-42 run reads no event"
+    return max(re.findall(r"[a-z]+", event.lower()), key=len)
+
+
+def _cued_round(client):
+    """The second round of a new seed-42 run: its events, its summary and its record."""
+    run_id = _start(client)["run_id"]
+    _round(client, run_id)
+    events = _round(client, run_id, played_s=5)
+    return events, _summary(events), load_run(run_id).rounds[1]
+
+
+class TestSoundCues:
+    CLIPS = {"boom-1.mp3": (1.0, "spot"), "boom-2.mp3": (1.0, "spot"), "dead-1.mp3": (1.0, "texture")}
+
+    def test_an_event_that_says_a_keyword_opens_its_round_with_a_cue(self, client, show_env, fake_model):
+        word = _event_word(client)
+        _ambience_folder(show_env, self.CLIPS, story_ambience=f"clips:\n  - {{file: boom-1.mp3, keywords: [{word}]}}\n"
+                                                              "  - {file: dead-1.mp3}\n")
+
+        events, summary, recorded = _cued_round(client)
+
+        kinds = [e["type"] for e in events if e["type"] != "token"]
+        assert kinds[:2] == ["cue", "start"]
+        assert sse_events_by_type(events, "cue") == [{"type": "cue", "file": "boom-1.mp3", "kind": "spot"}]
+        assert summary["cue"] == {"file": "boom-1.mp3", "kind": "spot"}
+        assert recorded.cue == "boom-1.mp3"
+
+    def test_the_cue_never_changes_the_directors_plan(self, client, show_env, fake_model):
+        word = _event_word(client)
+        _, plain, before = _cued_round(client)
+        _ambience_folder(show_env, self.CLIPS, story_ambience=f"clips:\n  - {{file: boom-1.mp3, keywords: [{word}]}}\n")
+
+        _, cued, after = _cued_round(client)
+
+        assert (plain["cue"], cued["cue"]["file"]) == (None, "boom-1.mp3")
+        assert (after.event, after.speakers, after.instruction, after.tone) == (
+            before.event, before.speakers, before.instruction, before.tone)
+
+    def test_no_cue_without_an_event_or_a_keyword_it_says(self, client, show_env, fake_model):
+        _ambience_folder(show_env, self.CLIPS, story_ambience="clips:\n  - {file: boom-1.mp3, keywords: [zeppelin]}\n")
+        run_id = _start(client)["run_id"]
+
+        for played_s in (0, 5):
+            events = _round(client, run_id, played_s=played_s)
+            assert sse_events_by_type(events, "cue") == []
+            assert _summary(events)["cue"] is None
+        assert [r.cue for r in load_run(run_id).rounds] == [None, None]
+        assert load_run(run_id).rounds[1].event
+
+    def test_no_cue_with_the_ambience_off_or_the_clip_disabled(self, client, show_env, fake_model):
+        word = _event_word(client)
+        _ambience_folder(show_env, self.CLIPS,
+                         story_ambience=f"clips:\n  - {{file: boom-1.mp3, enabled: false, keywords: [{word}]}}\n"
+                                        "  - {file: dead-1.mp3}\n")
+        assert _cued_round(client)[1]["cue"] is None
+
+        _ambience_folder(show_env, self.CLIPS, story_ambience=f"clips:\n  - {{file: boom-1.mp3, keywords: [{word}]}}\n")
+        app_config._settings_cache.show = ShowConfig(seed=42, ambience=False)
+        assert _cued_round(client)[1]["cue"] is None
+
+    def test_the_same_seed_cues_the_same_clip(self, client, show_env, fake_model):
+        word = _event_word(client)
+        _ambience_folder(show_env, self.CLIPS, story_ambience=f"clips:\n  - {{file: boom-1.mp3, keywords: [{word}]}}\n"
+                                                              f"  - {{file: boom-2.mp3, keywords: [{word}]}}\n")
+
+        picks = {_cued_round(client)[1]["cue"]["file"] for _ in range(3)}
+
+        assert len(picks) == 1 and picks <= {"boom-1.mp3", "boom-2.mp3"}
 
 
 class TestListenerTurn:

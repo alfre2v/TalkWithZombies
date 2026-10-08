@@ -86,6 +86,71 @@ class TestStoryAmbience:
         else:
             raise AssertionError("a misspelled key must fail")
 
+    def test_keywords_kept_in_lowercase_with_single_spaces(self, tmp_path):
+        path = tmp_path / "ambience.yaml"
+        path.write_text("clips:\n  - {file: boom-1.mp3, keywords: [Explosion, '  Lightning   Strikes ', dead's]}\n"
+                        "  - {file: dead-1.mp3}\n", encoding="utf-8")
+
+        clips = _load_bed("lab-outbreak", path, keywords=True)
+
+        assert [c.keywords for c in clips] == [("explosion", "lightning strikes", "dead's"), ()]
+
+    def test_cue_only_kept_false_by_default(self, tmp_path):
+        path = tmp_path / "ambience.yaml"
+        path.write_text("clips:\n  - {file: heli-1.mp3, keywords: [helicopter], cue_only: true}\n"
+                        "  - {file: dead-1.mp3}\n", encoding="utf-8")
+
+        clips = _load_bed("lab-outbreak", path, keywords=True)
+
+        assert [c.cue_only for c in clips] == [True, False]
+
+    def test_cue_only_must_be_true_or_false_and_needs_keywords(self, tmp_path):
+        path = tmp_path / "ambience.yaml"
+        for entry, why in (("{file: heli-1.mp3, keywords: [helicopter], cue_only: yes please}", "needs cue_only true or false"),
+                           ("{file: heli-1.mp3, cue_only: true}", "cue_only without keywords"),
+                           ("{file: heli-1.mp3, keywords: [], cue_only: true}", "cue_only without keywords")):
+            path.write_text(f"clips:\n  - {entry}\n", encoding="utf-8")
+            try:
+                _load_bed("lab-outbreak", path, keywords=True)
+            except Exception as exc:  # StoryError
+                assert why in str(exc), (entry, str(exc))
+            else:
+                raise AssertionError(f"{entry} must fail")
+
+    def test_cue_only_only_in_the_ambience(self, tmp_path):
+        path = tmp_path / "bed.yaml"
+        path.write_text("clips:\n  - {file: static-1.mp3, cue_only: false}\n", encoding="utf-8")
+
+        try:
+            _load_bed("lab-outbreak", path)
+        except Exception as exc:  # StoryError
+            assert "bed.yaml does not know cue_only" in str(exc)
+        else:
+            raise AssertionError("cue_only in bed.yaml must fail")
+
+    def test_keywords_only_in_the_ambience(self, tmp_path):
+        path = tmp_path / "bed.yaml"
+        path.write_text("clips:\n  - {file: static-1.mp3, keywords: [static]}\n", encoding="utf-8")
+
+        try:
+            _load_bed("lab-outbreak", path)
+        except Exception as exc:  # StoryError
+            assert "bed.yaml does not know keywords" in str(exc)
+        else:
+            raise AssertionError("keywords in bed.yaml must fail")
+
+    def test_keywords_must_be_a_list_of_words_or_phrases(self, tmp_path):
+        path = tmp_path / "ambience.yaml"
+        for keywords, why in (("explosion", "needs keywords a list"), ("[boom!]", "needs keywords of letters only"),
+                              ("[3 shots]", "needs keywords of letters only"), ("[42]", "needs keywords a list")):
+            path.write_text(f"clips:\n  - {{file: boom-1.mp3, keywords: {keywords}}}\n", encoding="utf-8")
+            try:
+                _load_bed("lab-outbreak", path, keywords=True)
+            except Exception as exc:  # StoryError
+                assert why in str(exc), (keywords, str(exc))
+            else:
+                raise AssertionError(f"keywords {keywords} must fail")
+
 
 class TestShippedAmbience:
     """The ambience as shipped: Sounds/ambience/ and the story's ambience.yaml, both in the repo."""
@@ -96,13 +161,20 @@ class TestShippedAmbience:
         return json.loads((self.FOLDER / AMBIENCE_MANIFEST).read_text(encoding="utf-8"))["clips"]
 
     def test_every_clip_the_story_enables_is_on_disk_and_in_the_manifest_with_a_kind(self):
-        chosen = _load_bed("lab-outbreak", REPO / "stories" / "lab-outbreak" / "ambience.yaml")
+        chosen = _load_bed("lab-outbreak", REPO / "stories" / "lab-outbreak" / "ambience.yaml", keywords=True)
         on_disk = bed_clips(self.FOLDER, AMBIENCE_MANIFEST)
         enabled = [c.file for c in chosen if c.enabled]
         assert enabled, "the shipped story enables no clip of the ambience"
         playing = bed_play_list(on_disk, chosen)
         assert [c["file"] for c in playing] == enabled
         assert all(c.get("kind") in KINDS for c in playing)
+
+    def test_the_shipped_keywords_cue_only_enabled_clips_on_disk(self):
+        chosen = _load_bed("lab-outbreak", REPO / "stories" / "lab-outbreak" / "ambience.yaml", keywords=True)
+        on_disk = {c["file"] for c in bed_clips(self.FOLDER, AMBIENCE_MANIFEST)}
+        cued = [c.file for c in chosen if c.keywords]
+        assert cued, "the shipped story gives no clip keywords"
+        assert all(c.enabled and c.file in on_disk for c in chosen if c.keywords)
 
     def test_there_are_textures_and_spots(self):
         kinds = {c["kind"] for c in self._manifest()}

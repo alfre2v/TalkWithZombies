@@ -1,140 +1,430 @@
 # The ambience: which clips of Sounds/ambience/ play under this story — the world outside the lab, heard through the
 # broadcast: the dead, the fighting, the people, the weather. The clips ship with the app in Sounds/ambience/, with
 # Sounds/ambience/ambience.json (what is on disk: each clip's kind, length and measured gain) and CREDITS.md, all
-# written by zombie-radio's tools/sounds/prepare_ambience.py; this file only chooses. The 31 were generated with
-# Stable Audio 3 Small-SFX and chosen by the owner by ear on 2026-10-07 (zombie-radio's TODO, Task 13). A texture
-# (long, continuous) plays one after another; a spot (short, a single event) now and then, on top. Each clip:
+# written by zombie-radio's tools/sounds/prepare_ambience.py; this file only chooses. All were generated with
+# Stable Audio 3 Small-SFX and chosen by the owner by ear: the 31 of the ambience on 2026-10-07 (zombie-radio's TODO,
+# Task 13), the 42 event sounds, at the end, on 2026-10-08 (Task 14). A texture (long, continuous) plays one after
+# another; a spot (short, a single event) now and then, on top. Each clip's comment gives its kind, its length and
+# its prompt, as the manifest has them. Each clip:
 #   file     its file there
 #   enabled  true or false (optional; true when left out)
 #   gain_db  a change of its level by ear, in dB, added to the measured gain (optional; 0 when left out). 0 changes
 #            nothing; -3 is a little quieter, -6 half the amplitude, +6 twice it
+#   keywords the words or phrases of an event that cue the clip (optional; none when left out): a sound cue. When a
+#            free round's event says one (a whole word or phrase, any case), the clip plays as the event is read —
+#            a spot at once, a texture in place of the current one, to its end; several clips matched, one at
+#            random. Keep them precise: a loose word plays a sound where it does not belong ("blast" also means a
+#            blast door; "the moaning stops" names a moan). The dead's own sounds have none: every event naming
+#            them is about something else. List each form (explosion, explosions, explodes): no word stems
+#   cue_only true or false (optional; false when left out): true, the clip plays only when an event cues it —
+#            never in the shuffle of the textures or among the random spots. For a sound that belongs to its event
+#            (a helicopter, a train horn), not to the general ambience. A cue-only clip needs keywords
 # Read when a run opens: change a line, reload the show page and press Start, and the new run plays the new list,
 # with no restart of the app. A clip enabled here but missing there is skipped (the app's log says so); without this
 # file, every clip there plays.
 clips:
   # Textures
-  # A large crowd of zombies moaning far away at night, low and continuous (25 s)
+  # texture · 25 s · A large crowd of zombies moaning far away at night, low and continuous
   - file: dead-crowd-far-1.mp3
     enabled: true
     gain_db: 0
-  # A huge horde of the undead murmuring and groaning in the distance, a steady low drone (25 s)
+  # texture · 25 s · A huge horde of the undead murmuring and groaning in the distance, a steady low drone
   - file: dead-horde-murmur-1.mp3
     enabled: true
     gain_db: 0
-  # A few zombies slowly moaning just outside a concrete wall, muffled, continuous (25 s)
+    keywords: [horde, hordes]
+  # texture · 25 s · A few zombies slowly moaning just outside a concrete wall, muffled, continuous
   - file: dead-few-close-1.mp3
     enabled: true
     gain_db: 0
-  # A restless crowd of zombies outside, groans rising and falling, agitated, steady (25 s)
+  # texture · 25 s · A restless crowd of zombies outside, groans rising and falling, agitated, steady
   - file: dead-restless-1.mp3
     enabled: true
     gain_db: 0
-  # Slow heavy fists banging on a metal door, muffled moans behind it, continuous (25 s)
+  # texture · 25 s · Slow heavy fists banging on a metal door, muffled moans behind it, continuous
   - file: dead-banging-door-1.mp3
     enabled: true
     gain_db: 0
-  # A crowd of zombies moaning, slowly getting louder as they come closer (25 s)
+    keywords: [banging, pounding, hammering on the door, fists]
+  # texture · 25 s · A crowd of zombies moaning, slowly getting louder as they come closer
   - file: dead-swelling-1.mp3
     enabled: true
     gain_db: 0
-  # A car alarm wailing far away in an empty city, continuous (25 s)
+    keywords: [getting louder, growing louder, closer and closer]
+  # texture · 25 s · A car alarm wailing far away in an empty city, continuous
   - file: car-alarm-far-1.mp3
     enabled: true
     gain_db: 0
-  # Dogs barking far away in a deserted city at night, continuous (25 s)
+    keywords: [car alarm, car alarms]
+  # texture · 25 s · Dogs barking far away in a deserted city at night, continuous
   - file: dogs-far-1.mp3
     enabled: true
     gain_db: 0
-  # A distant crowd of people panicking and screaming, muffled by distance, continuous (25 s)
+    keywords: [barking, barks, dogs bark, dog barks]
+  # texture · 25 s · A distant crowd of people panicking and screaming, muffled by distance, continuous
   - file: crowd-panic-far-1.mp3
     enabled: true
     gain_db: 0
-  # A heavy thunderstorm, loud thunder claps and pouring rain, continuous (25 s)
+    keywords: [panic, panicking, stampede, riot, rioting]
+  # texture · 25 s · A heavy thunderstorm, loud thunder claps and pouring rain, continuous
   - file: thunderstorm-1.mp3
     enabled: true
     gain_db: 0
-  # A heavy thunderstorm, loud thunder claps and pouring rain, continuous (25 s)
+    keywords: [thunder, thunderstorm, thunderclap, lightning strikes, lightning strike]
+  # texture · 25 s · A heavy thunderstorm, loud thunder claps and pouring rain, continuous
   - file: thunderstorm-2.mp3
     enabled: true
     gain_db: 0
-  # A heavy thunderstorm, loud thunder claps and pouring rain, continuous (25 s)
+    keywords: [thunder, thunderstorm, thunderclap, lightning strikes, lightning strike]
+  # texture · 25 s · A heavy thunderstorm, loud thunder claps and pouring rain, continuous
   - file: thunderstorm-3.mp3
     enabled: true
     gain_db: 0
-  # A continuous gunfight outside, repeated machine gun bursts and many gunshots, warfare (20 s)
+    keywords: [thunder, thunderstorm, thunderclap, lightning strikes, lightning strike]
+  # texture · 20 s · A continuous gunfight outside, repeated machine gun bursts and many gunshots, warfare
   - file: warfare-1.mp3
     enabled: true
     gain_db: 0
-  # A continuous gunfight outside, repeated machine gun bursts and many gunshots, warfare (20 s)
+    keywords: [gunfire, gunfight, firefight, shootout, gun battle]
+  # texture · 20 s · A continuous gunfight outside, repeated machine gun bursts and many gunshots, warfare
   - file: warfare-3.mp3
     enabled: true
     gain_db: 0
-  # A continuous gunfight outside, repeated machine gun bursts and many gunshots, warfare (20 s)
+    keywords: [gunfire, gunfight, firefight, shootout, gun battle]
+  # texture · 20 s · A continuous gunfight outside, repeated machine gun bursts and many gunshots, warfare
   - file: warfare-4.mp3
     enabled: true
     gain_db: 0
-  # A continuous gunfight outside, repeated machine gun bursts and many gunshots, warfare (20 s)
+    keywords: [gunfire, gunfight, firefight, shootout, gun battle]
+  # texture · 20 s · A continuous gunfight outside, repeated machine gun bursts and many gunshots, warfare
   - file: warfare-5.mp3
     enabled: true
     gain_db: 0
+    keywords: [gunfire, gunfight, firefight, shootout, gun battle]
   # Spots
-  # A single long low zombie moan outside, close (5 s)
+  # spot · 5 s · A single long low zombie moan outside, close
   - file: dead-moan-long-1.mp3
     enabled: true
     gain_db: 0
-  # A frantic zombie shriek in the distance (3 s)
+    keywords: [a long moan, a single moan]
+  # spot · 3 s · A frantic zombie shriek in the distance
   - file: dead-shriek-1.mp3
     enabled: true
     gain_db: 0
-  # A group of zombies screaming frantically far away (4 s)
+  # spot · 4 s · A group of zombies screaming frantically far away
   - file: dead-screams-group-1.mp3
     enabled: true
     gain_db: 0
-  # A guttural zombie growl right outside a window (3 s)
+  # spot · 3 s · A guttural zombie growl right outside a window
   - file: dead-growl-1.mp3
     enabled: true
     gain_db: 0
-  # A wet gurgling groan of a zombie, close (3 s)
+    keywords: [growl, growls, growling]
+  # spot · 3 s · A wet gurgling groan of a zombie, close
   - file: dead-gurgle-1.mp3
     enabled: true
     gain_db: 0
-  # A single inhuman howl far away in the night (4 s)
+  # spot · 4 s · A single inhuman howl far away in the night
   - file: dead-howl-far-1.mp3
     enabled: true
     gain_db: 0
-  # Zombies snarling and snapping their teeth outside a door (3 s)
+  # spot · 3 s · Zombies snarling and snapping their teeth outside a door
   - file: dead-snarling-1.mp3
     enabled: true
     gain_db: 0
-  # A burst of machine gun fire in the distance (3 s)
+    keywords: [snarl, snarls, snarling]
+  # spot · 3 s · A burst of machine gun fire in the distance
   - file: gun-burst-far-1.mp3
     enabled: true
     gain_db: 0
-  # A few single gunshots far away, echoing between buildings (4 s)
+    keywords: [machine gun, machine-gun, machine guns, automatic fire, chain gun, burst of gunfire]
+  # spot · 4 s · A few single gunshots far away, echoing between buildings
   - file: gun-shots-far-1.mp3
     enabled: true
     gain_db: 0
-  # A woman screaming in terror in the distance (3 s)
+    keywords: [gunshot, gunshots, rifle shot, rifle shots, a shot rings out, shots ring out, sniper]
+  # spot · 3 s · A woman screaming in terror in the distance
   - file: scream-woman-far-1.mp3
     enabled: true
     gain_db: 0
-  # A man screaming in pain far away (3 s)
+    keywords: [scream, screams, screaming, screamed]
+  # spot · 3 s · A man screaming in pain far away
   - file: scream-man-far-1.mp3
     enabled: true
     gain_db: 0
-  # Hysterical laughter echoing in the distance at night (5 s)
+    keywords: [scream, screams, screaming, screamed]
+  # spot · 5 s · Hysterical laughter echoing in the distance at night
   - file: laughter-far-1.mp3
     enabled: true
     gain_db: 0
-  # A person laughing hysterically just outside a window, muffled (4 s)
+    keywords: [laughter, hysterical, hysterically, cackle, cackles, cackling]
+  # spot · 4 s · A person laughing hysterically just outside a window, muffled
   - file: laughter-close-1.mp3
     enabled: true
     gain_db: 0
-  # A loud explosion outside, a powerful boom and rumbling debris (5 s)
+    keywords: [laughter, hysterical, hysterically, cackle, cackles, cackling]
+  # spot · 5 s · A loud explosion outside, a powerful boom and rumbling debris
   - file: explosion-4.mp3
     enabled: true
     gain_db: 0
-  # A loud explosion outside, a powerful boom and rumbling debris (5 s)
+    keywords: [explosion, explosions, explodes, exploded, exploding, detonation, detonates]
+  # spot · 5 s · A loud explosion outside, a powerful boom and rumbling debris
   - file: explosion-5.mp3
     enabled: true
     gain_db: 0
+    keywords: [explosion, explosions, explodes, exploded, exploding, detonation, detonates]
+
+  # Event sounds (cue only): each belongs to the events that name it — heard only when one is read, never in
+  # the random rotation. Chosen by the owner by ear on 2026-10-08 (zombie-radio's TODO, Task 14, R1).
+  # spot · 8 s · A helicopter passes low overhead, the rotor thumping, then fades into the distance
+  - file: helicopter-1.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [helicopter, helicopters]
+    cue_only: true
+  # spot · 8 s · A helicopter passes low overhead, the rotor thumping, then fades into the distance
+  - file: helicopter-2.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [helicopter, helicopters]
+    cue_only: true
+  # spot · 10 s · A jet airliner flying overhead, a loud deep rumbling roar of its engines
+  - file: jet-1.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [jet, a plane]
+    cue_only: true
+  # spot · 10 s · A jet airliner flying overhead, a loud deep rumbling roar of its engines
+  - file: jet-2.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [jet, a plane]
+    cue_only: true
+  # spot · 6 s · The sound of a quadcopter drone hovering nearby, the loud high-pitched buzz of its four spinning propellers
+  - file: drone-6.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [drone]
+    cue_only: true
+  # spot · 10 s · Distant emergency sirens wailing across a city at night, one joining after another, heard from far away
+  - file: sirens-1.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [siren, sirens]
+    cue_only: true
+  # spot · 6 s · A freight train horn blowing, long and mournful, echoing
+  - file: train-horn-1.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [train horn]
+    cue_only: true
+  # spot · 6 s · A freight train horn blowing, long and mournful, echoing
+  - file: train-horn-2.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [train horn]
+    cue_only: true
+  # spot · 4 s · A loud electric fire alarm bell ringing in a corridor
+  - file: fire-alarm-1.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [fire alarm]
+    cue_only: true
+  # spot · 6 s · A smoke detector chirping, a single short high-pitched beep, repeated slowly
+  - file: smoke-detector-2.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [smoke detector]
+    cue_only: true
+  # spot · 6 s · An electronic alarm beeping steadily, a laboratory freezer temperature alarm
+  - file: freezer-alarm-1.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [beeping]
+    cue_only: true
+  # spot · 6 s · An electronic alarm beeping steadily, a laboratory freezer temperature alarm
+  - file: freezer-alarm-3.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [beeping]
+    cue_only: true
+  # spot · 6 s · An old desk telephone ringing, a loud mechanical ring repeated
+  - file: phone-ring-1.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [a phone in the lobby rings, desk phone in the director's office rings]
+    cue_only: true
+  # spot · 8 s · Church bells ringing out in celebration at the Vatican, many large bells pealing continuously
+  - file: church-bell-9.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [church bell rings]
+    cue_only: true
+  # spot · 6 s · A grandfather clock chiming, deep slow bell tones
+  - file: clock-chime-1.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [chimes]
+    cue_only: true
+  # spot · 4 s · A public address system chime, three ascending electronic notes
+  - file: pa-chime-2.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [shift-change chime]
+    cue_only: true
+  # spot · 8 s · A music box playing a slow tinkling melody, out of tune
+  - file: music-box-3.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [music box]
+    cue_only: true
+  # spot · 5 s · An old mechanical typewriter typing quickly, keys clacking, then the carriage bell
+  - file: typewriter-1.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [typewriter]
+    cue_only: true
+  # spot · 5 s · An old mechanical typewriter typing quickly, keys clacking, then the carriage bell
+  - file: typewriter-3.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [typewriter]
+    cue_only: true
+  # spot · 6 s · The very loud sound of a Geiger counter, rapid crackling clicks of radiation, close
+  - file: geiger-4.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [geiger counter]
+    cue_only: true
+  # spot · 6 s · The very loud sound of a Geiger counter, rapid crackling clicks of radiation, close
+  - file: geiger-6.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [geiger counter]
+    cue_only: true
+  # spot · 5 s · An old truck engine cranking and starting, then idling roughly
+  - file: truck-start-1.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [an old truck in the garage starts]
+    cue_only: true
+  # spot · 5 s · An old truck engine cranking and starting, then idling roughly
+  - file: truck-start-3.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [an old truck in the garage starts]
+    cue_only: true
+  # spot · 8 s · Fireworks exploding in the sky, loud bangs and crackling
+  - file: fireworks-2.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [fireworks]
+    cue_only: true
+  # spot · 6 s · Morse code beeps on a radio, a steady pattern of short and long tones
+  - file: morse-2.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [in perfect morse code]
+    cue_only: true
+  # spot · 5 s · An emergency broadcast alert tone, a harsh two-tone electronic signal
+  - file: eas-tone-2.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [emergency broadcast tone]
+    cue_only: true
+  # spot · 5 s · Slow knocking on a wall from the inside, muffled, three knocks
+  - file: knocking-1.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [knocking]
+    cue_only: true
+  # spot · 5 s · Slow knocking on a wall from the inside, muffled, three knocks
+  - file: knocking-3.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [knocking]
+    cue_only: true
+  # spot · 4 s · A rooster crowing loudly
+  - file: rooster-2.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [rooster]
+    cue_only: true
+  # spot · 4 s · A rooster crowing loudly
+  - file: rooster-3.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [rooster]
+    cue_only: true
+  # spot · 5 s · A flock of crows cawing and flapping their wings
+  - file: crows-3.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [flock of crows]
+    cue_only: true
+  # spot · 6 s · The sound of a horse galloping fast and close, loud rhythmic clip-clop of hooves on asphalt
+  - file: horse-4.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [gallops]
+    cue_only: true
+  # spot · 6 s · The sound of a horse galloping fast and close, loud rhythmic clip-clop of hooves on asphalt
+  - file: horse-6.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [gallops]
+    cue_only: true
+  # spot · 8 s · A heavy armored military vehicle rolling slowly, a deep diesel engine rumble and creaking tracks
+  - file: armored-vehicle-1.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [armored vehicle]
+    cue_only: true
+  # texture · 25 s · Strong wind howling through a broken window, continuous
+  - file: wind-howl-3.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [wind starts howling, the sound of wind]
+    cue_only: true
+  # texture · 20 s · Heavy hail hammering on a metal roof, continuous
+  - file: hail-1.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [hail]
+    cue_only: true
+  # spot · 6 s · Slow tapping of a fingernail on a glass door, a rhythmic pattern, a quiet night
+  - file: tapping-glass-1.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [tapping on the glass]
+    cue_only: true
+  # spot · 6 s · Slow tapping of a fingernail on a glass door, a rhythmic pattern, a quiet night
+  - file: tapping-glass-2.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [tapping on the glass]
+    cue_only: true
+  # spot · 6 s · Slow tapping of a fingernail on a glass door, a rhythmic pattern, a quiet night
+  - file: tapping-glass-3.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [tapping on the glass]
+    cue_only: true
+  # spot · 5 s · A dog whining loudly and repeatedly
+  - file: dog-whine-1.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [whines]
+    cue_only: true
+  # spot · 5 s · An owl hooting at night, a slow deep hoot, repeated
+  - file: owl-1.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [owl]
+    cue_only: true
+  # spot · 5 s · An owl hooting at night, a slow deep hoot, repeated
+  - file: owl-3.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [owl]
+    cue_only: true

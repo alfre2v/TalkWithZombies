@@ -39,6 +39,10 @@ listed clip to the page. And the ambience, the world outside the lab, the same
 way: the clips of Sounds/ambience/ambience.json that the story's
 ambience.yaml enables, each with its kind (texture or spot), its settings and
 the bed's AM filter; GET /api/show/ambience/<file> serves a listed clip.
+A round whose event says a keyword of one of those clips (the story's
+ambience.yaml) is cued (app/show/cues.py): its stream opens with a "cue"
+event (the clip's file and kind) before its first line, the page plays it as
+the first line is heard, and the summary and the record keep it.
 """
 
 import asyncio
@@ -64,6 +68,7 @@ from app.services.llm import server_context, stream_round
 from app.services.stt_client import transcribe_for_show
 from app.show.bed import AMBIENCE_MANIFEST, bed_clips, bed_play_list, clip_path
 from app.show.debug import write_round
+from app.show.cues import cue_dice, cue_for
 from app.show.director import LISTENS, plan_round
 from app.show.listen import usable
 from app.show.parser import LineParser
@@ -186,7 +191,8 @@ def _bed(show: ShowConfig, story: Story) -> Optional[ShowBed]:
 
 def _ambience(show: ShowConfig, story: Story) -> Optional[ShowAmbience]:
     """The ambience for the start reply: the clips that play (on disk with a kind, and enabled by the story's
-    ambience.yaml if it has one), its settings, and the bed's AM filter; None when off or no clip plays."""
+    ambience.yaml if it has one), each marked cue_only when the story says so, its settings, and the bed's AM
+    filter; None when off or no clip plays."""
     if not show.ambience:
         return None
     folder = app_config.get_ambience_directory()
@@ -196,10 +202,25 @@ def _ambience(show: ShowConfig, story: Story) -> Optional[ShowAmbience]:
     if not clips:
         logger.info("No ambience: no clip of %s plays", folder)
         return None
+    cue_only = {clip.file for clip in story.ambience or () if clip.cue_only}
+    clips = [{**clip, "cue_only": clip["file"] in cue_only} for clip in clips]
     settings = {name[len("ambience_"):]: value for name, value in show.model_dump().items()
                 if name.startswith("ambience_")}
     return ShowAmbience(clips=clips, filter=show.bed_filter, filter_low_hz=show.bed_filter_low_hz,
                         filter_high_hz=show.bed_filter_high_hz, **settings)
+
+
+def _cue(run: Run, n: int, show: ShowConfig, story: Story, event: Optional[str]) -> Optional[Tuple[str, str]]:
+    """The sound cue of round n, as (file, kind): an ambience clip that plays, whose keywords (the story's
+    ambience.yaml) the round's event says, picked with the round's cue dice; None without an event, a keyword
+    matched, or the ambience."""
+    if not event or not story.ambience:
+        return None
+    ambience = _ambience(show, story)
+    if ambience is None:
+        return None
+    words = {clip.file: clip.keywords for clip in story.ambience}
+    return cue_for(event, [(c.file, c.kind, words.get(c.file, ())) for c in ambience.clips], cue_dice(run.seed, n))
 
 
 @router.get("/ambience/{name}")
@@ -283,6 +304,9 @@ async def _round_stream(run: Run, story: Story, req: ShowRoundRequest) -> AsyncI
             logger.warning("Show run %s, round %s: a transcript arrived outside a listening window; ignored",
                            run.run_id, n)
     plan = plan_round(run, story, show, req.played_s, words)
+    cue = _cue(run, n, show, story, plan.event)
+    if cue:
+        logger.info("Show run %s, round %s: the event cues %s (%s)", run.run_id, n, cue[0], cue[1])
     size_before = known_size(run)
     # The trim only before a round that asks the model: a round without a request (the Repair) gets no size back, so
     # the round after it counts its share from the size before both, which a trim in between would make wrong.
@@ -321,6 +345,8 @@ async def _round_stream(run: Run, story: Story, req: ShowRoundRequest) -> AsyncI
         return f"{line.speaker} ({line.mood}): {line.text}\n" if line.mood else f"{line.speaker}: {line.text}\n"
 
     try:
+        if cue:
+            yield _sse({"type": "cue", "file": cue[0], "kind": cue[1]})
         for line in plan.before:
             for event in feed(said(line), fixed=True):
                 yield event
@@ -352,6 +378,7 @@ async def _round_stream(run: Run, story: Story, req: ShowRoundRequest) -> AsyncI
         dropped=parser.dropped, timings=final.get("timings"), finish_reason=final.get("finish_reason"),
         tokens=round_share(size_before, trimmed_tokens, final.get("timings")), trims=trimmed,
         overtone=plan.overtone, agenda=plan.agenda, slot=plan.slot, recollects=plan.recollects,
+        cue=cue[0] if cue else None,
     )
     append_round(run, round_)
     if show.debug:
@@ -367,5 +394,6 @@ async def _round_stream(run: Run, story: Story, req: ShowRoundRequest) -> AsyncI
                 "receiver": plan.receiver_on,
                 "overtone": plan.overtone, "agenda": plan.agenda, "slot": plan.slot,
                 "answers": list(plan.answers) if plan.answers else None,
+                "cue": {"file": cue[0], "kind": cue[1]} if cue else None,
                 "direction": story.directions.get(plan.kind)})
     yield _sse({"type": "complete"})

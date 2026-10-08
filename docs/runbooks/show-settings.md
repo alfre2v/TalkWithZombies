@@ -293,6 +293,53 @@ In the story's `ambience.yaml`, a clip's `gain_db` (`-6` half the amplitude,
 `+6` twice) or `enabled: false`. Read when a run opens: reload the show page
 and press Start, no restart.
 
+### Sound cues: an event that names a sound plays it
+
+A clip in the story's `ambience.yaml` may have `keywords:` — the words or
+phrases of an event that cue it. When a free round's event says one (a whole
+word or phrase, any case), the clip plays as the event is read aloud: a spot
+at once, a texture in place of the current one, to its end (then the shuffle
+goes on). Several clips matched: one of them, picked with the run's seed, so a
+seed replays its cues. For example, the explosions:
+
+```yaml
+clips:
+  - file: explosion-4.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [explosion, explosions, explodes, exploded, exploding, detonation, detonates]
+```
+
+Keep them precise — a loose word plays a sound where it does not belong
+("blast" is also a blast door; "the moaning stops" names a moan) — and list
+each form: "explosion" does not match "explosions".
+
+A sound that belongs to its event — a helicopter, a train horn — and should
+never pass by at random gets `cue_only: true` (it needs keywords): it is left
+out of the textures' shuffle and the random spots, and plays only when an
+event cues it.
+
+```yaml
+clips:
+  - file: helicopter-1.mp3
+    enabled: true
+    gain_db: 0
+    keywords: [helicopter, helicopters]
+    cue_only: true
+```
+
+A cue switches nothing on:
+with `ambience: false`, `ambience_spots: false`, a clip off, or the A key's
+mute, it is not heard. Read when a run opens: reload the page and press Start.
+
+To hear cues more often while testing, an event in every free round:
+
+```yaml
+show:
+  event_every: 1
+  event_jitter: 0
+```
+
 ### No ambience at all
 
 For the whole show:
