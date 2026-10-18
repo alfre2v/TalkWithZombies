@@ -3,13 +3,16 @@
 TalkWithZombies is the app behind **Zombie-Radio**: an interactive,
 audio-only radio play performed by four AI voice actors, scientists
 trapped in a lab during a zombie outbreak, with the audience talking
-back over the radio. It will be presented in a talk at the Austin
-Python Meetup in Oct 2026.
+back over the radio. It was presented in a talk at the Austin
+Python Meetup in October 2026.
 
 What the demo sets out to show — among it, what this app delivers:
 story coherence and improvisation, and emotional voices in support of
 the narration — is listed in
 [zombie-radio's README, "What the demo shows"](https://github.com/alfre2v/zombie-radio#what-the-demo-shows).
+To hear a show, see the video at the top of
+[zombie-radio's README](https://github.com/alfre2v/zombie-radio), or
+[watch it on YouTube](https://youtu.be/4dxbiElata8).
 
 The show page opens on a chooser — pick how the show looks:
 
