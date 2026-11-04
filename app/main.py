@@ -92,6 +92,13 @@ async def lifespan(app: FastAPI):
     llm_auth.load_llm_api_key()
     llm.warn_if_plaintext_llm(settings.llm.base_url)
 
+    # The show speaks through TTS and hears the listener through STT. The app runs without them (the chat, and a
+    # text-only show), so it only says so at once, in the terminal, before anyone presses Start.
+    for name, without in (("tts", "the show will have no voice"), ("stt", "the show will not hear the listener")):
+        if not getattr(settings, name).is_active:
+            logger.warning("%s is not set up (%s.base_url, with %s.enabled: true, in settings.yaml): %s",
+                           name.upper(), name, name, without)
+
     # Warm the TTS capabilities cache (best-effort; ensure_capabilities
     # never raises, so a down TTS server cannot break startup). Imported
     # into this module's namespace so tests can monkeypatch it the same

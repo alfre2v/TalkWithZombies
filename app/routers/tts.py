@@ -165,6 +165,8 @@ async def tts_proxy(req: TTSRequest):
     )
 
     if not result:
+        if not get_settings().tts.is_active:
+            return JSONResponse(status_code=503, content={"detail": "TTS is disabled in settings"})
         return JSONResponse(status_code=502, content={"detail": "TTS server returned no audio"})
 
     if req.debug and get_settings().show.debug:

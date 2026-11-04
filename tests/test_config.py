@@ -671,3 +671,12 @@ class TestCaching:
         assert app_config.get_settings().llm.base_url == "http://reloaded:1"
         assert [p.name for p in app_config.get_personas().personas] == ["Fresh"]
         assert [r.name for r in app_config.get_chatrooms().chat_rooms] == ["NewRoom"]
+
+
+def test_load_settings_treats_an_empty_section_as_its_defaults(tmp_path):
+    """A section with nothing under it (only comments) is None in YAML: it means its defaults, as an absent one does,
+    instead of stopping the app at start."""
+    path = tmp_path / "settings.yaml"
+    path.write_text("".join(f"{name}:\n  # nothing set\n" for name in ("llm", "tts", "stt", "general", "mcp", "show")),
+                    encoding="utf-8")
+    assert app_config.load_settings(path) == AppSettings()

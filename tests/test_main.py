@@ -11,7 +11,7 @@ import app.config as app_config
 import app.main as main_module
 import app.services.llm_auth as llm_auth
 import app.services.tts_client as tts_client
-from app.config import TTSConfig
+from app.config import STTConfig, TTSConfig
 from app.session import session
 from tests.factories import (
     FakeAsyncClient,
@@ -305,3 +305,29 @@ class TestLifespan:
         assert calls == ["http://tts.local:5500/capabilities"]  # negative cache served, no retry
 
 
+
+
+class TestLifespanVoiceWarnings:
+    """The show's voice (TTS) and ears (STT): the app starts without them, and says so at once in the log."""
+
+    def test_startup_without_tts_or_stt_warns_for_each(self, monkeypatch, caplog):
+        stub_lifespan(monkeypatch)  # the factory's settings: TTS and STT inactive
+
+        with caplog.at_level(logging.WARNING):
+            with TestClient(main_module.app):
+                pass
+
+        assert "TTS is not set up (tts.base_url, with tts.enabled: true, in settings.yaml): the show will have no " \
+               "voice" in caplog.text
+        assert "STT is not set up (stt.base_url, with stt.enabled: true, in settings.yaml): the show will not hear " \
+               "the listener" in caplog.text
+
+    def test_startup_with_tts_and_stt_says_nothing(self, monkeypatch, caplog):
+        stub_lifespan(monkeypatch, make_settings(tts=TTSConfig(enabled=True, base_url="http://tts.local:5500"),
+                                                 stt=STTConfig(enabled=True, base_url="http://stt.local:6600")))
+
+        with caplog.at_level(logging.WARNING):
+            with TestClient(main_module.app):
+                pass
+
+        assert "is not set up" not in caplog.text

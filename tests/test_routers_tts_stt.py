@@ -111,6 +111,7 @@ class TestTTSProxy:
         assert resp.status_code == 503
 
     def test_synthesis_failure_502(self, client, monkeypatch, tmp_path):
+        _active_tts_settings(monkeypatch)
         _persona_cache(monkeypatch, PersonasConfig(personas=[self._tts_capable_persona(tmp_path)]))
 
         async def failing_synthesize(**kwargs):
@@ -120,6 +121,14 @@ class TestTTSProxy:
 
         resp = client.post("/api/tts", json={"text": "hi", "persona_name": "Luna"})
         assert resp.status_code == 502
+
+    def test_tts_disabled_503(self, client, monkeypatch, tmp_path):
+        """No voice server set up: the reply says so, instead of blaming a server that was never called."""
+        _persona_cache(monkeypatch, PersonasConfig(personas=[self._tts_capable_persona(tmp_path)]))
+
+        resp = client.post("/api/tts", json={"text": "hi", "persona_name": "Luna"})
+        assert resp.status_code == 503
+        assert resp.json()["detail"] == "TTS is disabled in settings"
 
     def test_success_forwards_reference_data_and_returns_audio(self, client, monkeypatch, tmp_path):
         _persona_cache(monkeypatch, PersonasConfig(personas=[self._tts_capable_persona(tmp_path)]))
