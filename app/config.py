@@ -508,13 +508,14 @@ def load_settings(path: Optional[Path] = None) -> AppSettings:
         return AppSettings()
     with open(target) as f:
         raw = yaml.safe_load(f) or {}
+    # A section with nothing under it (only comments) is None in YAML: it means its defaults, as an absent one does
     _settings_cache = AppSettings(
-        llm=LLMSettings(**raw.get("llm", {})),
-        tts=TTSConfig(**raw.get("tts", {})),
-        stt=STTConfig(**raw.get("stt", {})),
-        general=GeneralConfig(**raw.get("general", {})),
-        mcp=MCPConfig(**raw.get("mcp", {})),
-        show=ShowConfig(**raw.get("show", {})),
+        llm=LLMSettings(**(raw.get("llm") or {})),
+        tts=TTSConfig(**(raw.get("tts") or {})),
+        stt=STTConfig(**(raw.get("stt") or {})),
+        general=GeneralConfig(**(raw.get("general") or {})),
+        mcp=MCPConfig(**(raw.get("mcp") or {})),
+        show=ShowConfig(**(raw.get("show") or {})),
     )
     return _settings_cache
 

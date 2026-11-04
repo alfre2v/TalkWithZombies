@@ -1,0 +1,140 @@
+# settings.example.yaml - every setting of the app, for reference.
+#
+# Copy it to start a settings file:   cp settings.example.yaml settings.yaml
+# The sections llm, tts, stt, general and mcp are the ones zombie-radio's installer (make client-mac) seeds:
+# the three model servers reached through the SSH tunnel's local ports.
+#
+# The show: section lists every show setting at its DEFAULT value, which is the demo's configuration. To change
+# one, edit its value. A copied file pins every value it holds: a default changed in a later release will not
+# reach it.
+#
+# Good to know before a demo:
+# - The settings are read once, when the app starts: after a change, restart uvicorn (Ctrl-C, start it again),
+#   reload the show page and press Start. The story's files (stories/<story>/*.yaml), the page's address and the
+#   keys need no restart.
+# - A misspelled setting is ignored without a word; a value out of its range stops the app at start, naming it.
+# - Save on the chat's settings page (/talkwithme) rewrites settings.yaml from what the app holds: every comment is
+#   lost, and every show setting is written out with its current value. Keep this file as the reference.
+# - The page's address: /show (the chooser), /show?design=old-radio, ?design=amateur-radio-transmitter,
+#   ?design=plain (add &bed=on for the static there); &voice=off for text only; &mock=1 for a recorded stretch.
+# - The keys: Space held to talk, M mutes the static, A mutes the ambience, F flips the AM filter (both).
+# Every recipe, in words: docs/runbooks/show-settings.md.
+
+llm:
+  base_url: http://localhost:8080
+  model: default
+  max_tokens: 200
+  temperature: 0.8
+tts:
+  enabled: true
+  base_url: http://localhost:8001
+  timeout: 60.0
+  streaming: true
+  parameters: {}
+stt:
+  enabled: true
+  base_url: http://localhost:8002
+  timeout: 30.0
+general:
+  persona_name_mentions: true
+  max_persona_replies: 4
+  max_turns_for_context: 50
+  show_tool_calls: true
+  enable_persona_memories: false
+  global_system_prompt: ''
+  personas_directory: null
+mcp:
+  servers: []
+  max_tool_iterations: 8
+
+show:
+  # -- The story and the model's request
+  story: lab-outbreak               # the folder in stories/ the show plays
+  episode: null                     # reserved for episodes, not built yet: the app does not read it
+  model_prefix: /no_think           # starts the system message; /no_think turns Nemotron's reasoning off
+  max_tokens: 512                   # the most a round's reply may write
+  emotion_tags: true                # each line written as "Name (mood): text"
+  #
+  # -- Replay and debugging
+  seed: null                        # a fixed run seed (an integer) replays the same show on the same box and
+  #                                 #   build; null draws a random one per run
+  debug: false                      # true keeps prompts, requests and voice chunks in runs/<id>/debug/
+  #
+  # -- The voices
+  mood_voices: true                 # each line in its mood's recording; false: always ref.wav
+  voice_seed: false                 # true: every chunk asked for with the run's seed, so a replay sounds the same
+  reference_format: wav             # wav, or ogg: each clip's compressed copy, about 8 times smaller
+  #
+  # -- The static bed (volumes multiply the amplitude, 0 to 1; M mutes it live)
+  bed: true                         # false: no static at all
+  bed_volume_voice: 0.05            # its level under a line
+  bed_volume_between: 0.15          # its level between rounds
+  bed_dip_s: 0.5                    # seconds to dip under a line
+  bed_rise_s: 1.5                   # seconds to rise after it
+  bed_off_in_contact: false         # true: silent while the receiver is on
+  bed_silences: true                # breaks in the static, to rest the ear
+  bed_silence_every_s: [30.0, 120.0]   # a break every [min, max] seconds
+  bed_silence_s: [3.0, 15.0]        # a break lasts [min, max] seconds
+  bed_silence_fade_s: 1.0           # seconds to fade out and back in
+  bed_filter: false                 # true: start with the AM filter on (F flips it live)
+  bed_filter_low_hz: 300.0          # the filter's band, a small radio's speaker
+  bed_filter_high_hz: 3000.0
+  bed_fading_db: 3.0                # the signal swells and sinks by up to this many dB; 0 turns it off
+  bed_fading_every_s: [2.0, 6.0]    # a new level every [min, max] seconds
+  #
+  # -- The ambience, the world outside (A mutes it live; it carries the sound cues)
+  ambience: true                    # false: no world outside, and so no sound cues either
+  ambience_volume_voice: 0.12       # its level under a line
+  ambience_volume_between: 0.3      # its level between rounds
+  ambience_dip_s: 0.8               # seconds to dip under a line
+  ambience_rise_s: 2.5              # seconds to rise after it
+  ambience_silences: true           # breaks in the textures, on timers of their own
+  ambience_silence_every_s: [45.0, 150.0]
+  ambience_silence_s: [5.0, 20.0]
+  ambience_silence_fade_s: 2.0
+  ambience_fading_db: 4.0           # swells and sinks by up to this many dB; 0 turns it off
+  ambience_fading_every_s: [5.0, 15.0]
+  ambience_spots: true              # false: no random spots, and no spot cues either (texture cues still play)
+  ambience_spot_every_s: [20.0, 60.0]   # a spot every [min, max] seconds
+  ambience_spot_volume: 1.0         # the spots' level against the textures, 0 to 4
+  #
+  # -- The story's pace, in free rounds (each drawn N +/- its jitter, never below 1; 0 turns it off)
+  event_every: 2                    # an event every N free rounds
+  event_jitter: 1
+  tone_hold: 3                      # a tone word kept N rounds
+  tone_jitter: 1
+  free_lines: [1, 2, 3, 4]          # a free round's line budget, drawn...
+  free_line_weights: [1.0, 3.0, 3.0, 1.0]   # ...with these weights
+  overtone_hold: 4                  # positive, neutral or negative held N free rounds, then a drift
+  overtone_jitter: 1
+  orientation_every: 20             # "who we are" for newcomers every N free rounds
+  orientation_jitter: 5
+  recollection_every: 15            # recall an earlier caller every N free rounds
+  recollection_jitter: 5
+  event_report: true                # (only with fixed_lines off) the first speaker reports the event on air
+  fixed_lines: true                 # events and the receiver's beats read word for word; false: the model
+  #                                 #   writes them
+  #
+  # -- The listener's turn
+  interaction_min_s: 60.0           # the call comes between min and max seconds of audio after the receiver
+  interaction_max_s: 180.0          #   went off (e.g. 20 and 40 to reach it quickly in a demo)
+  listen_window_s: 10.0             # seconds the radio waits for a press
+  press_cap_s: 30.0                 # the longest press
+  contact_exchanges: 5              # answers before the receiver breaks down
+  contact_jitter: 1
+  contact_min_lines: 2              # an exchange's lines, min...
+  contact_max_lines: 3              # ...and max
+  silences_to_switch_off: 2         # silences in a row that switch the receiver off
+  beat_max_lines: 2                 # the lines of the call, the breakdown and the switch-off
+  restatement_contacts: 5           # earlier contacts whose words an exchange restates
+  stt_language: en                  # the language Whisper listens for
+  no_speech_max: 0.6                # Whisper's no-speech probability above which a press counts as silence
+  logprob_min: -1.0                 # Whisper's average confidence below which a press counts as silence
+  #
+  # -- The trim: the script kept inside the model's context
+  context_budget: 34000             # the script's size the trim works against, in tokens
+  trim_trigger: 0.9                 # trim when the script reaches this share of the budget...
+  trim_target: 0.5                  # ...down to this share
+  trim_keep_first: 2                # rounds always kept at the start...
+  trim_keep_last: 4                 # ...and at the end
+  instruction_room: 1000            # tokens kept free for the next round's instruction

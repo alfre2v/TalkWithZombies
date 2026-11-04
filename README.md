@@ -190,7 +190,8 @@ The UI offers a "Settings" control in the top right, which brings up the server 
 
 The `settings.yaml` file stores general application settings. This file does not exist
 on a fresh clone - default values are used on first run, and the file is created the
-first time you visit the Settings dialog and save. Here is an example of this file:
+first time you visit the Settings dialog and save. `settings.example.yaml` lists every
+setting, the show's included, at its default value. Here is an example of this file:
 
 ```yaml
 llm:

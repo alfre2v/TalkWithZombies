@@ -10,6 +10,11 @@ at import time, so no lifespan, config, or network access is needed.
 The runbooks' recipes (docs/runbooks/show-settings.md above all) and the README show settings as YAML examples
 under `show:`. The app ignores a name it does not know without a word, so a renamed setting would leave a recipe
 that silently does nothing: every name under `show:` in a YAML example must be a field of ShowConfig.
+
+settings.example.yaml sets every show setting at its default value: it must name every field of ShowConfig once and
+nothing else, and load through the app's own load_settings giving the defaults. So the reference cannot drift from
+the code: a new setting, a renamed one or a changed default fails here until the example follows. And every show
+setting is mentioned in docs/runbooks/show-settings.md, so a new one cannot ship without a recipe.
 """
 
 import re
@@ -18,11 +23,13 @@ from pathlib import Path
 
 import yaml
 
-from app.config import ShowConfig
+from app.config import ShowConfig, load_settings
 from app.main import app
 
 REPO = Path(__file__).resolve().parent.parent
 AGENTS_MD = REPO / "AGENTS.md"
+SETTINGS_EXAMPLE = REPO / "settings.example.yaml"
+EXAMPLE_SHOW_LINE = re.compile(r"^  ([a-z_]+):")
 YAML_BLOCK = re.compile(r"^[ \t]*```yaml\n(.*?)^[ \t]*```", re.S | re.M)
 
 # Starlette auto-registers HEAD (for GET routes) and OPTIONS; they are not
@@ -127,3 +134,43 @@ def test_the_docs_show_setting_examples_exist():
     unknown = sorted({(file, name) for file, name in examples if name not in ShowConfig.model_fields})
     assert not unknown, "Settings in the docs' YAML examples that ShowConfig does not have: " + ", ".join(
         f"{name} ({file})" for file, name in unknown)
+
+
+def _settings_example_show_names() -> list[str]:
+    """The names set under `show:` in settings.example.yaml, in order; a name set twice is listed twice (YAML itself
+    would keep only the last)."""
+    lines = SETTINGS_EXAMPLE.read_text(encoding="utf-8").splitlines()
+    names = []
+    for line in lines[lines.index("show:") + 1:]:
+        if line.strip() and not line.startswith(" "):
+            break
+        match = EXAMPLE_SHOW_LINE.match(line)
+        if match:
+            names.append(match.group(1))
+    return names
+
+
+def test_the_settings_example_lists_every_show_setting():
+    names = _settings_example_show_names()
+    twice = sorted(name for name, count in Counter(names).items() if count > 1)
+    assert not twice, f"Show settings set twice in settings.example.yaml: {twice}"
+    unknown = sorted(set(names) - set(ShowConfig.model_fields))
+    assert not unknown, f"Show settings in settings.example.yaml that ShowConfig does not have: {unknown}"
+    missing = sorted(set(ShowConfig.model_fields) - set(names))
+    assert not missing, f"ShowConfig settings missing from settings.example.yaml: {missing}"
+
+
+def test_the_settings_example_loads_at_the_defaults():
+    written = yaml.safe_load(SETTINGS_EXAMPLE.read_text(encoding="utf-8"))["show"]
+    assert len(written) == len(ShowConfig.model_fields), (
+        f"settings.example.yaml sets {len(written)} show settings; ShowConfig has {len(ShowConfig.model_fields)}")
+    settings = load_settings(SETTINGS_EXAMPLE)
+    assert settings.show == ShowConfig(), "settings.example.yaml's show settings are not the defaults"
+    assert settings.llm.base_url == "http://localhost:8080"
+
+
+def test_every_show_setting_has_a_recipe():
+    runbook = (REPO / "docs" / "runbooks" / "show-settings.md").read_text(encoding="utf-8")
+    missing = [name for name in ShowConfig.model_fields
+               if not re.search(rf"(?<![A-Za-z0-9_]){name}(?![A-Za-z0-9_])", runbook)]
+    assert not missing, f"Show settings that docs/runbooks/show-settings.md never mentions: {missing}"

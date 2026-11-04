@@ -13,7 +13,8 @@ holds recipes. How the page behaves is in
    installed client's `~/TalkWithZombies-client/settings.yaml`, or a
    checkout's own. The show's settings go under a `show:` section. **No `show:`
    section at all is the demo:** every setting has a default, and the defaults
-   are the demo's configuration.
+   are the demo's configuration. Every setting, at its default and with a few
+   words on what it does: `settings.example.yaml`, in the app's folder.
 2. **Add or change the lines** of a recipe below, under `show:` (two spaces of
    indent). Several recipes can be combined in one `show:` section.
 3. **Restart the app** — the settings are read once, when it starts: stop
@@ -64,6 +65,21 @@ show:
 
 Check: the debug line appears under each round; with the browser's console
 open (Developer Tools), the bed names each clip it plays.
+
+## The voices follow the mood
+
+Each line is spoken with the reference clip of its mood: the story's
+`overtones.yaml` names a clip per mood (`afraid: ref-fear.wav`, `calm:
+ref.wav`), and each persona's folder holds its own recording of each. That is
+`mood_voices` (on). Off, every line is spoken with the persona's `ref.wav`,
+whatever its mood — the same voice, without the emotion:
+
+```yaml
+show:
+  mood_voices: false   # every line with ref.wav
+```
+
+More: [`show-page.md`](show-page.md), "The voice".
 
 ## The voice's reference clips, compressed
 
@@ -287,6 +303,51 @@ show:
 
 `ambience_spots: false` keeps the textures alone.
 
+### A deeper, or a gentler, dip under the voices (the ambience)
+
+As the static's: the dip is the ratio of the two volumes (`ambience_volume_voice`
+0.12 under a line, `ambience_volume_between` 0.3 between rounds), and two
+settings say how fast it moves: `ambience_dip_s` (0.8 s, down when a line
+starts) and `ambience_rise_s` (2.5 s, back up). The ambience rises more slowly
+than the static (1.5 s), so the world outside creeps back in after a line:
+
+```yaml
+show:
+  ambience_dip_s: 0.4    # out of the way faster
+  ambience_rise_s: 4     # and back more slowly
+```
+
+### More rest for the ear — or fewer breaks (the ambience's silences)
+
+As the static's, on timers of their own, never in step with them: every
+random time in `ambience_silence_every_s` (45-150 s) the textures fade out
+(over `ambience_silence_fade_s`, 2 s) and pause for a random time in
+`ambience_silence_s` (5-20 s), then go on where they stopped. Only the
+textures fall silent: a spot may still come out of the silence. Ranges are
+`[min, max]` in seconds.
+
+```yaml
+show:
+  ambience_silence_every_s: [30, 90]   # more often
+  ambience_silence_s: [10, 30]         # and longer
+```
+
+No silences: `ambience_silences: false`.
+
+### A steadier, or a livelier, world outside (the ambience's fading)
+
+As the static's fading, on its own timer: every random time in
+`ambience_fading_every_s` (5-15 s) the level glides to a new one within ±
+`ambience_fading_db` decibels (±4 dB). 0 keeps it steady:
+
+```yaml
+show:
+  ambience_fading_db: 0     # steady
+```
+
+Every setting of the ambience, at its default, with a line on each:
+`settings.example.yaml`, in the app's folder.
+
 ### One clip louder, quieter, or off
 
 In the story's `ambience.yaml`, a clip's `gain_db` (`-6` half the amplitude,
@@ -385,6 +446,58 @@ show:
   silences_to_switch_off: 1
 ```
 
+**Longer, or shorter, answers from the cast.** Each exchange — the cast
+answering what the listener said, ending on a question — is
+`contact_min_lines` to `contact_max_lines` lines (2-3):
+
+```yaml
+show:
+  contact_min_lines: 1     # quicker back-and-forth
+  contact_max_lines: 2
+```
+
+**How much the cast remember of earlier callers.** A contact's instruction
+restates what the voices of the last `restatement_contacts` contacts said (5),
+so the cast can come back to it:
+
+```yaml
+show:
+  restatement_contacts: 2  # only the last two callers
+```
+
+**A listener speaking another language.** `stt_language` is the language
+Whisper listens for (`en`); the cast still speak English, as the story is
+written:
+
+```yaml
+show:
+  stt_language: es
+```
+
+**Whisper hears silence, or invents words.** A press counts as silence — and
+the radio calls again — when Whisper heard nothing, when it heard one of its
+known inventions ("Thank you for watching"), or when one of two thresholds says
+so: `no_speech_max` (0.6), Whisper's probability that nobody spoke, above which
+the press is silence; and `logprob_min` (−1.0), Whisper's average confidence in
+its reading, below which it is silence too. Real answers counted as silence (a
+quiet speaker, a noisy room): loosen them; invented words getting through:
+tighten them.
+
+```yaml
+show:
+  no_speech_max: 0.8       # looser: fewer presses thrown away as silence
+  logprob_min: -1.5
+```
+
+The app's log always says why a press counted as silence, with what Whisper
+heard (`no speech (no_speech_prob 0.72 > 0.6)`, for example). One price of the
+known inventions: a listener who really says just "Thank you." is heard as
+silence.
+
+More on the contact's settings: [`show-driver.md`](show-driver.md), "What you
+need" (the paragraph on Step 3.4c's settings); on the listener's turn:
+[`show-page.md`](show-page.md), "Talk back".
+
 ## The story's pace
 
 **Events more, or less, often** — something happens in the lab every
@@ -404,6 +517,75 @@ show:
   orientation_every: 40
 ```
 
+**The tone changes more, or less, often.** Each round is told in a tone word
+from the story's `overtones.yaml` ("haunted", "comradely"…), kept
+`tone_hold` (± `tone_jitter`) rounds (3 ± 1) and not repeated until its list
+is used up; 0 turns tone words off:
+
+```yaml
+show:
+  tone_hold: 6             # a tone lasts longer
+```
+
+**Longer, or shorter, rounds among the cast.** A free round's line budget is
+drawn from `free_lines`, with the matching `free_line_weights` (1 to 4 lines,
+weighted 1:3:3:1, so mostly 2 or 3). A round with an event gets at least 2: the
+event read out and a reaction.
+
+```yaml
+show:
+  free_lines: [2, 3, 4]
+  free_line_weights: [1, 2, 2]   # longer conversations, never a single line
+```
+
+**The mood swings more, or less, often.** Each free round has an overtone —
+positive, neutral or negative — that picks its moods, its tone word and its
+event. It is held `overtone_hold` (± `overtone_jitter`) free rounds (4 ± 1),
+then drifts to a neighbor, with the weights the story's `overtones.yaml` sets:
+
+```yaml
+show:
+  overtone_hold: 8         # longer stretches of hope, or of dread
+```
+
+**The cast recall earlier callers more, or less, often.** Once a listener has
+spoken, every `recollection_every` (± `recollection_jitter`) free rounds
+(15 ± 5) the cast remember an earlier caller and imagine how they could help;
+0 turns recollections off:
+
+```yaml
+show:
+  recollection_every: 8
+```
+
+**The receiver's beats: longer, or shorter.** The call, the Breakdown and the
+Switch-off take `beat_max_lines` lines (2: the key line, then a reaction), and
+an orientation up to as many:
+
+```yaml
+show:
+  beat_max_lines: 3
+```
+
+**The key lines said word for word — or written by the model.** With
+`fixed_lines` (on), the lines the listener must not miss are said word for word
+by a cast member: an event, read out by the round's first speaker; the call;
+the Breakdown's and the Switch-off's opening lines (from the story's
+`beats.yaml`). The model writes only the reactions. Off, the model writes them
+all, and `event_report` (on) decides how it is told an event: on, the
+listeners cannot see it, so the first to speak tells them on air what is
+happening; off, the older "Offstage: …", where the characters only react — which
+a listener cannot follow.
+
+```yaml
+show:
+  fixed_lines: false       # the model writes every line, events included
+```
+
+More on all of these: [`show-driver.md`](show-driver.md), "What you need" (the
+paragraphs on the pacing settings and on Step 3.4c's settings), and
+[`show-page.md`](show-page.md), "How the show runs".
+
 ## The model server's context
 
 The defaults fit a model server with a 32k context (`context_budget` 34,000).
@@ -420,6 +602,65 @@ A smaller budget makes the show forget older rounds sooner (it trims when the
 script nears 90 % of the budget). The arithmetic is in the error message, and in
 [`show-driver.md`](show-driver.md), "How the app tracks the script's size, and
 when it trims".
+
+**When, and how much, the show forgets.** Every round the model reads the
+whole script so far. Before a round that asks the model, when the script
+reaches `trim_trigger` of the budget (0.9, so 30,600 tokens), whole rounds stop
+being read, from the middle outwards, until it is back to `trim_target` (0.5,
+17,000 tokens); the first `trim_keep_first` rounds (2: the sign-on and the one
+after) and the last `trim_keep_last` (4) are always kept. The cut rounds stay in
+the run's record; the model just stops reading them. After a trim the model
+server reads the shortened script afresh, a pause of about 8 s at 32k. A higher
+target forgets less each time, but trims more often:
+
+```yaml
+show:
+  trim_target: 0.7         # forget less at each trim (trims come more often)
+  trim_keep_last: 6        # keep more of the latest rounds
+```
+
+**The reply's size, and the room for the next instruction.** `max_tokens`
+(512) is the most one round's reply may write; a reply cut short by it loses its
+unfinished line, which is never spoken (the app's log says so).
+`instruction_room` (1,000) is the room kept for the next round's instruction.
+Both count in the start's check: `trim_trigger × context_budget +
+instruction_room + max_tokens` must fit the model server's context.
+
+```yaml
+show:
+  max_tokens: 768          # room for longer rounds
+```
+
+More: [`show-driver.md`](show-driver.md), "Play rounds" (the trim, as the driver
+shows it) and "When something looks wrong" (a dropped line).
+
+## The model's prompt
+
+Three settings shape what the model is told; none needs changing for the
+demo's model.
+
+**`model_prefix`** (`/no_think`) starts the system message. Nemotron's chat
+template turns `/no_think` into an empty, closed `<think></think>`, so the model
+writes the script at once, not reasoning first — and the grammar, which
+constrains what the model writes, starts in the script. Another model may need
+its own switch, or none:
+
+```yaml
+show:
+  model_prefix: ""         # no prefix, for a model without a reasoning switch
+```
+
+**`emotion_tags`** (on): each line is written `Name (mood): text`, the grammar
+allows only the round's moods, and the voice says each line with its mood's
+clip. Off, lines are `Name: text`: no moods, so every line is spoken with the
+persona's `ref.wav` (as with `mood_voices: false`).
+
+**`episode`** is declared for episodes, which do not exist yet: the app does
+not read it, and the cast sheet's `{{ episode }}` placeholder stays empty.
+Setting it changes nothing today.
+
+Every setting at its default, with a line on each: `settings.example.yaml`, in
+the app's folder.
 
 ## The address switches
 
