@@ -125,7 +125,8 @@ show:
   contact_min_lines: 2              # an exchange's lines, min...
   contact_max_lines: 3              # ...and max
   silences_to_switch_off: 2         # silences in a row that switch the receiver off
-  beat_max_lines: 2                 # the lines of the call, the breakdown and the switch-off
+  beat_max_lines: 2                 # the breakdown's and switch-off's lines: 1 fixed + the rest reactions (the call
+  #                                 #   ignores it with fixed_lines on); an orientation's most
   restatement_contacts: 5           # earlier contacts whose words an exchange restates
   stt_language: en                  # the language Whisper listens for
   no_speech_max: 0.6                # Whisper's no-speech probability above which a press counts as silence

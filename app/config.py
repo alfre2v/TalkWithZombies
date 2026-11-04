@@ -345,8 +345,9 @@ class ShowConfig(BaseModel):
     overtone_jitter: int = Field(default=1, ge=0)
     # A contact lasts contact_exchanges +/- contact_jitter of the listener's answers, drawn when it starts; each
     # exchange is contact_min_lines to contact_max_lines lines. silences_to_switch_off silences in a row switch
-    # the receiver off; the receiver beats — the Repair, the Breakdown, the Switch-off — take beat_max_lines lines,
-    # the orientation up to that many.
+    # the receiver off. beat_max_lines: with fixed_lines, the Breakdown and the Switch-off are one fixed line plus
+    # exactly beat_max_lines - 1 reactions, and the Repair is its two fixed lines whatever the setting; without,
+    # all three receiver beats take exactly beat_max_lines lines. The orientation takes up to that many.
     contact_exchanges: int = Field(default=5, ge=1)
     contact_jitter: int = Field(default=1, ge=0)
     contact_min_lines: int = Field(default=2, ge=1)
