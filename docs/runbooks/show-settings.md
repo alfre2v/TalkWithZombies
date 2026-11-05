@@ -66,6 +66,72 @@ show:
 Check: the debug line appears under each round; with the browser's console
 open (Developer Tools), the bed names each clip it plays.
 
+## A demo for an audience
+
+More chances for the room to talk, livelier conversations, less ceremony
+between them, more happening. A starting point to try in a rehearsal, not a
+tested combination:
+
+```yaml
+show:
+  interaction_min_s: 30
+  interaction_max_s: 75
+  silences_to_switch_off: 3
+  listen_window_s: 15
+  contact_min_lines: 1
+  contact_max_lines: 2
+  contact_exchanges: 6
+  recollection_every: 8
+  beat_max_lines: 1
+  event_every: 1
+  event_jitter: 0
+  ambience_spot_every_s: [15, 40]
+```
+
+**More chances to talk:**
+
+| Setting | Default | Demo | Why |
+|---|---|---|---|
+| `interaction_min_s` / `interaction_max_s` | 60 / 180 | **30 / 75** | The main lever: a call after about 45-50 s of audio instead of about 104 s (measured on the 2026-10-08 show), so roughly **twice as many contacts** |
+| `silences_to_switch_off` | 2 | **3** | A shy room gets one more re-call before the radio gives up |
+| `listen_window_s` | 10 | **15** | Time to notice the radio is listening and reach the button: attempts become answers |
+
+**Livelier conversations once someone talks:**
+
+| Setting | Default | Demo | Why |
+|---|---|---|---|
+| `contact_min_lines` / `contact_max_lines` | 2 / 3 | **1 / 2** | Snappier back-and-forth: the cast answer and hand the turn back sooner, so more turns per minute |
+| `contact_exchanges` | 5 (± 1) | **6** | A little longer per contact, once the room is engaged |
+| `recollection_every` | 15 (± 5) | **8** | The cast bring up earlier callers more often: the audience feels **remembered** |
+
+**Less ceremony between contacts:**
+
+| Setting | Default | Demo | Why |
+|---|---|---|---|
+| `beat_max_lines` | 2 | **1** | The Breakdown and the Switch-off become the operator's fixed line alone: a quicker return to the next call (the call itself is unchanged) |
+
+**More happening, and more to hear:**
+
+| Setting | Default | Demo | Why |
+|---|---|---|---|
+| `event_every` / `event_jitter` | 2 / 1 | **1 / 0** | An event in every free round: more for the cast to react to, and **more sound cues** (43 of the 289 events name a sound) |
+| `ambience_spot_every_s` | [20, 60] | **[15, 40]** | More screams, gunfire and explosions between lines; `ambience_spot_volume` stays 1.0, so the voices stay clear in a room |
+
+**Cautions:**
+
+- **More events and fewer lines per round compete:** with an event every round
+  and only 1-2 lines per exchange, the cast may feel rushed. If a rehearsal feels
+  breathless, go back to `event_every: 2` first.
+- **Leave Whisper's thresholds alone at a venue:** loosening `no_speech_max` and
+  `logprob_min` to catch quiet speakers lets Whisper's inventions through as
+  "answers" in a noisy room, which is worse than a re-call.
+- **The seed matters less with an audience:** once someone talks, the story
+  follows them, so a known-good seed only fixes the first minute or two.
+- **Measure, don't guess:** rehearse 15 minutes with the preset and compare its
+  record (`runs/<run-id>/script.json`: the rounds' kinds and `played_s`) with
+  the 2026-10-08 baseline — a call after 77-134 s of audio (mean 104 s), a
+  contact every 2.5 minutes, 20 % of the show's audio in contact.
+
 ## The voices follow the mood
 
 Each line is spoken with the reference clip of its mood: the story's
@@ -456,9 +522,72 @@ show:
   contact_max_lines: 2
 ```
 
-**How much the cast remember of earlier callers.** A contact's instruction
-restates what the voices of the last `restatement_contacts` contacts said (5),
-so the cast can come back to it:
+**How much the cast remember of earlier callers (`restatement_contacts`).**
+
+*What it counts: contacts, not lines.* It counts **earlier contacts**: the last
+**5** (by default) whose listener said anything. Within each, **every** utterance
+of the listener is restated, in order, quoted, separated by ` / `. There is
+**no** per-contact limit on lines and no limit on length (`_restatement` in
+`app/show/director.py`):
+
+```python
+before = [words for n, words in contacts if n != opened][-show.restatement_contacts:]
+```
+
+- **What is restated is only what the listener said**, never the cast's lines.
+- **The current contact is always restated in full**, separately ("Earlier in
+  this contact the voice said: …"), and does not count toward the 5.
+- **Contacts where the listener never spoke** (only silences, ended by a
+  Switch-off) are **skipped and do not count**.
+- **It goes into three kinds of instruction:** an exchange, the last exchange,
+  and a re-call after a silence.
+- **It does not depend on the trim:** the list is rebuilt from the run's record
+  at every round, so an earlier caller is restated even after their rounds were
+  trimmed from what the model reads. That is the point of the setting: it is the
+  show's memory of callers beyond the context.
+
+*How a contact is identified: by the receiver, not by a name.* The app has **no
+notion of who is speaking** (speaker identification is only a follow-up idea).
+**A contact is one opening of the receiver**: everything the listener says from
+one call (Repair) to the next belongs to that contact (`_contacts` in
+`app/show/director.py`):
+
+```python
+for r in run.rounds:
+    if r.kind in _OPENS:                  # a Repair opens a new contact
+        contacts.append((r.n, []))
+    elif r.listener and contacts:         # a round that followed the listener's words
+        contacts[-1][1].append(r.listener)
+```
+
+So **every utterance always belongs to a contact**, by when it was heard;
+grouping never depends on a name. If two different people speak during the same
+opening, they are one "contact"; if the same person calls back at the next
+opening, that is a new contact.
+
+*What happens with a line that has no name.* Names matter **only to the model**,
+never to the code. The restatement ends with an instruction:
+
+> "Only a voice that says the name of one of them is someone you spoke with
+> before: greet them as a returning friend and use what they told you. Any other
+> voice is someone new."
+
+- **An earlier contact with no name** in its words is still listed (numbered:
+  1, 2, …), but **a returning caller cannot be recognized from it**: the model
+  is told to treat any voice that does not say a known name as someone new.
+- **The matching is the model's judgment, not code.** A caller who says a name
+  heard before ("this is Maria again") is likely recognized; one who says nothing
+  about who they are is not. The model can also be wrong in either direction.
+
+*What changing it does.*
+
+- **Higher** (e.g. 10): callers are remembered further back. Each exchange's
+  instruction gets longer, though, since every earlier contact's words are
+  repeated in it, and those instructions stay in the script: the script grows
+  faster and **trims come more often**.
+- **Lower** (e.g. 2): a lighter prompt, but the cast forget callers sooner. With
+  about 11 contacts in 26 minutes (a show of 2026-10-08 on the 3090, default
+  timing), 5 contacts reach back roughly 12 minutes; 2 contacts, about 5.
 
 ```yaml
 show:
@@ -558,14 +687,52 @@ show:
   recollection_every: 8
 ```
 
-**The receiver's beats: longer, or shorter.** The call, the Breakdown and the
-Switch-off take `beat_max_lines` lines (2: the key line, then a reaction), and
-an orientation up to as many:
+**The receiver's beats: longer, or shorter (`beat_max_lines`).**
+
+*What it is.* The **receiver's beats** are the rounds that mark the radio's
+turning points: **the call** (Repair, the receiver back on), **the Breakdown**
+(the receiver fails after the last answer) and **the Switch-off** (the lab turns
+it off after silences). `beat_max_lines` (default **2**) sets how many lines
+those rounds have. **Orientations** borrow it as their upper limit.
+
+*What it does, round by round, with the demo's defaults (`fixed_lines: true`):*
+
+| Round | Its lines | What `beat_max_lines` does |
+|---|---|---|
+| **The call (Repair)** | **always 2 fixed lines**: someone announces the receiver is back, then Samantha calls out. The model isn't asked (`app/show/director.py:252-260`) | **nothing**: the fixed pair ignores it |
+| **The Breakdown** | **1 fixed line** (Samantha, from the story's `beats.yaml`) **+ exactly `beat_max_lines − 1` reactions** written by the model (`director.py:345-353`: `rest = lines - 1`, `min_lines=rest`) | 2 gives one reaction; 3 gives two |
+| **The Switch-off** | the same: 1 fixed line (lost voice, or nobody answered) **+ exactly `beat_max_lines − 1` reactions** (`director.py:409-419`) | the same |
+| **An orientation** ("who we are", for newcomers) | **up to** `beat_max_lines` lines, the first speaker pinned (`director.py:217-218`) | 2 means one or two lines |
+
+**With `fixed_lines: false`**, the model writes the beats itself, and
+`beat_max_lines` then applies to all three:
+
+- the call gets `beat_max_lines` lines, Samantha's last (with 1, she says it all);
+- the Breakdown and the Switch-off get exactly that many, the first saying what
+  happens, the last what it means for the listeners.
+
+**Despite its name, it's not always a maximum:** for the Breakdown and the
+Switch-off it's an **exact** count (`min_lines` equals the line count). It's a
+maximum only for orientations.
+
+*In practice:*
+
+- **`beat_max_lines: 1`:** the Breakdown and Switch-off become **Samantha's
+  fixed line alone**, with no reaction; orientations become a single line. That's
+  the quickest return to the cast's talk, useful with more frequent contacts
+  (see "The listener's turn").
+- **`beat_max_lines: 3`:** **two reactions** to each Breakdown and Switch-off
+  (more drama around losing the listener), and orientations of up to three
+  lines. **The call doesn't change.**
 
 ```yaml
 show:
   beat_max_lines: 3
 ```
+
+The line numbers above are those of `app/show/director.py` as of 2026-11-04; they
+drift as the code changes, the function names (`_repair`, `_breakdown`,
+`_switch_off`, `_orientation`) do not.
 
 **The key lines said word for word — or written by the model.** With
 `fixed_lines` (on), the lines the listener must not miss are said word for word
